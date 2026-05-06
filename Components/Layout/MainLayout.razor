@@ -1,0 +1,47 @@
+@inherits LayoutComponentBase
+
+<NavMenu />
+
+<main class="site-main">
+    @Body
+</main>
+
+<footer class="site-footer">
+    <div class="container">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <a href="/" class="footer-logo-link">
+                    <img src="logo.png" alt="Fixlosophy" class="footer-logo-img"
+                         onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
+                    <span class="footer-logo-text" style="display:none">&#9851; Fixlosophy</span>
+                </a>
+                <p>Your neighbourhood bike repair experts. We fix, tune, and transform your ride.</p>
+            </div>
+            <div class="footer-links">
+                <h6>Navigate</h6>
+                <ul>
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/services">Services</a></li>
+                    <li><a href="/about">About</a></li>
+                    <li><a href="/contact">Contact</a></li>
+                </ul>
+            </div>
+            <div class="footer-contact">
+                <h6>Find Us</h6>
+                <p>&#128205; 42 Spoke Street, Chainring Quarter</p>
+                <p>&#128222; +1 (555) 123-4567</p>
+                <p>&#9993; hello&#64;fixlosophy.com</p>
+                <p>&#128337; Mon–Sat: 9am – 6pm</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; @DateTime.Now.Year Fixlosophy. All rights reserved.</p>
+        </div>
+    </div>
+</footer>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">&#x2715;</span>
+</div>

@@ -1,0 +1,713 @@
+@page "/admin"
+@rendermode InteractiveServer
+@inject BookingService BookingService
+@inject AuthService AuthService
+
+<PageTitle>Admin – Fixlosophy Bookings</PageTitle>
+
+@if (loggedInStaff == null)
+{
+    <div class="admin-login">
+        <div class="admin-login__card">
+            <div class="admin-login__logo">
+                <img src="logo.png" alt="Fixlosophy" class="admin-logo-img"
+                     onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
+                <span style="display:none">&#9851; Fixlosophy</span>
+            </div>
+            <h2>Staff Access</h2>
+            <p>Enter your credentials to access the booking dashboard.</p>
+
+            @if (loginError)
+            {
+                <div class="booking-error">Incorrect email or password.</div>
+            }
+
+            <div class="form-group">
+                <label>Email</label>
+                <input class="form-control" type="email" @bind="loginEmail" placeholder="staff@fixlosophy.com" />
+            </div>
+            <div class="form-group" style="margin-top:.75rem">
+                <label>Password</label>
+                <input class="form-control" type="password" @bind="loginPassword"
+                       @onkeydown="OnKeyDown" placeholder="Enter password" />
+            </div>
+            <button class="btn btn-primary btn-full" style="margin-top:1rem" @onclick="Login">Sign In</button>
+            <p class="admin-login__hint">Default admin: <code>admin@fixlosophy.com</code> / <code>fixlosophy</code></p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="page-hero page-hero--sm">
+        <div class="container admin-hero-row">
+            <div>
+                <p class="section-eyebrow">@(IsAdmin ? "Admin Dashboard" : "Staff Dashboard")</p>
+                <h1>Booking Management</h1>
+            </div>
+            <div style="display:flex;align-items:center;gap:1rem">
+                <span style="color:rgba(255,255,255,.7);font-size:.9rem">
+                    @loggedInStaff.FullName &nbsp;·&nbsp;
+                    <span class="status-badge status-badge--@(IsAdmin ? "confirmed" : "pending")" style="font-size:.75rem">
+                        @loggedInStaff.Role
+                    </span>
+                </span>
+                <button class="btn btn-outline" @onclick="Logout">Sign Out</button>
+            </div>
+        </div>
+    </div>
+
+    <section class="section admin-section">
+        <div class="container">
+
+            <!-- Tab bar -->
+            <div class="admin-filter-scroll" style="margin-bottom:1.5rem">
+                <div class="admin-filter-tabs">
+                    <button class="filter-tab @(activeTab == "bookings" ? "active" : "")"
+                            @onclick="SetBookingsTab">Bookings</button>
+                    @if (IsAdmin)
+                    {
+                        <button class="filter-tab @(activeTab == "pricing" ? "active" : "")"
+                                @onclick="OpenPricingTab">Pricing</button>
+                        <button class="filter-tab @(activeTab == "staff" ? "active" : "")"
+                                @onclick="OpenStaffTab">Staff Management</button>
+                    }
+                </div>
+            </div>
+
+            <!-- ── BOOKINGS TAB ─────────────────────────────────────────── -->
+            @if (activeTab == "bookings")
+            {
+                <!-- Stats -->
+                <div class="admin-stats">
+                    <div class="admin-stat">
+                        <div class="admin-stat__number">@stats.total</div>
+                        <div class="admin-stat__label">@(IsAdmin || loggedInStaff.CanViewAllBookings ? "Total" : "Assigned")</div>
+                    </div>
+                    <div class="admin-stat admin-stat--highlight">
+                        <div class="admin-stat__number">@stats.today</div>
+                        <div class="admin-stat__label">Today</div>
+                    </div>
+                    <div class="admin-stat">
+                        <div class="admin-stat__number">@stats.pending</div>
+                        <div class="admin-stat__label">Pending</div>
+                    </div>
+                    <div class="admin-stat">
+                        <div class="admin-stat__number">@stats.confirmed</div>
+                        <div class="admin-stat__label">Confirmed</div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="admin-filters">
+                    <div class="admin-filter-scroll">
+                        <div class="admin-filter-tabs">
+                            @foreach (var f in Filters)
+                            {
+                                <button class="filter-tab @(activeFilter == f ? "active" : "")"
+                                        @onclick="() => SetFilter(f)">@f</button>
+                            }
+                        </div>
+                    </div>
+                    <div class="admin-search">
+                        <input class="form-control" type="text" @bind="searchTerm"
+                               @oninput="OnSearch" placeholder="Search name, ref, service…" />
+                    </div>
+                </div>
+
+                @if (TodayBookings.Any() && activeFilter == "All")
+                {
+                    <div class="today-schedule">
+                        <h3>&#128337; Today's Schedule</h3>
+                        <div class="today-slots">
+                            @foreach (var b in TodayBookings.OrderBy(x => x.SlotTime))
+                            {
+                                <div class="today-slot">
+                                    <span class="today-slot__time">@b.SlotTime</span>
+                                    <span class="today-slot__name">@b.CustomerName</span>
+                                    <span class="today-slot__service">@b.ServiceName</span>
+                                    <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (!FilteredBookings.Any())
+                {
+                    <div class="admin-empty">
+                        <p>No bookings match the current filter.</p>
+                    </div>
+                }
+                else
+                {
+                    <!-- MOBILE: Card list -->
+                    <div class="admin-cards">
+                        @foreach (var booking in FilteredBookings)
+                        {
+                            var b = booking;
+                            var isOpen = expandedId == b.Id;
+                            <div class="admin-card @(isOpen ? "admin-card--open" : "")" @onclick="() => ToggleExpand(b.Id)">
+                                <div class="admin-card__header">
+                                    <span class="ref-badge">@b.Reference</span>
+                                    <div class="admin-card__header-right">
+                                        <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                                        <span class="admin-card__chevron @(isOpen ? "open" : "")">&#8250;</span>
+                                    </div>
+                                </div>
+                                <div class="admin-card__name">@b.CustomerName</div>
+                                <div class="admin-card__meta">
+                                    <span>@b.ServiceName</span>
+                                    <span>@b.SlotDate.ToString("d MMM") &middot; @b.SlotTime</span>
+                                </div>
+
+                                @if (isOpen)
+                                {
+                                    <div class="admin-card__detail">
+                                        @if (CanSeeCustomerDetails)
+                                        {
+                                            <div class="admin-card__detail-row"><span>Email</span><span>@b.CustomerEmail</span></div>
+                                            @if (!string.IsNullOrWhiteSpace(b.CustomerPhone))
+                                            {
+                                                <div class="admin-card__detail-row"><span>Phone</span><span>@b.CustomerPhone</span></div>
+                                            }
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(b.BikeDescription))
+                                        {
+                                            <div class="admin-card__detail-row"><span>Bike</span><span>@b.BikeDescription</span></div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(b.Notes))
+                                        {
+                                            <div class="admin-card__detail-row"><span>Notes</span><span>@b.Notes</span></div>
+                                        }
+                                        <div class="admin-card__detail-row">
+                                            <span>Price</span><span>@(b.ServicePrice > 0 ? $"From £{b.ServicePrice}" : "Quote")</span>
+                                        </div>
+                                        <div class="admin-card__detail-row">
+                                            <span>Booked</span><span>@b.CreatedAt.ToString("d MMM, HH:mm")</span>
+                                        </div>
+                                        @if (IsAdmin)
+                                        {
+                                            <div class="admin-card__detail-row">
+                                                <span>Assign to</span>
+                                                <select class="form-control" style="font-size:.85rem;padding:.25rem .5rem"
+                                                        value="@b.AssignedStaffId"
+                                                        @onchange="e => AssignBooking(b.Id, e.Value?.ToString())"
+                                                        @onclick:stopPropagation="true">
+                                                    <option value="">— Unassigned —</option>
+                                                    @foreach (var s in _allStaff.Where(x => x.IsActive))
+                                                    {
+                                                        <option value="@s.Id">@s.FullName</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+
+                                @if (CanManage)
+                                {
+                                    <div class="admin-card__actions" @onclick:stopPropagation="true">
+                                        @if (b.Status == BookingStatus.Pending)
+                                        {
+                                            <button class="action-btn action-btn--confirm"
+                                                    @onclick="() => UpdateStatus(b.Id, BookingStatus.Confirmed)">Confirm</button>
+                                        }
+                                        @if (b.Status == BookingStatus.Confirmed)
+                                        {
+                                            <button class="action-btn action-btn--progress"
+                                                    @onclick="() => UpdateStatus(b.Id, BookingStatus.InProgress)">In Progress</button>
+                                        }
+                                        @if (b.Status == BookingStatus.InProgress)
+                                        {
+                                            <button class="action-btn action-btn--complete"
+                                                    @onclick="() => UpdateStatus(b.Id, BookingStatus.Completed)">Complete</button>
+                                        }
+                                        @if (b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Completed)
+                                        {
+                                            <button class="action-btn action-btn--cancel"
+                                                    @onclick="() => UpdateStatus(b.Id, BookingStatus.Cancelled)">Cancel</button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <!-- DESKTOP: Table -->
+                    <div class="admin-table-wrapper">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Reference</th>
+                                    <th>Customer</th>
+                                    <th>Service</th>
+                                    <th>Date &amp; Time</th>
+                                    <th>Status</th>
+                                    @if (IsAdmin) { <th>Assigned To</th> }
+                                    @if (CanManage) { <th>Actions</th> }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var booking in FilteredBookings)
+                                {
+                                    var b = booking;
+                                    <tr class="@(expandedId == b.Id ? "row-expanded" : "")" @onclick="() => ToggleExpand(b.Id)">
+                                        <td><span class="ref-badge">@b.Reference</span></td>
+                                        <td>
+                                            <div class="customer-cell">
+                                                <strong>@b.CustomerName</strong>
+                                                @if (CanSeeCustomerDetails)
+                                                {
+                                                    <span>@b.CustomerEmail</span>
+                                                }
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="service-cell">
+                                                <strong>@b.ServiceName</strong>
+                                                <span>@(b.ServicePrice > 0 ? $"£{b.ServicePrice}" : "Quote")</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="date-cell">
+                                                <strong>@b.SlotDate.ToString("d MMM yyyy")</strong>
+                                                <span>@b.SlotTime</span>
+                                            </div>
+                                        </td>
+                                        <td><span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span></td>
+                                        @if (IsAdmin)
+                                        {
+                                            <td @onclick:stopPropagation="true">
+                                                <select class="form-control" style="font-size:.82rem;padding:.2rem .4rem;min-width:130px"
+                                                        value="@b.AssignedStaffId"
+                                                        @onchange="e => AssignBooking(b.Id, e.Value?.ToString())">
+                                                    <option value="">— Unassigned —</option>
+                                                    @foreach (var s in _allStaff.Where(x => x.IsActive))
+                                                    {
+                                                        <option value="@s.Id">@s.FullName</option>
+                                                    }
+                                                </select>
+                                            </td>
+                                        }
+                                        @if (CanManage)
+                                        {
+                                            <td @onclick:stopPropagation="true">
+                                                <div class="action-buttons">
+                                                    @if (b.Status == BookingStatus.Pending)
+                                                    {
+                                                        <button class="action-btn action-btn--confirm"
+                                                                @onclick="() => UpdateStatus(b.Id, BookingStatus.Confirmed)">Confirm</button>
+                                                    }
+                                                    @if (b.Status == BookingStatus.Confirmed)
+                                                    {
+                                                        <button class="action-btn action-btn--progress"
+                                                                @onclick="() => UpdateStatus(b.Id, BookingStatus.InProgress)">In Progress</button>
+                                                    }
+                                                    @if (b.Status == BookingStatus.InProgress)
+                                                    {
+                                                        <button class="action-btn action-btn--complete"
+                                                                @onclick="() => UpdateStatus(b.Id, BookingStatus.Completed)">Complete</button>
+                                                    }
+                                                    @if (b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Completed)
+                                                    {
+                                                        <button class="action-btn action-btn--cancel"
+                                                                @onclick="() => UpdateStatus(b.Id, BookingStatus.Cancelled)">Cancel</button>
+                                                    }
+                                                </div>
+                                            </td>
+                                        }
+                                    </tr>
+                                    @if (expandedId == b.Id && CanSeeCustomerDetails)
+                                    {
+                                        <tr class="row-detail">
+                                            <td colspan="7">
+                                                <div class="booking-detail">
+                                                    <div class="booking-detail__grid">
+                                                        <div><strong>Phone</strong><span>@(string.IsNullOrWhiteSpace(b.CustomerPhone) ? "—" : b.CustomerPhone)</span></div>
+                                                        <div><strong>Bike</strong><span>@(string.IsNullOrWhiteSpace(b.BikeDescription) ? "—" : b.BikeDescription)</span></div>
+                                                        <div><strong>Booked</strong><span>@b.CreatedAt.ToString("d MMM yyyy, HH:mm")</span></div>
+                                                        <div><strong>Notes</strong><span>@(string.IsNullOrWhiteSpace(b.Notes) ? "—" : b.Notes)</span></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            }
+
+            <!-- ── PRICING TAB ────────────────────────────────────────────── -->
+            @if (activeTab == "pricing" && IsAdmin)
+            {
+                <div class="staff-mgmt">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.75rem">
+                        <h3 style="margin:0">Service Prices</h3>
+                        <button class="btn btn-primary" @onclick="SaveAllPrices">Save All</button>
+                    </div>
+
+                    @if (_priceSaveMessage != null)
+                    {
+                        <div class="admin-success">&#10003; @_priceSaveMessage</div>
+                    }
+
+                    @if (_priceAdjustments.Any())
+                    {
+                        var last = _priceAdjustments.First();
+                        <div class="pricing-info-banner">
+                            Last automatic increase: <strong>@last.AppliedAt.ToString("d MMMM yyyy")</strong>
+                            &nbsp;·&nbsp; Rate applied: <strong>@((last.Rate * 100).ToString("0.##"))%</strong>
+                            &nbsp;·&nbsp; Next increase: <strong>1 April @(last.Year + 1)</strong>
+                        </div>
+                    }
+
+                    <div class="admin-table-wrapper">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Service</th>
+                                    <th>Category</th>
+                                    <th>Duration</th>
+                                    <th style="width:130px">Current Price</th>
+                                    <th style="width:140px">New Price (£)</th>
+                                    <th style="width:80px">Save</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var sp in _servicePricings)
+                                {
+                                    var sid = sp.Id;
+                                    <tr>
+                                        <td><strong>@sp.Name</strong></td>
+                                        <td style="font-size:.85rem;color:rgba(255,255,255,0.45)">@sp.Category</td>
+                                        <td style="font-size:.85rem;color:rgba(255,255,255,0.45)">@sp.Duration</td>
+                                        <td>
+                                            @if (sp.IsQuoteOnly)
+                                            {
+                                                <span style="font-size:.85rem;color:rgba(255,255,255,0.35)">Quote only</span>
+                                            }
+                                            else
+                                            {
+                                                <span style="font-weight:700;color:var(--green)">£@sp.CurrentPrice</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (sp.IsQuoteOnly)
+                                            {
+                                                <span style="font-size:.85rem;color:rgba(255,255,255,0.35)">—</span>
+                                            }
+                                            else
+                                            {
+                                                <input class="form-control"
+                                                       type="number" min="0" step="1"
+                                                       style="font-size:.875rem;padding:.3rem .5rem;width:100px"
+                                                       value="@_editPrices[sid]"
+                                                       @oninput="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _editPrices[sid] = v; }" />
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (!sp.IsQuoteOnly)
+                                            {
+                                                <button class="action-btn action-btn--confirm"
+                                                        @onclick="() => SavePrice(sid)">Save</button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
+            <!-- ── STAFF MANAGEMENT TAB ────────────────────────────────── -->
+            @if (activeTab == "staff" && IsAdmin)
+            {
+                <div class="staff-mgmt">
+
+                    <!-- Add new staff form -->
+                    <div class="staff-add-card">
+                        <h3>Add Staff Member</h3>
+                        @if (staffFormError != null)
+                        {
+                            <div class="booking-error" style="margin-bottom:.75rem">@staffFormError</div>
+                        }
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Full Name</label>
+                                <input class="form-control" @bind="newStaff.FullName" placeholder="Jane Smith" />
+                            </div>
+                            <div class="form-group">
+                                <label>Email</label>
+                                <input class="form-control" type="email" @bind="newStaff.Email" placeholder="jane@fixlosophy.com" />
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Password</label>
+                                <input class="form-control" type="password" @bind="newStaffPassword" placeholder="Temporary password" />
+                            </div>
+                            <div class="form-group">
+                                <label>Role</label>
+                                <select class="form-control" @bind="newStaff.Role">
+                                    <option value="@StaffRole.Worker">Worker</option>
+                                    <option value="@StaffRole.Admin">Admin</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" @onclick="AddStaff">Add Staff Member</button>
+                    </div>
+
+                    <!-- Staff list -->
+                    <h3 style="margin-top:2rem;margin-bottom:1rem">Current Staff</h3>
+                    <div class="admin-table-wrapper">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Role</th>
+                                    <th>View All Bookings</th>
+                                    <th>Manage Bookings</th>
+                                    <th>Customer Details</th>
+                                    <th>Status</th>
+                                    <th>Save</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var member in _allStaff)
+                                {
+                                    var m = member;
+                                    var isCurrentUser = m.Id == loggedInStaff.Id;
+                                    <tr>
+                                        <td><strong>@m.FullName</strong> @if (isCurrentUser) { <span style="font-size:.75rem;color:#888">(you)</span> }</td>
+                                        <td style="font-size:.85rem;color:#666">@m.Email</td>
+                                        <td>
+                                            <span class="status-badge status-badge--@(m.Role == StaffRole.Admin ? "confirmed" : "pending")">
+                                                @m.Role
+                                            </span>
+                                        </td>
+                                        @if (m.Role == StaffRole.Admin)
+                                        {
+                                            <td colspan="3" style="color:#888;font-size:.85rem;text-align:center">Full access (Admin)</td>
+                                        }
+                                        else
+                                        {
+                                            <td style="text-align:center">
+                                                <input type="checkbox" @bind="m.CanViewAllBookings" />
+                                            </td>
+                                            <td style="text-align:center">
+                                                <input type="checkbox" @bind="m.CanManageBookings" />
+                                            </td>
+                                            <td style="text-align:center">
+                                                <input type="checkbox" @bind="m.CanViewCustomerDetails" />
+                                            </td>
+                                        }
+                                        <td>
+                                            @if (!isCurrentUser)
+                                            {
+                                                <input type="checkbox" @bind="m.IsActive" title="Active" />
+                                                <span style="font-size:.8rem;margin-left:.3rem">Active</span>
+                                            }
+                                            else
+                                            {
+                                                <span style="font-size:.8rem;color:#888">—</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <button class="action-btn action-btn--confirm"
+                                                    @onclick="() => SaveStaffMember(m)">Save</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
+        </div>
+    </section>
+}
+
+@code {
+    private StaffMember? loggedInStaff;
+    private string loginEmail = "";
+    private string loginPassword = "";
+    private bool loginError;
+
+    private string activeTab = "bookings";
+
+    // Bookings
+    private List<Booking> _allBookings = [];
+    private string activeFilter = "All";
+    private string searchTerm = "";
+    private string? expandedId;
+    private (int total, int today, int pending, int confirmed) stats;
+
+    // Staff management
+    private List<StaffMember> _allStaff = [];
+    private StaffMember newStaff = new();
+    private string newStaffPassword = "";
+    private string? staffFormError;
+
+    // Pricing management
+    private List<ServicePricing> _servicePricings = [];
+    private Dictionary<string, decimal> _editPrices = [];
+    private List<PriceAdjustment> _priceAdjustments = [];
+    private string? _priceSaveMessage;
+
+    private static readonly string[] Filters =
+        ["All", "Today", "Pending", "Confirmed", "In Progress", "Completed", "Cancelled"];
+
+    private bool IsAdmin => loggedInStaff?.Role == StaffRole.Admin;
+    private bool CanManage => IsAdmin || loggedInStaff?.CanManageBookings == true;
+    private bool CanSeeCustomerDetails => IsAdmin || loggedInStaff?.CanViewCustomerDetails == true;
+    private List<Booking> TodayBookings =>
+        FilteredBookings.Where(b => b.SlotDate.Date == DateTime.Today).ToList();
+
+    private List<Booking> FilteredBookings
+    {
+        get
+        {
+            var all = _allBookings;
+
+            all = activeFilter switch
+            {
+                "Today"       => all.Where(b => b.SlotDate.Date == DateTime.Today).ToList(),
+                "Pending"     => all.Where(b => b.Status == BookingStatus.Pending).ToList(),
+                "Confirmed"   => all.Where(b => b.Status == BookingStatus.Confirmed).ToList(),
+                "In Progress" => all.Where(b => b.Status == BookingStatus.InProgress).ToList(),
+                "Completed"   => all.Where(b => b.Status == BookingStatus.Completed).ToList(),
+                "Cancelled"   => all.Where(b => b.Status == BookingStatus.Cancelled).ToList(),
+                _             => all
+            };
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var q = searchTerm.ToLower();
+                all = all.Where(b =>
+                    b.CustomerName.ToLower().Contains(q) ||
+                    b.CustomerEmail.ToLower().Contains(q) ||
+                    b.ServiceName.ToLower().Contains(q) ||
+                    b.Reference.ToLower().Contains(q)).ToList();
+            }
+
+            return all;
+        }
+    }
+
+    private void Login()
+    {
+        var staff = AuthService.AuthenticateStaff(loginEmail, loginPassword);
+        if (staff != null)
+        {
+            loggedInStaff = staff;
+            loginError = false;
+            LoadBookings();
+            RefreshStats();
+            if (IsAdmin) _allStaff = AuthService.GetAllStaff();
+        }
+        else
+        {
+            loginError = true;
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") Login(); }
+
+    private void Logout()
+    {
+        loggedInStaff = null;
+        loginEmail = loginPassword = "";
+        _allBookings = [];
+        _allStaff = [];
+        activeTab = "bookings";
+    }
+
+    private void LoadBookings()
+    {
+        _allBookings = IsAdmin || loggedInStaff?.CanViewAllBookings == true
+            ? BookingService.GetAllBookings()
+            : BookingService.GetBookingsForStaff(loggedInStaff!.Id);
+    }
+
+    private void RefreshStats()
+    {
+        stats = IsAdmin || loggedInStaff?.CanViewAllBookings == true
+            ? BookingService.GetStats()
+            : BookingService.GetStatsForStaff(loggedInStaff!.Id);
+    }
+
+    private void SetFilter(string f) { activeFilter = f; expandedId = null; }
+    private void ToggleExpand(string id) => expandedId = expandedId == id ? null : id;
+    private void OnSearch(ChangeEventArgs e) => searchTerm = e.Value?.ToString() ?? "";
+
+    private void UpdateStatus(string id, BookingStatus status)
+    {
+        BookingService.UpdateStatus(id, status);
+        LoadBookings();
+        RefreshStats();
+    }
+
+    private void AssignBooking(string bookingId, string? staffId)
+    {
+        BookingService.AssignStaff(bookingId, staffId);
+        LoadBookings();
+    }
+
+    private void SetBookingsTab() => activeTab = "bookings";
+
+    private void OpenPricingTab()
+    {
+        activeTab = "pricing";
+        _servicePricings = BookingService.GetServicePricings();
+        _editPrices = _servicePricings.ToDictionary(s => s.Id, s => s.CurrentPrice);
+        _priceAdjustments = BookingService.GetPriceAdjustments();
+        _priceSaveMessage = null;
+    }
+
+    private void SavePrice(string id)
+    {
+        if (!_editPrices.TryGetValue(id, out var price) || price < 0) return;
+        BookingService.UpdateServicePrice(id, Math.Round(price, 2));
+        _priceSaveMessage = "Price updated.";
+        _servicePricings = BookingService.GetServicePricings();
+    }
+
+    private void SaveAllPrices()
+    {
+        foreach (var (id, price) in _editPrices.Where(p => p.Value >= 0))
+            BookingService.UpdateServicePrice(id, Math.Round(price, 2));
+        _priceSaveMessage = "All prices saved.";
+        _servicePricings = BookingService.GetServicePricings();
+    }
+
+    private void OpenStaffTab()
+    {
+        activeTab = "staff";
+        _allStaff = AuthService.GetAllStaff();
+    }
+
+    private void AddStaff()
+    {
+        staffFormError = null;
+        if (string.IsNullOrWhiteSpace(newStaff.FullName)) { staffFormError = "Name is required."; return; }
+        if (string.IsNullOrWhiteSpace(newStaff.Email)) { staffFormError = "Email is required."; return; }
+        if (string.IsNullOrWhiteSpace(newStaffPassword)) { staffFormError = "Password is required."; return; }
+
+        newStaff.PasswordHash = AuthService.HashPassword(newStaffPassword);
+        AuthService.SaveStaff(newStaff);
+        _allStaff = AuthService.GetAllStaff();
+        newStaff = new StaffMember();
+        newStaffPassword = "";
+    }
+
+    private void SaveStaffMember(StaffMember member)
+    {
+        AuthService.SaveStaff(member);
+        _allStaff = AuthService.GetAllStaff();
+    }
+}

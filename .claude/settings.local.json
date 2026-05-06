@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build *)",
+      "Bash(claude mcp *)",
+      "PowerShell(Get-Command claude -ErrorAction SilentlyContinue; where.exe claude 2>$null; Get-ChildItem \"$env:LOCALAPPDATA\\\\@anthropic\" -Recurse -Filter \"claude.exe\" -ErrorAction SilentlyContinue | Select-Object -First 3 FullName)",
+      "PowerShell(npx claude --version 2>&1)",
+      "mcp__mcp-registry__list_connectors",
+      "Bash(nslookup db.dkwyccnsjbwsejrijard.supabase.co)",
+      "Bash(nslookup aws-0-eu-west-2.pooler.supabase.com)",
+      "Bash(nslookup aws-0-eu-west-1.pooler.supabase.com)",
+      "Bash(ping -6 -n 2 db.dkwyccnsjbwsejrijard.supabase.co)",
+      "Bash(grep -r \"CREATE\\\\|RLS\\\\|POLICY\\\\|policies\\\\|ALTER ROLE\\\\|row_security\\\\|rls_enabled\" \"C:\\\\Users\\\\Nelgar\\\\source\\\\repos\\\\Fixlosophy\" --include=\"*.cs\" ! -path \"*/bin/*\" ! -path \"*/obj/*\")"
+    ]
+  }
+}

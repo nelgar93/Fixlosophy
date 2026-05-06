@@ -1,0 +1,196 @@
+@page "/contact"
+@rendermode InteractiveServer
+
+<PageTitle>Contact – Fixlosophy Bike Repair</PageTitle>
+
+<div class="page-hero page-hero--sm">
+    <div class="container">
+        <p class="section-eyebrow">Get In Touch</p>
+        <h1>Book a Repair</h1>
+        <p>Fill in the form and we'll confirm your booking within a few hours.</p>
+    </div>
+</div>
+
+<section class="section">
+    <div class="container">
+        <div class="contact-grid">
+
+            <!-- FORM -->
+            <div class="contact-form-wrapper">
+                <h2>Send Us a Message</h2>
+
+                @if (submitted)
+                {
+                    <div class="success-message">
+                        <div class="success-icon">&#10003;</div>
+                        <h3>Thanks, @model.Name!</h3>
+                        <p>We've received your booking request and will confirm within a few hours. See you soon!</p>
+                        <button class="btn btn-outline" @onclick="ResetForm">Send Another</button>
+                    </div>
+                }
+                else
+                {
+                    <EditForm Model="model" OnValidSubmit="HandleSubmit" FormName="contact">
+                        <DataAnnotationsValidator />
+
+                        <div class="form-group">
+                            <label for="name">Your Name *</label>
+                            <InputText id="name" class="form-control" @bind-Value="model.Name" placeholder="e.g. Jane Smith" />
+                            <ValidationMessage For="() => model.Name" />
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="email">Email Address *</label>
+                                <InputText id="email" class="form-control" @bind-Value="model.Email" placeholder="jane@example.com" />
+                                <ValidationMessage For="() => model.Email" />
+                            </div>
+                            <div class="form-group">
+                                <label for="phone">Phone (optional)</label>
+                                <InputText id="phone" class="form-control" @bind-Value="model.Phone" placeholder="+1 555 000 000" />
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="service">Service Required *</label>
+                            <InputSelect id="service" class="form-control" @bind-Value="model.Service">
+                                <option value="">— Select a service —</option>
+                                <option>Flat Tyre Repair</option>
+                                <option>Brake Adjustment</option>
+                                <option>Gear Indexing</option>
+                                <option>Basic Tune-Up</option>
+                                <option>Full Service</option>
+                                <option>E-Bike Service</option>
+                                <option>Safety Check</option>
+                                <option>Suspension Service</option>
+                                <option>Custom Build</option>
+                                <option>Other / Not Sure</option>
+                            </InputSelect>
+                            <ValidationMessage For="() => model.Service" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="bike">Bike Type &amp; Brand (optional)</label>
+                            <InputText id="bike" class="form-control" @bind-Value="model.BikeDescription" placeholder="e.g. Trek Marlin 7 MTB, 2021" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="message">Describe the Issue *</label>
+                            <InputTextArea id="message" class="form-control" rows="5" @bind-Value="model.Message" placeholder="Tell us what's happening with your bike..." />
+                            <ValidationMessage For="() => model.Message" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="preferred">Preferred Date (optional)</label>
+                            <InputDate id="preferred" class="form-control" @bind-Value="model.PreferredDate" />
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg btn-full">Send Booking Request</button>
+                    </EditForm>
+                }
+            </div>
+
+            <!-- INFO SIDEBAR -->
+            <div class="contact-info">
+                <div class="info-card">
+                    <h3>Visit the Shop</h3>
+                    <div class="info-item">
+                        <span class="info-icon">&#128205;</span>
+                        <div>
+                            <strong>Address</strong>
+                            <p>42 Spoke Street<br />Chainring Quarter<br />City, 10001</p>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">&#128337;</span>
+                        <div>
+                            <strong>Opening Hours</strong>
+                            <p>Monday – Friday: 9am – 6pm<br />Saturday: 9am – 5pm<br />Sunday: Closed</p>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">&#128222;</span>
+                        <div>
+                            <strong>Phone</strong>
+                            <p><a href="tel:+15551234567">+1 (555) 123-4567</a></p>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">&#9993;</span>
+                        <div>
+                            <strong>Email</strong>
+                            <p><a href="mailto:hello@fixlosophy.com">hello&#64;fixlosophy.com</a></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h3>Walk-Ins Welcome</h3>
+                    <p>No appointment needed for quick repairs like flat tyres and minor adjustments. Just roll in during opening hours.</p>
+                </div>
+
+                <div class="info-card">
+                    <h3>Turnaround Times</h3>
+                    <div class="turnaround-list">
+                        <div class="turnaround-item">
+                            <span>Flat tyre / Quick fix</span>
+                            <span class="turnaround-time">Same day</span>
+                        </div>
+                        <div class="turnaround-item">
+                            <span>Basic Tune-Up</span>
+                            <span class="turnaround-time">Same day</span>
+                        </div>
+                        <div class="turnaround-item">
+                            <span>Full Service</span>
+                            <span class="turnaround-time">1–2 days</span>
+                        </div>
+                        <div class="turnaround-item">
+                            <span>Custom Build</span>
+                            <span class="turnaround-time">1–2 weeks</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+@code {
+    private ContactModel model = new();
+    private bool submitted = false;
+
+    private void HandleSubmit()
+    {
+        submitted = true;
+    }
+
+    private void ResetForm()
+    {
+        model = new();
+        submitted = false;
+    }
+
+    public class ContactModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Please enter your name.")]
+        public string Name { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Please enter your email.")]
+        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Please enter a valid email.")]
+        public string Email { get; set; } = "";
+
+        public string? Phone { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Please select a service.")]
+        public string Service { get; set; } = "";
+
+        public string? BikeDescription { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Please describe the issue.")]
+        [System.ComponentModel.DataAnnotations.MinLength(10, ErrorMessage = "Please give us a bit more detail.")]
+        public string Message { get; set; } = "";
+
+        public DateTime? PreferredDate { get; set; }
+    }
+}

@@ -1,0 +1,154 @@
+@page "/services"
+@inject BookingService BookingService
+
+<PageTitle>Services – Fixlosophy Bike Repair</PageTitle>
+
+<div class="page-hero page-hero--sm">
+    <div class="container">
+        <p class="section-eyebrow">What We Offer</p>
+        <h1>Our Services</h1>
+        <p>Professional bike care for every rider, every budget.</p>
+    </div>
+</div>
+
+<section class="section">
+    <div class="container">
+
+        <!-- SERVICING PACKAGES -->
+        <div class="services-category">
+            <h2 class="category-title"><span class="cat-icon">&#128736;</span> Servicing Packages</h2>
+            <div class="package-grid">
+                @{
+                    var basicPrice = _priceMap.GetValueOrDefault("Basic Service");
+                    var fullPrice  = _priceMap.GetValueOrDefault("Full Service");
+                    var goldPrice  = _priceMap.GetValueOrDefault("Gold Service");
+                }
+                <div class="package-card">
+                    <div class="package-header">
+                        <h3>Basic Service</h3>
+                        <div class="package-price">£@basicPrice</div>
+                    </div>
+                    <ul>
+                        <li>&#10003; Gear indexing (front &amp; rear)</li>
+                        <li>&#10003; Brake adjustment</li>
+                        <li>&#10003; Tyre pressure check</li>
+                        <li>&#10003; Chain lube &amp; inspection</li>
+                        <li>&#10003; Safety check</li>
+                    </ul>
+                    <a href="/book" class="btn btn-outline">Book Now</a>
+                </div>
+                <div class="package-card package-card--popular">
+                    <div class="package-badge">Most Popular</div>
+                    <div class="package-header">
+                        <h3>Full Service</h3>
+                        <div class="package-price">£@fullPrice</div>
+                    </div>
+                    <ul>
+                        <li>&#10003; Everything in Basic Service</li>
+                        <li>&#10003; Full drivetrain clean</li>
+                        <li>&#10003; Cable &amp; housing check</li>
+                        <li>&#10003; Wheel true &amp; spoke check</li>
+                        <li>&#10003; Bearing inspection</li>
+                    </ul>
+                    <a href="/book" class="btn btn-primary">Book Now</a>
+                </div>
+                <div class="package-card">
+                    <div class="package-header">
+                        <h3>Gold Service</h3>
+                        <div class="package-price">£@goldPrice</div>
+                    </div>
+                    <ul>
+                        <li>&#10003; Complete disassembly</li>
+                        <li>&#10003; Deep clean &amp; degrease</li>
+                        <li>&#10003; New cables &amp; housing</li>
+                        <li>&#10003; Bearing service &amp; repack</li>
+                        <li>&#10003; Full drivetrain overhaul</li>
+                        <li>&#10003; Written service report</li>
+                    </ul>
+                    <a href="/book" class="btn btn-outline">Book Now</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- SPECIALIST -->
+        @if (_servicesByCategory.Contains("Specialist"))
+        {
+            <div class="services-category">
+                <h2 class="category-title"><span class="cat-icon">&#9889;</span> Specialist Services</h2>
+                <div class="pricing-table">
+                    @foreach (var svc in _servicesByCategory["Specialist"])
+                    {
+                        <div class="pricing-row">
+                            <div class="pricing-info">
+                                <h4>@svc.Name</h4>
+                                <p>@svc.Duration</p>
+                            </div>
+                            <div class="pricing-cost">£@svc.PriceFrom</div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- COMPONENTS -->
+        @if (_servicesByCategory.Contains("Components"))
+        {
+            <div class="services-category">
+                <h2 class="category-title"><span class="cat-icon">&#128295;</span> Components &amp; Repairs</h2>
+                <div class="pricing-table">
+                    @foreach (var svc in _servicesByCategory["Components"])
+                    {
+                        <div class="pricing-row">
+                            <div class="pricing-info">
+                                <h4>@svc.Name</h4>
+                                <p>@svc.Duration</p>
+                            </div>
+                            <div class="pricing-cost">£@svc.PriceFrom</div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- OTHER CATEGORIES -->
+        @foreach (var cat in _servicesByCategory.Select(g => g.Key)
+                                                 .Where(k => k != "Servicing Packages" && k != "Specialist" && k != "Components"))
+        {
+            <div class="services-category">
+                <h2 class="category-title">@cat</h2>
+                <div class="pricing-table">
+                    @foreach (var svc in _servicesByCategory[cat])
+                    {
+                        <div class="pricing-row">
+                            <div class="pricing-info">
+                                <h4>@svc.Name</h4>
+                                <p>@svc.Duration</p>
+                            </div>
+                            <div class="pricing-cost">
+                                @(svc.PriceFrom > 0 ? $"£{svc.PriceFrom}" : "Quote on request")
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="services-note">
+            <p>&#9432; Prices shown are for labour only. Parts quoted separately. Final price confirmed before work begins.</p>
+            <a href="/book" class="btn btn-primary btn-lg">Book Now</a>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private ILookup<string, ServiceOption> _servicesByCategory = Enumerable.Empty<ServiceOption>().ToLookup(s => s.Category);
+    private Dictionary<string, decimal> _priceMap = [];
+
+    protected override void OnInitialized()
+    {
+        var services = BookingService.GetServices();
+        _servicesByCategory = services.ToLookup(s => s.Category);
+        _priceMap = services.ToDictionary(s => s.Name, s => s.PriceFrom);
+    }
+}

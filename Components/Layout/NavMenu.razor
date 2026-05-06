@@ -1,0 +1,49 @@
+@inject NavigationManager Nav
+@implements IDisposable
+
+<header class="navbar-wrapper @(scrolled ? "navbar-scrolled" : "")">
+    <nav class="navbar container">
+        <a class="navbar-brand" href="/">
+            <img src="logo.png" alt="Fixlosophy" class="navbar-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
+            <span style="display:none">&#9851; Fixlosophy</span>
+        </a>
+
+        <button class="hamburger @(menuOpen ? "open" : "")" @onclick="ToggleMenu" aria-label="Toggle navigation">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+
+        <div class="nav-links @(menuOpen ? "nav-links--open" : "")">
+            <NavLink href="/" Match="NavLinkMatch.All" @onclick="CloseMenu">Home</NavLink>
+            <NavLink href="/services" @onclick="CloseMenu">Services</NavLink>
+            <NavLink href="/about" @onclick="CloseMenu">About</NavLink>
+            <NavLink href="/contact" @onclick="CloseMenu">Contact</NavLink>
+            <a class="btn-book" href="/book" @onclick="CloseMenu">Book a Repair</a>
+        </div>
+    </nav>
+</header>
+
+@code {
+    private bool menuOpen = false;
+    private bool scrolled = false;
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        menuOpen = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleMenu() => menuOpen = !menuOpen;
+    private void CloseMenu() => menuOpen = false;
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

@@ -1,0 +1,613 @@
+@page "/book"
+@rendermode InteractiveServer
+@inject BookingService BookingService
+@inject AuthService AuthService
+
+<PageTitle>Book a Repair – Fixlosophy</PageTitle>
+
+<div class="page-hero page-hero--sm">
+    <div class="container">
+        <p class="section-eyebrow">Online Booking</p>
+        <h1>Book a Repair</h1>
+        <p>Pick your service, choose a time, and we'll have you back on the road.</p>
+    </div>
+</div>
+
+<section class="section booking-section">
+    <div class="container">
+
+        <!-- Customer account strip (visible during booking steps) -->
+        @if (step < 5)
+        {
+            <div class="customer-auth-strip">
+                @if (loggedInCustomer != null)
+                {
+                    <span>Signed in as <strong>@loggedInCustomer.FullName</strong></span>
+                    <button class="customer-auth-strip__link" @onclick="SignOutCustomer">Sign out</button>
+                }
+                else
+                {
+                    <span>Have an account?</span>
+                    <button class="customer-auth-strip__link"
+                            @onclick='() => { showAuthPanel = !showAuthPanel; authMode = "login"; authError = null; }'>
+                        Sign in for faster checkout
+                    </button>
+
+                    @if (showAuthPanel)
+                    {
+                        <div class="customer-auth-panel">
+                            <div class="customer-auth-tabs">
+                                <button class="@(authMode == "login" ? "active" : "")"
+                                        @onclick='() => { authMode = "login"; authError = null; }'>Sign In</button>
+                                <button class="@(authMode == "register" ? "active" : "")"
+                                        @onclick='() => { authMode = "register"; authError = null; }'>Create Account</button>
+                            </div>
+
+                            @if (authError != null)
+                            {
+                                <div class="booking-error" style="margin-bottom:.5rem">@authError</div>
+                            }
+
+                            @if (authMode == "login")
+                            {
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Email</label>
+                                        <input class="form-control" type="email" @bind="authEmail" placeholder="you@example.com" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Password</label>
+                                        <input class="form-control" type="password" @bind="authPassword" placeholder="Your password" />
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary" @onclick="SignInCustomer">Sign In</button>
+                            }
+                            else
+                            {
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Full Name</label>
+                                        <input class="form-control" @bind="authName" placeholder="Jane Smith" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Email</label>
+                                        <input class="form-control" type="email" @bind="authEmail" placeholder="jane@example.com" />
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Phone</label>
+                                        <input class="form-control" type="tel" @bind="authPhone" placeholder="+1 555 000 000" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Password</label>
+                                        <input class="form-control" type="password" @bind="authPassword" placeholder="Choose a password" />
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary" @onclick="RegisterCustomer">Create Account</button>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        }
+
+        @if (step < 5)
+        {
+            <!-- Step indicator -->
+            <div class="steps-indicator">
+                @foreach (var (label, i) in new[] { "Service", "Schedule", "Details", "Review" }.Select((l, i) => (l, i + 1)))
+                {
+                    <div class="step-indicator @(step == i ? "active" : step > i ? "done" : "")">
+                        <div class="step-indicator__dot">
+                            @if (step > i) { <span>&#10003;</span> }
+                            else { <span>@i</span> }
+                        </div>
+                        <span class="step-indicator__label">@label</span>
+                    </div>
+                    @if (i < 4)
+                    {
+                        <div class="step-indicator__line @(step > i ? "done" : "")"></div>
+                    }
+                }
+            </div>
+        }
+
+        <!-- STEP 1: SERVICE -->
+        @if (step == 1)
+        {
+            <div class="booking-card">
+                <h2 class="booking-card__title">Choose a Service</h2>
+                <p class="booking-card__subtitle">Select the type of repair or service you need.</p>
+
+                @foreach (var category in _services.Select(s => s.Category).Distinct())
+                {
+                    <div class="service-category-group">
+                        <h3 class="service-category-label">@category</h3>
+                        <div class="service-pick-grid">
+                            @foreach (var svc in _services.Where(s => s.Category == category))
+                            {
+                                var isSelected = selectedService?.Name == svc.Name;
+                                <div class="service-pick-card @(isSelected ? "selected" : "")" @onclick="() => SelectService(svc)">
+                                    <div class="service-pick-card__icon">@((MarkupString)svc.Icon)</div>
+                                    <div class="service-pick-card__info">
+                                        <strong>@svc.Name</strong>
+                                        <span>@svc.Duration</span>
+                                    </div>
+                                    <div class="service-pick-card__price">
+                                        @(svc.PriceFrom > 0 ? $"From £{svc.PriceFrom}" : "Quote")
+                                    </div>
+                                    @if (isSelected)
+                                    {
+                                        <div class="service-pick-card__check">&#10003;</div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="booking-nav">
+                    <span></span>
+                    <button class="btn btn-primary btn-lg" @onclick="GoToStep2" disabled="@(selectedService == null)">
+                        Continue <span>&#8594;</span>
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- STEP 2: DATE & TIME -->
+        @if (step == 2)
+        {
+            <div class="booking-card">
+                <h2 class="booking-card__title">Pick a Date &amp; Time</h2>
+                <p class="booking-card__subtitle">We're open Monday – Saturday, 9am – 5pm. Closed Sundays.</p>
+
+                <div class="schedule-grid">
+                    <!-- Calendar -->
+                    <div class="calendar-wrapper">
+                        <div class="cal-nav">
+                            <button class="cal-nav__btn" @onclick="PrevMonth" disabled="@(calendarMonth.Year == DateTime.Today.Year && calendarMonth.Month == DateTime.Today.Month)">&#8592;</button>
+                            <span class="cal-nav__title">@calendarMonth.ToString("MMMM yyyy")</span>
+                            <button class="cal-nav__btn" @onclick="NextMonth">&#8594;</button>
+                        </div>
+
+                        <div class="cal-grid">
+                            @foreach (var d in new[] { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" })
+                            {
+                                <div class="cal-head">@d</div>
+                            }
+
+                            @for (int i = 0; i < CalFirstDayOffset; i++)
+                            {
+                                <div class="cal-day cal-day--empty"></div>
+                            }
+
+                            @for (int d = 1; d <= CalDaysInMonth; d++)
+                            {
+                                var day = d;
+                                var date = new DateTime(calendarMonth.Year, calendarMonth.Month, day);
+                                var isPast = date.Date < DateTime.Today;
+                                var isSun = date.DayOfWeek == DayOfWeek.Sunday;
+                                var avail = !isPast && !isSun && GetDateAvailable(date);
+                                var isSelected = selectedDate.HasValue && selectedDate.Value.Date == date.Date;
+                                var isToday = date.Date == DateTime.Today;
+
+                                var css = "cal-day"
+                                    + (isSelected ? " cal-day--selected" : "")
+                                    + (isToday && !isSelected ? " cal-day--today" : "")
+                                    + (avail ? " cal-day--available" : " cal-day--disabled");
+
+                                <div class="@css" @onclick="() => OnDayClick(date, avail)">@day</div>
+                            }
+                        </div>
+                        <div class="cal-legend">
+                            <span class="cal-legend__dot cal-legend__dot--available"></span> Available
+                            <span class="cal-legend__dot cal-legend__dot--selected"></span> Selected
+                            <span class="cal-legend__dot cal-legend__dot--disabled"></span> Unavailable
+                        </div>
+                    </div>
+
+                    <!-- Time slots -->
+                    <div class="timeslot-wrapper">
+                        @if (selectedDate.HasValue)
+                        {
+                            <h4>@selectedDate.Value.ToString("dddd, d MMMM")</h4>
+                            @if (availableSlots.Count == 0)
+                            {
+                                <p class="timeslot-none">No slots available for this date. Please pick another day.</p>
+                            }
+                            else
+                            {
+                                <div class="timeslot-grid">
+                                    @foreach (var slot in availableSlots)
+                                    {
+                                        var s = slot;
+                                        <div class="timeslot @(selectedTime == s ? "timeslot--selected" : "")" @onclick="() => selectedTime = s">
+                                            @s
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="timeslot-prompt">
+                                <span>&#128197;</span>
+                                <p>Select a date to see available time slots.</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="booking-nav">
+                    <button class="btn btn-outline" @onclick="() => GoToStep(1)">&#8592; Back</button>
+                    <button class="btn btn-primary btn-lg" @onclick="GoToStep3" disabled="@(selectedDate == null || selectedTime == null)">
+                        Continue <span>&#8594;</span>
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- STEP 3: DETAILS -->
+        @if (step == 3)
+        {
+            <div class="booking-card">
+                <h2 class="booking-card__title">Your Details</h2>
+                <p class="booking-card__subtitle">Tell us a bit about yourself and your bike.</p>
+
+                @if (validationError != null)
+                {
+                    <div class="booking-error">@validationError</div>
+                }
+
+                <div class="details-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Full Name *</label>
+                            <input class="form-control" type="text" @bind="customerName" placeholder="e.g. Jane Smith" />
+                        </div>
+                        <div class="form-group">
+                            <label>Email Address *</label>
+                            <input class="form-control" type="email" @bind="customerEmail" placeholder="jane@example.com" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Phone Number</label>
+                            <input class="form-control" type="tel" @bind="customerPhone" placeholder="+1 555 000 000" />
+                        </div>
+                        <div class="form-group">
+                            <label>Bike Make &amp; Model</label>
+                            <input class="form-control" type="text" @bind="bikeDescription" placeholder="e.g. Trek Marlin 7, 2022" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Describe the Issue</label>
+                        <textarea class="form-control" rows="4" @bind="notes" placeholder="Any extra details that would help our mechanic prepare..."></textarea>
+                    </div>
+                </div>
+
+                <div class="booking-nav">
+                    <button class="btn btn-outline" @onclick="() => GoToStep(2)">&#8592; Back</button>
+                    <button class="btn btn-primary btn-lg" @onclick="GoToStep4">Continue <span>&#8594;</span></button>
+                </div>
+            </div>
+        }
+
+        <!-- STEP 4: REVIEW -->
+        @if (step == 4)
+        {
+            <div class="booking-card">
+                <h2 class="booking-card__title">Review Your Booking</h2>
+                <p class="booking-card__subtitle">Check everything looks right before we confirm.</p>
+
+                <div class="review-grid">
+                    <div class="review-item">
+                        <span class="review-label">Service</span>
+                        <span class="review-value">@selectedService!.Name</span>
+                    </div>
+                    <div class="review-item">
+                        <span class="review-label">Category</span>
+                        <span class="review-value">@selectedService.Category</span>
+                    </div>
+                    <div class="review-item">
+                        <span class="review-label">Estimated Price</span>
+                        <span class="review-value review-value--green">@(selectedService.PriceFrom > 0 ? $"From £{selectedService.PriceFrom}" : "Quote on arrival")</span>
+                    </div>
+                    <div class="review-item">
+                        <span class="review-label">Duration</span>
+                        <span class="review-value">@selectedService.Duration</span>
+                    </div>
+                    <div class="review-item">
+                        <span class="review-label">Date</span>
+                        <span class="review-value">@selectedDate!.Value.ToString("dddd, d MMMM yyyy")</span>
+                    </div>
+                    <div class="review-item">
+                        <span class="review-label">Time</span>
+                        <span class="review-value">@selectedTime</span>
+                    </div>
+                    <div class="review-item">
+                        <span class="review-label">Name</span>
+                        <span class="review-value">@customerName</span>
+                    </div>
+                    <div class="review-item">
+                        <span class="review-label">Email</span>
+                        <span class="review-value">@customerEmail</span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(customerPhone))
+                    {
+                        <div class="review-item">
+                            <span class="review-label">Phone</span>
+                            <span class="review-value">@customerPhone</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(bikeDescription))
+                    {
+                        <div class="review-item">
+                            <span class="review-label">Bike</span>
+                            <span class="review-value">@bikeDescription</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="review-note">
+                    <span>&#9432;</span>
+                    Final price confirmed after assessment. You won't be charged until you approve the quote.
+                </div>
+
+                <div class="booking-nav">
+                    <button class="btn btn-outline" @onclick="() => GoToStep(3)">&#8592; Back</button>
+                    <button class="btn btn-primary btn-lg" @onclick="ConfirmBooking" disabled="@submitting">
+                        @(submitting ? "Confirming…" : "Confirm Booking &#10003;")
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- STEP 5: CONFIRMED -->
+        @if (step == 5 && confirmedBooking != null)
+        {
+            <div class="booking-confirmed">
+                <div class="confirmed-icon">&#10003;</div>
+                <h2>You're booked in!</h2>
+                <p class="confirmed-subtitle">We've received your booking and will send a confirmation shortly.</p>
+
+                <div class="confirmed-ref">
+                    <span>Booking Reference</span>
+                    <strong>@confirmedBooking.Reference</strong>
+                </div>
+
+                <div class="confirmed-summary">
+                    <div class="confirmed-row">
+                        <span>&#128736;</span>
+                        <div>
+                            <strong>@confirmedBooking.ServiceName</strong>
+                            <span>@(confirmedBooking.ServicePrice > 0 ? $"From £{confirmedBooking.ServicePrice}" : "Quote on arrival")</span>
+                        </div>
+                    </div>
+                    <div class="confirmed-row">
+                        <span>&#128197;</span>
+                        <div>
+                            <strong>@confirmedBooking.SlotDate.ToString("dddd, d MMMM yyyy")</strong>
+                            <span>at @confirmedBooking.SlotTime</span>
+                        </div>
+                    </div>
+                    <div class="confirmed-row">
+                        <span>&#128205;</span>
+                        <div>
+                            <strong>42 Spoke Street, Chainring Quarter</strong>
+                            <span>Bring your bike 5 minutes early</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="confirmed-actions">
+                    <a href="/" class="btn btn-primary btn-lg">Back to Home</a>
+                    <a href="/book" class="btn btn-outline btn-lg" @onclick="ResetBooking">Book Another</a>
+                </div>
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private int step = 1;
+
+    // Step 1
+    private List<ServiceOption> _services = [];
+    private ServiceOption? selectedService;
+
+    // Step 2
+    private DateTime calendarMonth = DateTime.Today;
+    private DateTime? selectedDate;
+    private string? selectedTime;
+    private List<string> availableSlots = new();
+    private Dictionary<DateTime, bool> _monthAvailability = new();
+
+    // Step 3
+    private string customerName = "";
+    private string customerEmail = "";
+    private string customerPhone = "";
+    private string bikeDescription = "";
+    private string notes = "";
+    private string? validationError;
+
+    // Step 4/5
+    private bool submitting = false;
+    private Booking? confirmedBooking;
+
+    // Customer account
+    private Customer? loggedInCustomer;
+    private bool showAuthPanel;
+    private string authMode = "login";
+    private string authEmail = "";
+    private string authPassword = "";
+    private string authName = "";
+    private string authPhone = "";
+    private string? authError;
+
+    // Calendar helpers
+    private int CalDaysInMonth => DateTime.DaysInMonth(calendarMonth.Year, calendarMonth.Month);
+    private int CalFirstDayOffset
+    {
+        get
+        {
+            var first = (int)new DateTime(calendarMonth.Year, calendarMonth.Month, 1).DayOfWeek;
+            return first == 0 ? 6 : first - 1;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _services = BookingService.GetServices();
+    }
+
+    private bool GetDateAvailable(DateTime date) =>
+        _monthAvailability.TryGetValue(date.Date, out var avail) && avail;
+
+    private void LoadMonthAvailability()
+    {
+        _monthAvailability = BookingService.GetDateAvailabilityForMonth(calendarMonth.Year, calendarMonth.Month);
+    }
+
+    private void SelectService(ServiceOption svc) => selectedService = svc;
+
+    private void GoToStep(int s)
+    {
+        if (s == 2)
+        {
+            LoadMonthAvailability();
+            if (selectedDate.HasValue)
+                availableSlots = BookingService.GetAvailableSlots(selectedDate.Value);
+        }
+        step = s;
+    }
+
+    private void GoToStep2()
+    {
+        if (selectedService == null) return;
+        LoadMonthAvailability();
+        step = 2;
+    }
+
+    private void GoToStep3() => step = 3;
+
+    private void GoToStep4()
+    {
+        validationError = null;
+        if (string.IsNullOrWhiteSpace(customerName))
+        { validationError = "Please enter your name."; return; }
+        if (string.IsNullOrWhiteSpace(customerEmail) || !customerEmail.Contains('@'))
+        { validationError = "Please enter a valid email address."; return; }
+        step = 4;
+    }
+
+    private void OnDayClick(DateTime date, bool available)
+    {
+        if (!available) return;
+        selectedDate = date;
+        selectedTime = null;
+        availableSlots = BookingService.GetAvailableSlots(date);
+        // If all slots are now full (booked since month data was loaded), update the calendar
+        if (availableSlots.Count == 0)
+            _monthAvailability[date.Date] = false;
+    }
+
+    private void PrevMonth()
+    {
+        var prev = calendarMonth.AddMonths(-1);
+        if (prev.Year > DateTime.Today.Year || (prev.Year == DateTime.Today.Year && prev.Month >= DateTime.Today.Month))
+        {
+            calendarMonth = prev;
+            LoadMonthAvailability();
+        }
+    }
+
+    private void NextMonth()
+    {
+        calendarMonth = calendarMonth.AddMonths(1);
+        LoadMonthAvailability();
+    }
+
+    private void ConfirmBooking()
+    {
+        if (selectedService == null || selectedDate == null || selectedTime == null) return;
+        submitting = true;
+
+        var booking = new Booking
+        {
+            CustomerName    = customerName,
+            CustomerEmail   = customerEmail,
+            CustomerPhone   = customerPhone,
+            ServiceCategory = selectedService.Category,
+            ServiceName     = selectedService.Name,
+            ServicePrice    = selectedService.PriceFrom,
+            SlotDate        = selectedDate.Value,
+            SlotTime        = selectedTime,
+            BikeDescription = bikeDescription,
+            Notes           = notes,
+            CustomerId      = loggedInCustomer?.Id
+        };
+
+        confirmedBooking = BookingService.CreateBooking(booking);
+        step = 5;
+        submitting = false;
+    }
+
+    private void ResetBooking()
+    {
+        step = 1;
+        selectedService = null;
+        selectedDate = null;
+        selectedTime = null;
+        availableSlots = new();
+        _monthAvailability = new();
+        customerName = customerEmail = customerPhone = bikeDescription = notes = "";
+        validationError = null;
+        confirmedBooking = null;
+        calendarMonth = DateTime.Today;
+        // Keep the customer logged in between bookings
+    }
+
+    private void SignInCustomer()
+    {
+        authError = null;
+        var customer = AuthService.AuthenticateCustomer(authEmail, authPassword);
+        if (customer == null) { authError = "Incorrect email or password."; return; }
+        loggedInCustomer = customer;
+        PrefillCustomerDetails();
+        showAuthPanel = false;
+        authEmail = authPassword = "";
+    }
+
+    private void RegisterCustomer()
+    {
+        authError = null;
+        if (string.IsNullOrWhiteSpace(authName)) { authError = "Please enter your name."; return; }
+        if (string.IsNullOrWhiteSpace(authEmail)) { authError = "Please enter your email."; return; }
+        if (string.IsNullOrWhiteSpace(authPassword)) { authError = "Please choose a password."; return; }
+
+        var (customer, error) = AuthService.RegisterCustomer(authEmail, authName, authPhone, authPassword);
+        if (error != null) { authError = error; return; }
+        loggedInCustomer = customer;
+        PrefillCustomerDetails();
+        showAuthPanel = false;
+        authEmail = authPassword = authName = authPhone = "";
+    }
+
+    private void SignOutCustomer()
+    {
+        loggedInCustomer = null;
+        showAuthPanel = false;
+    }
+
+    private void PrefillCustomerDetails()
+    {
+        if (loggedInCustomer == null) return;
+        customerName = loggedInCustomer.FullName;
+        customerEmail = loggedInCustomer.Email;
+        customerPhone = loggedInCustomer.Phone;
+    }
+}
