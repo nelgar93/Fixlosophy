@@ -20,6 +20,11 @@ builder.Services.AddSingleton<GoogleCalendarService>();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: true)
+    .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())

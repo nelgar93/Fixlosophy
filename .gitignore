@@ -1,0 +1,95 @@
+## =====================
+## Build output
+## =====================
+bin/
+obj/
+out/
+publish/
+
+## =====================
+## User-specific files
+## =====================
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## =====================
+## Visual Studio
+## =====================
+.vs/
+.vscode/
+
+## =====================
+## Rider / JetBrains
+## =====================
+.idea/
+*.sln.iml
+
+## =====================
+## Logs
+## =====================
+*.log
+
+## =====================
+## NuGet
+## =====================
+*.nupkg
+*.snupkg
+**/packages/
+!**/packages/build/
+
+## NuGet assets (optional, ma spesso consigliato ignorarlo)
+project.assets.json
+packages.lock.json
+
+## =====================
+## Dotnet tools
+## =====================
+.dotnet/
+
+## =====================
+## EF Core migrations local artifacts (opzionale)
+## =====================
+Migrations/*Designer.cs
+Migrations/*Snapshot.cs
+
+## =====================
+## OS files
+## =====================
+.DS_Store
+Thumbs.db
+
+## =====================
+## Secrets (IMPORTANT)
+## =====================
+appsettings.Development.json
+appsettings.*.local.json
+appsettings.Local.json
+secrets.json
+*.key
+*.pfx
+
+## =====================
+## Publish folders
+## =====================
+wwwroot/dist/
+wwwroot/build/
+
+## =====================
+## Test results
+## =====================
+TestResults/
+*.trx
+
+## =====================
+## Docker (optional)
+## =====================
+docker-compose.override.yml
+
+## =====================
+## Coverage
+## =====================
+coverage/
+*.coverage
+*.coveragexml
