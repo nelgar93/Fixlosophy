@@ -10,7 +10,11 @@
       "Bash(nslookup aws-0-eu-west-2.pooler.supabase.com)",
       "Bash(nslookup aws-0-eu-west-1.pooler.supabase.com)",
       "Bash(ping -6 -n 2 db.dkwyccnsjbwsejrijard.supabase.co)",
-      "Bash(grep -r \"CREATE\\\\|RLS\\\\|POLICY\\\\|policies\\\\|ALTER ROLE\\\\|row_security\\\\|rls_enabled\" \"C:\\\\Users\\\\Nelgar\\\\source\\\\repos\\\\Fixlosophy\" --include=\"*.cs\" ! -path \"*/bin/*\" ! -path \"*/obj/*\")"
+      "Bash(grep -r \"CREATE\\\\|RLS\\\\|POLICY\\\\|policies\\\\|ALTER ROLE\\\\|row_security\\\\|rls_enabled\" \"C:\\\\Users\\\\Nelgar\\\\source\\\\repos\\\\Fixlosophy\" --include=\"*.cs\" ! -path \"*/bin/*\" ! -path \"*/obj/*\")",
+      "PowerShell(cmd /c \"mkdir testdir123 2>&1\")",
+      "PowerShell(cmd /c \"mkdir obj 2>&1\")",
+      "PowerShell([System.IO.Directory]::Exists\\('C:\\\\Users\\\\Raven\\\\Documents\\\\GitHub\\\\Fixlosophy'\\); [System.IO.File]::Exists\\('C:\\\\Users\\\\Raven\\\\Documents\\\\GitHub\\\\Fixlosophy\\\\wwwroot\\\\logo.svg'\\); $env:OneDrive; \\(Get-Location\\).Path; [System.IO.Directory]::CreateDirectory\\('C:\\\\Users\\\\Raven\\\\Documents\\\\GitHub\\\\Fixlosophy\\\\obj'\\).FullName; [System.IO.Directory]::Exists\\('C:\\\\Users\\\\Raven\\\\Documents\\\\GitHub\\\\Fixlosophy\\\\obj'\\))",
+      "PowerShell([System.IO.Directory]::CreateDirectory\\(\"$env:TEMP\\\\fixl-build\\\\obj\"\\).FullName; dotnet build Fixlosophy.csproj --nologo -v minimal /p:BaseIntermediateOutputPath=\"$env:TEMP\\\\fixl-build\\\\obj\\\\\" /p:BaseOutputPath=\"$env:TEMP\\\\fixl-build\\\\bin\\\\\" 2>&1 | Select-Object -Last 20)"
     ]
   }
 }
