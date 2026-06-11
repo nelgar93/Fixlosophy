@@ -24,11 +24,11 @@
 
             <div class="form-group">
                 <label>Email</label>
-                <input class="form-control" type="email" @bind="loginEmail" placeholder="staff@fixlosophy.com" />
+                <input class="form-control" type="email" @bind="loginEmail" @bind:event="oninput" placeholder="staff@fixlosophy.com" />
             </div>
             <div class="form-group" style="margin-top:.75rem">
                 <label>Password</label>
-                <input class="form-control" type="password" @bind="loginPassword"
+                <input class="form-control" type="password" @bind="loginPassword" @bind:event="oninput"
                        @onkeydown="OnKeyDown" placeholder="Enter password" />
             </div>
             <button class="btn btn-primary btn-full" style="margin-top:1rem" @onclick="Login">Sign In</button>

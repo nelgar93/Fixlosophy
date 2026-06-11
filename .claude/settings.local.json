@@ -18,7 +18,9 @@
       "PowerShell(Resolve-DnsName db.dkwyccnsjbwsejrijard.supabase.co -ErrorAction SilentlyContinue)",
       "PowerShell(Test-NetConnection -ComputerName db.dkwyccnsjbwsejrijard.supabase.co -Port 5432 -InformationLevel Quiet -WarningAction SilentlyContinue)",
       "PowerShell(foreach \\($h in 'aws-0-eu-west-1.pooler.supabase.com','aws-1-eu-west-1.pooler.supabase.com'\\) { $r = Test-NetConnection -ComputerName $h -Port 5432 -InformationLevel Quiet -WarningAction SilentlyContinue; \"$h : $r\" })",
-      "PowerShell($psql = Get-Command psql -ErrorAction SilentlyContinue; if \\($psql\\) { $psql.Source } else { \"psql not found\" })"
+      "PowerShell($psql = Get-Command psql -ErrorAction SilentlyContinue; if \\($psql\\) { $psql.Source } else { \"psql not found\" })",
+      "PowerShell(Get-Process -Name Fixlosophy -ErrorAction SilentlyContinue | Stop-Process -Force; Get-Process -Name dotnet -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'run --project' } | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; \\(Get-NetTCPConnection -LocalPort 5126 -ErrorAction SilentlyContinue\\) -eq $null ? \"port 5126 free\" : \"port 5126 still in use\")",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }
