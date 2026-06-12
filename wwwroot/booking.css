@@ -540,20 +540,6 @@
 .admin-login__card p { color: rgba(255,255,255,0.5); margin-bottom: 1.5rem; font-size: 0.9rem; }
 .admin-login__card .form-group { text-align: left; margin-bottom: 1.25rem; }
 
-.admin-login__hint {
-    margin-top: 1.25rem !important;
-    font-size: 0.75rem !important;
-    color: rgba(255,255,255,0.25) !important;
-}
-
-.admin-login__hint code {
-    background: var(--dark-3);
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    color: var(--green);
-}
-
 /* ---------- Admin Dashboard ---------- */
 .admin-section { padding-top: 2.5rem; }
 

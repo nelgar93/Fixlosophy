@@ -1,5 +1,6 @@
 @page "/contact"
 @rendermode InteractiveServer
+@inject ActionRateLimiter RateLimiter
 
 <PageTitle>Contact – Fixlosophy Bike Repair</PageTitle>
 
@@ -85,6 +86,11 @@
                             <InputDate id="preferred" class="form-control" @bind-Value="model.PreferredDate" />
                         </div>
 
+                        @if (rateLimitError != null)
+                        {
+                            <div class="booking-error">@rateLimitError</div>
+                        }
+
                         <button type="submit" class="btn btn-primary btn-lg btn-full">Send Booking Request</button>
                     </EditForm>
                 }
@@ -159,9 +165,13 @@
 @code {
     private ContactModel model = new();
     private bool submitted = false;
+    private string? rateLimitError;
 
     private void HandleSubmit()
     {
+        if (!RateLimiter.TryAcquire(LimitedAction.ContactMessage))
+        { rateLimitError = "Too many messages in a short time. Please wait a few minutes and try again."; return; }
+        rateLimitError = null;
         submitted = true;
     }
 

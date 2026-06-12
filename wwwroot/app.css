@@ -149,7 +149,8 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     align-items: center;
 }
 .navbar-brand:hover { color: var(--green) !important; }
-.navbar-logo { height: 40px; width: auto; display: block; }
+/* logo.avif has a solid black background; screen blend hides it on dark surfaces */
+.navbar-logo { height: 40px; width: auto; display: block; mix-blend-mode: screen; }
 
 /* ---------- Footer logo ---------- */
 .footer-logo-link {
@@ -157,7 +158,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     margin-bottom: 0.85rem;
     line-height: 0;
 }
-.footer-logo-img  { height: 38px; width: auto; display: block; }
+.footer-logo-img  { height: 38px; width: auto; display: block; mix-blend-mode: screen; }
 .footer-logo-text {
     font-size: 1.3rem;
     font-weight: 800;
@@ -167,7 +168,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 /* ---------- Admin login logo ---------- */
 .admin-login__logo { margin-bottom: 1.5rem; }
-.admin-logo-img   { height: 64px; width: auto; display: block; margin: 0 auto; }
+.admin-logo-img   { height: 64px; width: auto; display: block; margin: 0 auto; mix-blend-mode: screen; }
 
 .nav-links {
     display: flex;

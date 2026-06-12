@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Threading.RateLimiting;
 using Fixlosophy.Components;
 using Fixlosophy.Data;
 using Fixlosophy.Services;
@@ -15,7 +17,30 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<BookingService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<InflationService>();
+builder.Services.AddScoped<ActionRateLimiter>();
 builder.Services.AddSingleton<GoogleCalendarService>();
+
+// HTTP-level rate limit per client IP: covers page loads and SignalR circuit
+// negotiation. In-circuit actions are throttled separately by ActionRateLimiter.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.Headers.RetryAfter = "10";
+        await context.HttpContext.Response.WriteAsync(
+            "Too many requests. Please try again shortly.", cancellationToken);
+    };
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromSeconds(10),
+                QueueLimit = 0
+            }));
+});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -35,7 +60,7 @@ using (var scope = app.Services.CreateScope())
     EnsureSchema(db);
     SeedServicePricings(db);
     SeedDemoData(db);
-    SeedDefaultAdmin(db);
+    SeedDefaultAdmin(db, config, app.Logger);
     await ApplyAnnualPriceIncreaseAsync(db, config, inflation);
 }
 
@@ -46,6 +71,8 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
+
+app.UseRateLimiter();
 
 app.UseAntiforgery();
 
@@ -249,15 +276,29 @@ static void SeedDemoData(AppDbContext db)
     db.SaveChanges();
 }
 
-static void SeedDefaultAdmin(AppDbContext db)
+static void SeedDefaultAdmin(AppDbContext db, IConfiguration config, ILogger logger)
 {
     if (db.Staff.Any()) return;
+
+    var email    = config["SeedAdmin:Email"]?.Trim();
+    var password = config["SeedAdmin:Password"];
+    if (string.IsNullOrEmpty(email)) email = "admin@fixlosophy.com";
+
+    if (string.IsNullOrEmpty(password))
+    {
+        password = RandomNumberGenerator.GetString(
+            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789", 20);
+        logger.LogWarning(
+            "No SeedAdmin:Password configured. Seeded initial admin {Email} with generated password: {Password} " +
+            "— store it securely. To choose your own, set SeedAdmin:Email/Password in appsettings.Local.json " +
+            "before first run.", email, password);
+    }
 
     db.Staff.Add(new StaffMember
     {
         FullName     = "Admin",
-        Email        = "admin@fixlosophy.com",
-        PasswordHash = AuthService.HashPassword("fixlosophy"),
+        Email        = email,
+        PasswordHash = AuthService.HashPassword(password),
         Role         = StaffRole.Admin,
         IsActive     = true
     });

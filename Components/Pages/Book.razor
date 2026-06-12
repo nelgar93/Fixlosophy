@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inject BookingService BookingService
 @inject AuthService AuthService
+@inject ActionRateLimiter RateLimiter
 
 <PageTitle>Book a Repair – Fixlosophy</PageTitle>
 
@@ -302,6 +303,11 @@
                 <h2 class="booking-card__title">Review Your Booking</h2>
                 <p class="booking-card__subtitle">Check everything looks right before we confirm.</p>
 
+                @if (validationError != null)
+                {
+                    <div class="booking-error">@validationError</div>
+                }
+
                 <div class="review-grid">
                     <div class="review-item">
                         <span class="review-label">Service</span>
@@ -534,6 +540,9 @@
     private void ConfirmBooking()
     {
         if (selectedService == null || selectedDate == null || selectedTime == null) return;
+        validationError = null;
+        if (!RateLimiter.TryAcquire(LimitedAction.CreateBooking))
+        { validationError = "Too many bookings in a short time. Please wait a few minutes and try again."; return; }
         submitting = true;
 
         var booking = new Booking
@@ -574,6 +583,8 @@
     private void SignInCustomer()
     {
         authError = null;
+        if (!RateLimiter.TryAcquire(LimitedAction.Login))
+        { authError = "Too many sign-in attempts. Please wait a minute and try again."; return; }
         var customer = AuthService.AuthenticateCustomer(authEmail, authPassword);
         if (customer == null) { authError = "Incorrect email or password."; return; }
         loggedInCustomer = customer;
@@ -588,6 +599,8 @@
         if (string.IsNullOrWhiteSpace(authName)) { authError = "Please enter your name."; return; }
         if (string.IsNullOrWhiteSpace(authEmail)) { authError = "Please enter your email."; return; }
         if (string.IsNullOrWhiteSpace(authPassword)) { authError = "Please choose a password."; return; }
+        if (!RateLimiter.TryAcquire(LimitedAction.Register))
+        { authError = "Too many registration attempts. Please wait a few minutes and try again."; return; }
 
         var (customer, error) = AuthService.RegisterCustomer(authEmail, authName, authPhone, authPassword);
         if (error != null) { authError = error; return; }
