@@ -540,6 +540,21 @@
 .admin-login__card p { color: rgba(255,255,255,0.5); margin-bottom: 1.5rem; font-size: 0.9rem; }
 .admin-login__card .form-group { text-align: left; margin-bottom: 1.25rem; }
 
+.remember-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: left;
+    margin-bottom: 1.25rem;
+    color: rgba(255,255,255,0.7);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+.remember-row input { width: auto; margin: 0; }
+
+.auth-alt { margin-top: 1.25rem; margin-bottom: 0; font-size: 0.9rem; color: rgba(255,255,255,0.5); }
+.auth-alt a { color: var(--green); font-weight: 600; }
+
 /* ---------- Admin Dashboard ---------- */
 .admin-section { padding-top: 2.5rem; }
 
@@ -929,3 +944,143 @@
     .admin-filter-scroll { flex: 1; }
     .admin-search { width: auto; min-width: 220px; flex: 0 1 260px; }
 }
+
+/* ============================================================
+   ADMIN DAY CALENDAR
+   ============================================================ */
+.day-cal__nav {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.day-cal__title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 1.05rem;
+    min-width: 240px;
+}
+
+.day-cal__picker {
+    width: auto;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.85rem;
+    color-scheme: dark;
+}
+
+.day-cal__summary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    color: rgba(255,255,255,0.6);
+    font-size: 0.9rem;
+}
+
+.day-cal__closed {
+    color: #f87171;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.day-cal__slots {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.day-cal-slot {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 0.75rem;
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+}
+
+.day-cal-slot--free {
+    background: transparent;
+    opacity: 0.55;
+}
+
+.day-cal-slot__time {
+    font-weight: 700;
+    color: var(--green);
+    font-size: 0.9rem;
+    padding-top: 0.15rem;
+}
+
+.day-cal-slot--free .day-cal-slot__time { color: rgba(255,255,255,0.35); }
+
+.day-cal-slot__content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.day-cal-slot__free {
+    color: rgba(255,255,255,0.3);
+    font-size: 0.85rem;
+    padding-top: 0.15rem;
+}
+
+.day-cal-booking {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: var(--dark-4);
+    border: 1px solid var(--border-dark);
+    border-radius: 8px;
+    padding: 0.65rem 0.8rem;
+}
+
+.day-cal-booking--cancelled { opacity: 0.45; }
+
+.day-cal-booking__info { min-width: 0; flex: 1 1 260px; }
+
+.day-cal-booking__head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.25rem;
+}
+
+.day-cal-booking__meta {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.55);
+}
+
+.day-cal-booking__notes {
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.4);
+    font-style: italic;
+}
+
+.day-cal-booking__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+a.action-btn {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+}
+
+.action-btn--whatsapp { background: rgba(37,211,102,0.12); color: #25d366; border-color: rgba(37,211,102,0.3); }
+.action-btn--whatsapp:hover { background: #25d366; color: var(--dark); }
+.action-btn--call { background: rgba(59,130,246,0.12); color: #60a5fa; border-color: rgba(59,130,246,0.3); }
+.action-btn--call:hover { background: #3b82f6; color: var(--white); }
+.action-btn--keep { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.15); }
+.action-btn--keep:hover { background: rgba(255,255,255,0.15); color: var(--white); }

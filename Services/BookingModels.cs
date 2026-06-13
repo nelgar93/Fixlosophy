@@ -20,7 +20,6 @@ public class Booking
     public BookingStatus Status { get; set; } = BookingStatus.Pending;
     public string? CustomerId { get; set; }
     public string? AssignedStaffId { get; set; }
-    public string? CalendarEventId { get; set; }
 
     // Navigation
     public Customer? Customer { get; set; }

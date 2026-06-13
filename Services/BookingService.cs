@@ -3,9 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Fixlosophy.Services;
 
-public class BookingService(AppDbContext db, GoogleCalendarService calendar, IServiceScopeFactory scopeFactory)
+public class BookingService(AppDbContext db)
 {
     public const int MaxPerSlot = 2;
+    public const int MaxActiveBookingsPerEmail = 3;
 
     public static readonly string[] TimeSlots =
         ["09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
@@ -65,16 +66,57 @@ public class BookingService(AppDbContext db, GoogleCalendarService calendar, ISe
         return GetAvailableSlots(date).Count > 0;
     }
 
-    public Booking CreateBooking(Booking booking)
+    public (Booking? booking, string? error) CreateBooking(Booking booking)
     {
+        booking.CustomerEmail = booking.CustomerEmail.Trim();
+        var normEmail = booking.CustomerEmail.ToLower();
+        var today = DateTime.Today;
+
+        var slotTaken = db.Bookings.Count(b =>
+            b.SlotDate == booking.SlotDate && b.SlotTime == booking.SlotTime &&
+            b.Status != BookingStatus.Cancelled);
+        if (slotTaken >= MaxPerSlot)
+            return (null, "Sorry, this time slot has just filled up. Please pick another time.");
+
+        var hasDuplicate = db.Bookings.Any(b =>
+            b.CustomerEmail.ToLower() == normEmail &&
+            b.SlotDate == booking.SlotDate && b.SlotTime == booking.SlotTime &&
+            b.Status != BookingStatus.Cancelled);
+        if (hasDuplicate)
+            return (null, "You already have a booking at this time.");
+
+        var upcoming = db.Bookings.Count(b =>
+            b.CustomerEmail.ToLower() == normEmail &&
+            b.SlotDate >= today &&
+            b.Status != BookingStatus.Cancelled);
+        if (upcoming >= MaxActiveBookingsPerEmail)
+            return (null, $"You already have {MaxActiveBookingsPerEmail} upcoming bookings — please contact us if you need to change one.");
+
         var seq = db.Bookings.Count() + 1;
         booking.Reference = $"FIX-{DateTime.Now:yyMMdd}-{seq:D3}";
         booking.CreatedAt = DateTime.Now;
         booking.Status = BookingStatus.Pending;
         db.Bookings.Add(booking);
+        try
+        {
+            db.SaveChanges();
+        }
+        catch (DbUpdateException)
+        {
+            // Lost a race against IX_Bookings_NoDuplicateSlot; detach so the
+            // circuit-scoped context stays usable.
+            db.Entry(booking).State = EntityState.Detached;
+            return (null, "You already have a booking at this time.");
+        }
+        return (booking, null);
+    }
+
+    public void DeleteBooking(string id)
+    {
+        var booking = db.Bookings.Find(id);
+        if (booking is null) return;
+        db.Bookings.Remove(booking);
         db.SaveChanges();
-        SyncCalendar(booking.Id);
-        return booking;
     }
 
     public List<Booking> GetAllBookings() =>
@@ -99,31 +141,6 @@ public class BookingService(AppDbContext db, GoogleCalendarService calendar, ISe
         if (booking is null) return;
         booking.Status = status;
         db.SaveChanges();
-        SyncCalendar(id);
-    }
-
-    // Fire-and-forget calendar sync using a fresh DI scope so the HTTP call
-    // doesn't race against the scoped DbContext being disposed.
-    private void SyncCalendar(string bookingId)
-    {
-        if (!calendar.IsEnabled) return;
-        _ = Task.Run(async () =>
-        {
-            using var scope = scopeFactory.CreateScope();
-            var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var b = ctx.Bookings.Find(bookingId);
-            if (b is null) return;
-
-            if (b.CalendarEventId is null)
-            {
-                var eventId = await calendar.CreateEventAsync(b);
-                if (eventId != null) { b.CalendarEventId = eventId; ctx.SaveChanges(); }
-            }
-            else
-            {
-                await calendar.UpdateEventAsync(b.CalendarEventId, b);
-            }
-        });
     }
 
     // Single DB query: returns true/false availability for every day in the given month.

@@ -1,0 +1,13 @@
+@inject NavigationManager Nav
+
+@code {
+    // Rendered by AuthorizeRouteView when an unauthenticated visitor hits a
+    // protected page (only /admin today). Bounce them to the staff login,
+    // preserving where they were headed so they land back there after signing in.
+    protected override void OnInitialized()
+    {
+        var returnUrl = Nav.ToBaseRelativePath(Nav.Uri);
+        var target = $"/admin/login?returnUrl={Uri.EscapeDataString("/" + returnUrl)}";
+        Nav.NavigateTo(target, forceLoad: false, replace: true);
+    }
+}
