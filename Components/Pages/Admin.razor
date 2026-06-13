@@ -1,42 +1,13 @@
 @page "/admin"
 @rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin,Worker")]
 @inject BookingService BookingService
 @inject AuthService AuthService
-@inject ActionRateLimiter RateLimiter
+@inject NavigationManager Nav
 
 <PageTitle>Admin – Fixlosophy Bookings</PageTitle>
 
-@if (loggedInStaff == null)
-{
-    <div class="admin-login">
-        <div class="admin-login__card">
-            <div class="admin-login__logo">
-                <img src="logo.avif" alt="Fixlosophy" class="admin-logo-img"
-                     onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
-                <span style="display:none">&#9851; Fixlosophy</span>
-            </div>
-            <h2>Staff Access</h2>
-            <p>Enter your credentials to access the booking dashboard.</p>
-
-            @if (loginError != null)
-            {
-                <div class="booking-error">@loginError</div>
-            }
-
-            <div class="form-group">
-                <label>Email</label>
-                <input class="form-control" type="email" @bind="loginEmail" @bind:event="oninput" placeholder="staff@fixlosophy.com" />
-            </div>
-            <div class="form-group" style="margin-top:.75rem">
-                <label>Password</label>
-                <input class="form-control" type="password" @bind="loginPassword" @bind:event="oninput"
-                       @onkeydown="OnKeyDown" placeholder="Enter password" />
-            </div>
-            <button class="btn btn-primary btn-full" style="margin-top:1rem" @onclick="Login">Sign In</button>
-        </div>
-    </div>
-}
-else
+@if (loggedInStaff != null)
 {
     <div class="page-hero page-hero--sm">
         <div class="container admin-hero-row">
@@ -64,6 +35,8 @@ else
                 <div class="admin-filter-tabs">
                     <button class="filter-tab @(activeTab == "bookings" ? "active" : "")"
                             @onclick="SetBookingsTab">Bookings</button>
+                    <button class="filter-tab @(activeTab == "calendar" ? "active" : "")"
+                            @onclick="OpenCalendarTab">Calendar</button>
                     @if (IsAdmin)
                     {
                         <button class="filter-tab @(activeTab == "pricing" ? "active" : "")"
@@ -339,6 +312,112 @@ else
                 }
             }
 
+            <!-- ── CALENDAR TAB ──────────────────────────────────────────── -->
+            @if (activeTab == "calendar")
+            {
+                <div class="day-cal">
+                    <div class="day-cal__nav">
+                        <button class="cal-nav__btn" @onclick="() => ChangeCalDay(-1)">&#8592;</button>
+                        <div class="day-cal__title">
+                            <strong>@calDay.ToString("dddd, d MMMM yyyy")</strong>
+                            @if (calDay.Date == DateTime.Today)
+                            {
+                                <span class="status-badge status-badge--confirmed">Today</span>
+                            }
+                        </div>
+                        <button class="cal-nav__btn" @onclick="() => ChangeCalDay(1)">&#8594;</button>
+                        <input type="date" class="form-control day-cal__picker"
+                               value="@calDay.ToString("yyyy-MM-dd")" @onchange="OnCalDatePicked" />
+                        @if (calDay.Date != DateTime.Today)
+                        {
+                            <button class="btn btn-outline" @onclick="() => SetCalDay(DateTime.Today)">Today</button>
+                        }
+                    </div>
+
+                    <div class="day-cal__summary">
+                        <span><strong>@_calDayBookings.Count</strong> booking@(_calDayBookings.Count == 1 ? "" : "s")</span>
+                        @if (_calDayBookings.Any(b => b.Status == BookingStatus.Pending))
+                        {
+                            <span class="status-badge status-badge--pending">@_calDayBookings.Count(b => b.Status == BookingStatus.Pending) pending</span>
+                        }
+                        @if (calDay.DayOfWeek == DayOfWeek.Sunday)
+                        {
+                            <span class="day-cal__closed">Closed on Sundays</span>
+                        }
+                    </div>
+
+                    <div class="day-cal__slots">
+                        @foreach (var slot in BookingService.TimeSlots)
+                        {
+                            var slotBookings = _calDayBookings.Where(b => b.SlotTime == slot).ToList();
+                            <div class="day-cal-slot @(slotBookings.Count == 0 ? "day-cal-slot--free" : "")">
+                                <div class="day-cal-slot__time">@slot</div>
+                                <div class="day-cal-slot__content">
+                                    @if (slotBookings.Count == 0)
+                                    {
+                                        <span class="day-cal-slot__free">Free</span>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var booking in slotBookings)
+                                        {
+                                            var b = booking;
+                                            <div class="day-cal-booking @(b.Status == BookingStatus.Cancelled ? "day-cal-booking--cancelled" : "")">
+                                                <div class="day-cal-booking__info">
+                                                    <div class="day-cal-booking__head">
+                                                        <strong>@b.CustomerName</strong>
+                                                        <span class="ref-badge">@b.Reference</span>
+                                                        <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                                                    </div>
+                                                    <div class="day-cal-booking__meta">
+                                                        <span>@b.ServiceName</span>
+                                                        @if (!string.IsNullOrWhiteSpace(b.BikeDescription))
+                                                        {
+                                                            <span> &middot; @b.BikeDescription</span>
+                                                        }
+                                                        @if (CanSeeCustomerDetails && !string.IsNullOrWhiteSpace(b.CustomerPhone))
+                                                        {
+                                                            <span> &middot; @b.CustomerPhone</span>
+                                                        }
+                                                    </div>
+                                                    @if (!string.IsNullOrWhiteSpace(b.Notes))
+                                                    {
+                                                        <div class="day-cal-booking__notes">@b.Notes</div>
+                                                    }
+                                                </div>
+                                                <div class="day-cal-booking__actions">
+                                                    @if (CanManage && b.Status == BookingStatus.Pending)
+                                                    {
+                                                        <button class="action-btn action-btn--confirm" @onclick="() => AcceptBooking(b.Id)">Accept</button>
+                                                    }
+                                                    @if (CanSeeCustomerDetails && !string.IsNullOrWhiteSpace(b.CustomerPhone))
+                                                    {
+                                                        <a class="action-btn action-btn--whatsapp" href="@WhatsAppHref(b)" target="_blank" rel="noopener">WhatsApp</a>
+                                                        <a class="action-btn action-btn--call" href="@TelHref(b.CustomerPhone)">Call</a>
+                                                    }
+                                                    @if (CanManage)
+                                                    {
+                                                        @if (deleteConfirmId == b.Id)
+                                                        {
+                                                            <button class="action-btn action-btn--cancel" @onclick="() => DeleteBooking(b.Id)">Confirm delete</button>
+                                                            <button class="action-btn action-btn--keep" @onclick="() => deleteConfirmId = null">Keep</button>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button class="action-btn action-btn--cancel" @onclick="() => deleteConfirmId = b.Id">Delete</button>
+                                                        }
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
             <!-- ── PRICING TAB ────────────────────────────────────────────── -->
             @if (activeTab == "pricing" && IsAdmin)
             {
@@ -533,10 +612,9 @@ else
 }
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
     private StaffMember? loggedInStaff;
-    private string loginEmail = "";
-    private string loginPassword = "";
-    private string? loginError;
 
     private string activeTab = "bookings";
 
@@ -546,6 +624,11 @@ else
     private string searchTerm = "";
     private string? expandedId;
     private (int total, int today, int pending, int confirmed) stats;
+
+    // Calendar tab
+    private DateTime calDay = DateTime.Today;
+    private List<Booking> _calDayBookings = [];
+    private string? deleteConfirmId;
 
     // Staff management
     private List<StaffMember> _allStaff = [];
@@ -599,36 +682,29 @@ else
         }
     }
 
-    private void Login()
+    // The cookie carries the staff id; re-fetch the full record so permission and
+    // role changes (or a deactivation) take effect on the next page load rather
+    // than being frozen into the cookie's claims.
+    protected override async Task OnInitializedAsync()
     {
-        if (!RateLimiter.TryAcquire(LimitedAction.Login))
-        { loginError = "Too many sign-in attempts. Please wait a minute and try again."; return; }
+        if (AuthState is null) return;
+        var user = (await AuthState).User;
+        var staffId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
-        var staff = AuthService.AuthenticateStaff(loginEmail, loginPassword);
-        if (staff != null)
+        loggedInStaff = staffId is null ? null : AuthService.GetStaffById(staffId);
+        if (loggedInStaff is null)
         {
-            loggedInStaff = staff;
-            loginError = null;
-            LoadBookings();
-            RefreshStats();
-            if (IsAdmin) _allStaff = AuthService.GetAllStaff();
+            // Authorized by cookie but the account is gone/deactivated — clear it.
+            Nav.NavigateTo("/auth/logout", forceLoad: true);
+            return;
         }
-        else
-        {
-            loginError = "Incorrect email or password.";
-        }
+
+        LoadBookings();
+        RefreshStats();
+        if (IsAdmin) _allStaff = AuthService.GetAllStaff();
     }
 
-    private void OnKeyDown(KeyboardEventArgs e) { if (e.Key == "Enter") Login(); }
-
-    private void Logout()
-    {
-        loggedInStaff = null;
-        loginEmail = loginPassword = "";
-        _allBookings = [];
-        _allStaff = [];
-        activeTab = "bookings";
-    }
+    private void Logout() => Nav.NavigateTo("/auth/logout", forceLoad: true);
 
     private void LoadBookings()
     {
@@ -662,6 +738,71 @@ else
     }
 
     private void SetBookingsTab() => activeTab = "bookings";
+
+    private void OpenCalendarTab()
+    {
+        activeTab = "calendar";
+        SetCalDay(calDay);
+    }
+
+    private void SetCalDay(DateTime day)
+    {
+        calDay = day.Date;
+        deleteConfirmId = null;
+        LoadCalDay();
+    }
+
+    private void ChangeCalDay(int days) => SetCalDay(calDay.AddDays(days));
+
+    private void OnCalDatePicked(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var d)) SetCalDay(d);
+    }
+
+    private void LoadCalDay()
+    {
+        var dayBookings = BookingService.GetBookingsByDate(calDay);
+        _calDayBookings = IsAdmin || loggedInStaff?.CanViewAllBookings == true
+            ? dayBookings
+            : dayBookings.Where(b => b.AssignedStaffId == loggedInStaff!.Id).ToList();
+    }
+
+    private void AcceptBooking(string id)
+    {
+        BookingService.UpdateStatus(id, BookingStatus.Confirmed);
+        LoadCalDay();
+        LoadBookings();
+        RefreshStats();
+    }
+
+    private void DeleteBooking(string id)
+    {
+        BookingService.DeleteBooking(id);
+        deleteConfirmId = null;
+        LoadCalDay();
+        LoadBookings();
+        RefreshStats();
+    }
+
+    // wa.me needs the number in international format with no '+' or leading
+    // zeros; bare national numbers (single leading 0) are assumed to be UK.
+    private static string WhatsAppNumber(string phone)
+    {
+        var digits = new string(phone.Where(char.IsDigit).ToArray());
+        if (digits.StartsWith("00")) return digits[2..];
+        if (digits.StartsWith('0')) return "44" + digits[1..];
+        return digits;
+    }
+
+    private string WhatsAppHref(Booking b)
+    {
+        var msg = $"Hi {b.CustomerName}, this is Fixlosophy about your booking {b.Reference} " +
+                  $"({b.ServiceName}) on {b.SlotDate:dddd d MMMM} at {b.SlotTime}.";
+        return $"https://wa.me/{WhatsAppNumber(b.CustomerPhone)}?text={Uri.EscapeDataString(msg)}";
+    }
+
+    private static string TelHref(string phone) =>
+        $"tel:{new string(phone.Where(c => char.IsDigit(c) || c == '+').ToArray())}";
 
     private void OpenPricingTab()
     {

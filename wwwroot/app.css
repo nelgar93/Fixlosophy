@@ -191,6 +191,13 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     background: rgba(255,255,255,0.08);
 }
 
+.nav-user {
+    color: rgba(255,255,255,0.5);
+    font-size: 0.9rem;
+    padding: 0.5rem 0.4rem 0.5rem 0.9rem;
+    white-space: nowrap;
+}
+
 .btn-book {
     background: var(--green) !important;
     color: var(--white) !important;

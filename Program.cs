@@ -3,6 +3,9 @@ using System.Threading.RateLimiting;
 using Fixlosophy.Components;
 using Fixlosophy.Data;
 using Fixlosophy.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 // Allow DateTime.Now / DateTime.Today to be stored as Postgres "timestamp without time zone"
@@ -18,7 +21,6 @@ builder.Services.AddScoped<BookingService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<InflationService>();
 builder.Services.AddScoped<ActionRateLimiter>();
-builder.Services.AddSingleton<GoogleCalendarService>();
 
 // HTTP-level rate limit per client IP: covers page loads and SignalR circuit
 // negotiation. In-circuit actions are throttled separately by ActionRateLimiter.
@@ -40,10 +42,45 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromSeconds(10),
                 QueueLimit = 0
             }));
+
+    // Tighter per-IP limit for the sign-in / registration endpoints, which run
+    // as plain HTTP requests outside the SignalR circuit (so ActionRateLimiter,
+    // which is per-circuit, can't guard them).
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
 });
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// Cookie authentication for staff and customers (one shared scheme; a
+// "user_type" claim distinguishes them). Persistence is decided per login via
+// the "Remember me" checkbox, so the 30-day window only applies when the user
+// opts in — otherwise it's a session cookie that clears on browser close.
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name        = "Fixlosophy.Auth";
+        options.Cookie.HttpOnly    = true;
+        options.Cookie.SameSite    = SameSiteMode.Lax;
+        // Secure in production; SameAsRequest in dev so it works over plain http://localhost.
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
+        options.ExpireTimeSpan    = TimeSpan.FromDays(30);
+        options.SlidingExpiration = true;
+        options.LoginPath         = "/admin/login";
+        options.AccessDeniedPath  = "/admin/login";
+    });
+builder.Services.AddAuthorization();
+builder.Services.AddCascadingAuthenticationState();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -57,7 +94,7 @@ using (var scope = app.Services.CreateScope())
     var db        = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var config    = scope.ServiceProvider.GetRequiredService<IConfiguration>();
     var inflation = scope.ServiceProvider.GetRequiredService<InflationService>();
-    EnsureSchema(db);
+    EnsureSchema(db, app.Logger);
     SeedServicePricings(db);
     SeedDemoData(db);
     SeedDefaultAdmin(db, config, app.Logger);
@@ -74,15 +111,90 @@ app.UseHttpsRedirection();
 
 app.UseRateLimiter();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+// ── Auth endpoints ────────────────────────────────────────────────────────
+// Cookies can only be written on a real HTTP request, never mid-circuit, so the
+// login forms (plain <form method="post"> on static pages) post here. The
+// "remember" field comes from the Remember-me checkbox; presence == checked.
+// Antiforgery is enforced automatically because these bind [FromForm] params.
+
+app.MapPost("/auth/staff-login", async (
+    HttpContext http, AuthService auth,
+    [FromForm] string email, [FromForm] string password,
+    [FromForm] string? remember, [FromForm] string? returnUrl) =>
+{
+    var staff = auth.AuthenticateStaff(email, password);
+    if (staff is null)
+        return Results.Redirect("/admin/login?error=1");
+
+    await http.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        AuthClaims.BuildStaffPrincipal(staff),
+        new AuthenticationProperties { IsPersistent = !string.IsNullOrEmpty(remember) });
+
+    return Results.Redirect(SafeReturn(returnUrl, "/admin"));
+}).RequireRateLimiting("auth");
+
+app.MapPost("/auth/customer-login", async (
+    HttpContext http, AuthService auth,
+    [FromForm] string email, [FromForm] string password,
+    [FromForm] string? remember, [FromForm] string? returnUrl) =>
+{
+    var customer = auth.AuthenticateCustomer(email, password);
+    if (customer is null)
+        return Results.Redirect($"/account/login?error=1&returnUrl={Uri.EscapeDataString(SafeReturn(returnUrl, "/"))}");
+
+    await http.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        AuthClaims.BuildCustomerPrincipal(customer),
+        new AuthenticationProperties { IsPersistent = !string.IsNullOrEmpty(remember) });
+
+    return Results.Redirect(SafeReturn(returnUrl, "/"));
+}).RequireRateLimiting("auth");
+
+app.MapPost("/auth/customer-register", async (
+    HttpContext http, AuthService auth,
+    [FromForm] string fullName, [FromForm] string email,
+    [FromForm] string? phone, [FromForm] string password,
+    [FromForm] string? remember, [FromForm] string? returnUrl) =>
+{
+    var (customer, error) = auth.RegisterCustomer(email, fullName, phone ?? "", password);
+    if (error is not null || customer is null)
+        return Results.Redirect($"/account/register?error={Uri.EscapeDataString(error ?? "Could not create account.")}");
+
+    await http.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        AuthClaims.BuildCustomerPrincipal(customer),
+        new AuthenticationProperties { IsPersistent = !string.IsNullOrEmpty(remember) });
+
+    return Results.Redirect(SafeReturn(returnUrl, "/"));
+}).RequireRateLimiting("auth");
+
+// GET so the Sign Out button inside interactive components is a simple
+// forceLoad navigation. Logout CSRF is low-risk (worst case: a forced logout).
+app.MapGet("/auth/logout", async (HttpContext http, string? returnUrl) =>
+{
+    await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Redirect(SafeReturn(returnUrl, "/"));
+});
+
 app.Run();
 
-static void EnsureSchema(AppDbContext db)
+// Only allow same-site relative redirects to avoid open-redirect via returnUrl.
+static string SafeReturn(string? url, string fallback) =>
+    !string.IsNullOrEmpty(url) && Uri.IsWellFormedUriString(url, UriKind.Relative)
+        && url.StartsWith('/') && !url.StartsWith("//") && !url.StartsWith("/\\")
+        ? url : fallback;
+
+static void EnsureSchema(AppDbContext db, ILogger logger)
 {
     db.Database.ExecuteSqlRaw(@"
         CREATE TABLE IF NOT EXISTS ""Bookings"" (
@@ -105,7 +217,6 @@ static void EnsureSchema(AppDbContext db)
 
         ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""CustomerId""       varchar(36) NULL;
         ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""AssignedStaffId""  varchar(36) NULL;
-        ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""CalendarEventId""  text        NULL;
 
         -- Relational FK constraints (idempotent via pg_constraint check)
         DO $$ BEGIN
@@ -191,6 +302,22 @@ static void EnsureSchema(AppDbContext db)
             END IF;
         END $$;
     ");
+
+    // Race-safety net for duplicate bookings: one active (non-cancelled)
+    // booking per email + slot. Created separately so pre-existing duplicate
+    // rows degrade to a startup warning instead of a crash.
+    try
+    {
+        db.Database.ExecuteSqlRaw(@"
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Bookings_NoDuplicateSlot""
+            ON ""Bookings"" (lower(""CustomerEmail""), ""SlotDate"", ""SlotTime"")
+            WHERE ""Status"" <> 4;");
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex,
+            "Could not create IX_Bookings_NoDuplicateSlot — existing data may contain duplicate bookings.");
+    }
 }
 
 static void SeedServicePricings(AppDbContext db)

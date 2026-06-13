@@ -25,6 +25,10 @@ public class AuthService(AppDbContext db)
         return customer != null && VerifyPassword(customer.PasswordHash, password) ? customer : null;
     }
 
+    // Restore a persisted customer session from the auth cookie's subject id.
+    public Customer? GetCustomerById(string id) =>
+        db.Customers.FirstOrDefault(c => c.Id == id);
+
     public (Customer? customer, string? error) RegisterCustomer(
         string email, string fullName, string phone, string password)
     {
@@ -43,6 +47,11 @@ public class AuthService(AppDbContext db)
         db.SaveChanges();
         return (customer, null);
     }
+
+    // Restore a persisted session: re-fetch from the DB so we honour any
+    // deactivation/role change since the cookie was issued.
+    public StaffMember? GetStaffById(string id) =>
+        db.Staff.FirstOrDefault(s => s.Id == id && s.IsActive);
 
     public List<StaffMember> GetAllStaff() =>
         db.Staff.OrderBy(s => s.FullName).ToList();

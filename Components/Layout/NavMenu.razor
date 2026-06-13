@@ -19,6 +19,21 @@
             <NavLink href="/services" @onclick="CloseMenu">Services</NavLink>
             <NavLink href="/about" @onclick="CloseMenu">About</NavLink>
             <NavLink href="/contact" @onclick="CloseMenu">Contact</NavLink>
+
+            <AuthorizeView>
+                <Authorized>
+                    @if (context.User.IsInRole("Admin") || context.User.IsInRole("Worker"))
+                    {
+                        <NavLink href="/admin" @onclick="CloseMenu">Dashboard</NavLink>
+                    }
+                    <span class="nav-user">Hi, @context.User.Identity?.Name</span>
+                    <a class="nav-auth-link" href="/auth/logout" data-enhance-nav="false">Sign out</a>
+                </Authorized>
+                <NotAuthorized>
+                    <a class="nav-auth-link" href="/account/login" data-enhance-nav="false" @onclick="CloseMenu">Sign in</a>
+                </NotAuthorized>
+            </AuthorizeView>
+
             <a class="btn-book" href="/book" @onclick="CloseMenu">Book a Repair</a>
         </div>
     </nav>

@@ -24,71 +24,13 @@
                 @if (loggedInCustomer != null)
                 {
                     <span>Signed in as <strong>@loggedInCustomer.FullName</strong></span>
-                    <button class="customer-auth-strip__link" @onclick="SignOutCustomer">Sign out</button>
                 }
                 else
                 {
-                    <span>Have an account?</span>
-                    <button class="customer-auth-strip__link"
-                            @onclick='() => { showAuthPanel = !showAuthPanel; authMode = "login"; authError = null; }'>
-                        Sign in for faster checkout
-                    </button>
-
-                    @if (showAuthPanel)
-                    {
-                        <div class="customer-auth-panel">
-                            <div class="customer-auth-tabs">
-                                <button class="@(authMode == "login" ? "active" : "")"
-                                        @onclick='() => { authMode = "login"; authError = null; }'>Sign In</button>
-                                <button class="@(authMode == "register" ? "active" : "")"
-                                        @onclick='() => { authMode = "register"; authError = null; }'>Create Account</button>
-                            </div>
-
-                            @if (authError != null)
-                            {
-                                <div class="booking-error" style="margin-bottom:.5rem">@authError</div>
-                            }
-
-                            @if (authMode == "login")
-                            {
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label>Email</label>
-                                        <input class="form-control" type="email" @bind="authEmail" placeholder="you@example.com" />
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Password</label>
-                                        <input class="form-control" type="password" @bind="authPassword" placeholder="Your password" />
-                                    </div>
-                                </div>
-                                <button class="btn btn-primary" @onclick="SignInCustomer">Sign In</button>
-                            }
-                            else
-                            {
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label>Full Name</label>
-                                        <input class="form-control" @bind="authName" placeholder="Jane Smith" />
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Email</label>
-                                        <input class="form-control" type="email" @bind="authEmail" placeholder="jane@example.com" />
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label>Phone</label>
-                                        <input class="form-control" type="tel" @bind="authPhone" placeholder="+1 555 000 000" />
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Password</label>
-                                        <input class="form-control" type="password" @bind="authPassword" placeholder="Choose a password" />
-                                    </div>
-                                </div>
-                                <button class="btn btn-primary" @onclick="RegisterCustomer">Create Account</button>
-                            }
-                        </div>
-                    }
+                    <span>Have an account?
+                        <a class="customer-auth-strip__link" href="/account/login?returnUrl=%2Fbook"
+                           data-enhance-nav="false">Sign in for faster checkout</a>
+                    </span>
                 }
             </div>
         }
@@ -444,15 +386,10 @@
     private bool submitting = false;
     private Booking? confirmedBooking;
 
-    // Customer account
+    // Customer account — identity comes from the auth cookie (sign-in lives in
+    // the nav / dedicated /account pages), we just read it here to prefill.
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private Customer? loggedInCustomer;
-    private bool showAuthPanel;
-    private string authMode = "login";
-    private string authEmail = "";
-    private string authPassword = "";
-    private string authName = "";
-    private string authPhone = "";
-    private string? authError;
 
     // Calendar helpers
     private int CalDaysInMonth => DateTime.DaysInMonth(calendarMonth.Year, calendarMonth.Month);
@@ -465,9 +402,21 @@
         }
     }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _services = BookingService.GetServices();
+
+        // If a customer is signed in via the auth cookie, prefill their details.
+        if (AuthState is not null)
+        {
+            var user = (await AuthState).User;
+            if (user.FindFirst(AuthClaims.UserType)?.Value == AuthClaims.CustomerType)
+            {
+                var id = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                loggedInCustomer = id is null ? null : AuthService.GetCustomerById(id);
+                PrefillCustomerDetails();
+            }
+        }
     }
 
     private bool GetDateAvailable(DateTime date) =>
@@ -539,6 +488,7 @@
 
     private void ConfirmBooking()
     {
+        if (submitting) return;
         if (selectedService == null || selectedDate == null || selectedTime == null) return;
         validationError = null;
         if (!RateLimiter.TryAcquire(LimitedAction.CreateBooking))
@@ -560,7 +510,14 @@
             CustomerId      = loggedInCustomer?.Id
         };
 
-        confirmedBooking = BookingService.CreateBooking(booking);
+        var (created, error) = BookingService.CreateBooking(booking);
+        if (error != null)
+        {
+            validationError = error;
+            submitting = false;
+            return;
+        }
+        confirmedBooking = created;
         step = 5;
         submitting = false;
     }
@@ -578,42 +535,6 @@
         confirmedBooking = null;
         calendarMonth = DateTime.Today;
         // Keep the customer logged in between bookings
-    }
-
-    private void SignInCustomer()
-    {
-        authError = null;
-        if (!RateLimiter.TryAcquire(LimitedAction.Login))
-        { authError = "Too many sign-in attempts. Please wait a minute and try again."; return; }
-        var customer = AuthService.AuthenticateCustomer(authEmail, authPassword);
-        if (customer == null) { authError = "Incorrect email or password."; return; }
-        loggedInCustomer = customer;
-        PrefillCustomerDetails();
-        showAuthPanel = false;
-        authEmail = authPassword = "";
-    }
-
-    private void RegisterCustomer()
-    {
-        authError = null;
-        if (string.IsNullOrWhiteSpace(authName)) { authError = "Please enter your name."; return; }
-        if (string.IsNullOrWhiteSpace(authEmail)) { authError = "Please enter your email."; return; }
-        if (string.IsNullOrWhiteSpace(authPassword)) { authError = "Please choose a password."; return; }
-        if (!RateLimiter.TryAcquire(LimitedAction.Register))
-        { authError = "Too many registration attempts. Please wait a few minutes and try again."; return; }
-
-        var (customer, error) = AuthService.RegisterCustomer(authEmail, authName, authPhone, authPassword);
-        if (error != null) { authError = error; return; }
-        loggedInCustomer = customer;
-        PrefillCustomerDetails();
-        showAuthPanel = false;
-        authEmail = authPassword = authName = authPhone = "";
-    }
-
-    private void SignOutCustomer()
-    {
-        loggedInCustomer = null;
-        showAuthPanel = false;
     }
 
     private void PrefillCustomerDetails()
