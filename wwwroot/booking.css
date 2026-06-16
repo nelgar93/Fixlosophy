@@ -556,7 +556,15 @@
 .auth-alt a { color: var(--green); font-weight: 600; }
 
 /* ---------- Admin Dashboard ---------- */
-.admin-section { padding-top: 2.5rem; }
+/* Tighter than the public page heroes so the dashboard header takes ~50px less
+   vertical space (and stays compact on phones). */
+.page-hero--admin { padding-top: 2rem; padding-bottom: 1.5rem; }
+.admin-section { padding-top: 1.75rem; }
+
+@media (max-width: 479px) {
+    .page-hero--admin { padding-top: 1.5rem; padding-bottom: 1.25rem; }
+    .admin-section { padding-top: 1.25rem; }
+}
 
 .admin-stats {
     display: grid;
@@ -769,10 +777,19 @@
 .action-buttons { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
 .action-btn {
+    /* inline-flex + inherited font + fixed line-height so <button> and <a>
+       action buttons render at an identical height everywhere (the calendar
+       row centres them, so any intrinsic size difference would show). */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0.3rem 0.7rem;
+    min-height: 28px;
     border-radius: 6px;
+    font-family: inherit;
     font-size: 0.75rem;
     font-weight: 600;
+    line-height: 1.35;
     cursor: pointer;
     border: 1px solid transparent;
     transition: all 0.15s;
@@ -1072,11 +1089,7 @@
     flex-wrap: wrap;
 }
 
-a.action-btn {
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-}
+a.action-btn { text-decoration: none; }
 
 .action-btn--whatsapp { background: rgba(37,211,102,0.12); color: #25d366; border-color: rgba(37,211,102,0.3); }
 .action-btn--whatsapp:hover { background: #25d366; color: var(--dark); }
@@ -1084,3 +1097,7 @@ a.action-btn {
 .action-btn--call:hover { background: #3b82f6; color: var(--white); }
 .action-btn--keep { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.15); }
 .action-btn--keep:hover { background: rgba(255,255,255,0.15); color: var(--white); }
+/* Delete is permanent (two-step), so it stays muted until hover — distinct from
+   the always-red "Cancel" which only changes a booking's status. */
+.action-btn--delete { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.5); border-color: rgba(255,255,255,0.12); }
+.action-btn--delete:hover { background: #dc2626; color: var(--white); border-color: #dc2626; }

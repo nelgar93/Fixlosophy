@@ -633,7 +633,11 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 .package-grid {
     display: grid;
-    grid-template-columns: 1fr;
+    /* auto-fit so cards reflow 1→2→3 across phone/tablet/desktop without ever
+       forcing the bold name+price header wider than the column (which used to
+       overflow the viewport at tablet widths). min(100%, …) keeps it safe on
+       very narrow screens. */
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
     gap: 1.25rem;
 }
 
@@ -644,6 +648,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     padding: 1.75rem;
     position: relative;
     transition: all 0.25s;
+    min-width: 0;
 }
 
 .package-card:hover { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
@@ -1041,9 +1046,6 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     }
     .about-intro {
         grid-template-columns: 1fr;
-    }
-    .package-grid {
-        grid-template-columns: repeat(3, 1fr);
     }
     .footer-grid {
         grid-template-columns: 2fr 1fr 1fr;

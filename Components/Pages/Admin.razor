@@ -9,7 +9,7 @@
 
 @if (loggedInStaff != null)
 {
-    <div class="page-hero page-hero--sm">
+    <div class="page-hero page-hero--sm page-hero--admin">
         <div class="container admin-hero-row">
             <div>
                 <p class="section-eyebrow">@(IsAdmin ? "Admin Dashboard" : "Staff Dashboard")</p>
@@ -33,10 +33,10 @@
             <!-- Tab bar -->
             <div class="admin-filter-scroll" style="margin-bottom:1.5rem">
                 <div class="admin-filter-tabs">
-                    <button class="filter-tab @(activeTab == "bookings" ? "active" : "")"
-                            @onclick="SetBookingsTab">Bookings</button>
                     <button class="filter-tab @(activeTab == "calendar" ? "active" : "")"
                             @onclick="OpenCalendarTab">Calendar</button>
+                    <button class="filter-tab @(activeTab == "bookings" ? "active" : "")"
+                            @onclick="SetBookingsTab">Bookings</button>
                     @if (IsAdmin)
                     {
                         <button class="filter-tab @(activeTab == "pricing" ? "active" : "")"
@@ -177,29 +177,10 @@
                                     </div>
                                 }
 
-                                @if (CanManage)
+                                @if (RowHasActions(b))
                                 {
                                     <div class="admin-card__actions" @onclick:stopPropagation="true">
-                                        @if (b.Status == BookingStatus.Pending)
-                                        {
-                                            <button class="action-btn action-btn--confirm"
-                                                    @onclick="() => UpdateStatus(b.Id, BookingStatus.Confirmed)">Confirm</button>
-                                        }
-                                        @if (b.Status == BookingStatus.Confirmed)
-                                        {
-                                            <button class="action-btn action-btn--progress"
-                                                    @onclick="() => UpdateStatus(b.Id, BookingStatus.InProgress)">In Progress</button>
-                                        }
-                                        @if (b.Status == BookingStatus.InProgress)
-                                        {
-                                            <button class="action-btn action-btn--complete"
-                                                    @onclick="() => UpdateStatus(b.Id, BookingStatus.Completed)">Complete</button>
-                                        }
-                                        @if (b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Completed)
-                                        {
-                                            <button class="action-btn action-btn--cancel"
-                                                    @onclick="() => UpdateStatus(b.Id, BookingStatus.Cancelled)">Cancel</button>
-                                        }
+                                        @ActionButtons(b)
                                     </div>
                                 }
                             </div>
@@ -217,7 +198,7 @@
                                     <th>Date &amp; Time</th>
                                     <th>Status</th>
                                     @if (IsAdmin) { <th>Assigned To</th> }
-                                    @if (CanManage) { <th>Actions</th> }
+                                    @if (CanManage || CanSeeCustomerDetails) { <th>Actions</th> }
                                 </tr>
                             </thead>
                             <tbody>
@@ -262,30 +243,11 @@
                                                 </select>
                                             </td>
                                         }
-                                        @if (CanManage)
+                                        @if (CanManage || CanSeeCustomerDetails)
                                         {
                                             <td @onclick:stopPropagation="true">
                                                 <div class="action-buttons">
-                                                    @if (b.Status == BookingStatus.Pending)
-                                                    {
-                                                        <button class="action-btn action-btn--confirm"
-                                                                @onclick="() => UpdateStatus(b.Id, BookingStatus.Confirmed)">Confirm</button>
-                                                    }
-                                                    @if (b.Status == BookingStatus.Confirmed)
-                                                    {
-                                                        <button class="action-btn action-btn--progress"
-                                                                @onclick="() => UpdateStatus(b.Id, BookingStatus.InProgress)">In Progress</button>
-                                                    }
-                                                    @if (b.Status == BookingStatus.InProgress)
-                                                    {
-                                                        <button class="action-btn action-btn--complete"
-                                                                @onclick="() => UpdateStatus(b.Id, BookingStatus.Completed)">Complete</button>
-                                                    }
-                                                    @if (b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Completed)
-                                                    {
-                                                        <button class="action-btn action-btn--cancel"
-                                                                @onclick="() => UpdateStatus(b.Id, BookingStatus.Cancelled)">Cancel</button>
-                                                    }
+                                                    @ActionButtons(b)
                                                 </div>
                                             </td>
                                         }
@@ -386,27 +348,7 @@
                                                     }
                                                 </div>
                                                 <div class="day-cal-booking__actions">
-                                                    @if (CanManage && b.Status == BookingStatus.Pending)
-                                                    {
-                                                        <button class="action-btn action-btn--confirm" @onclick="() => AcceptBooking(b.Id)">Accept</button>
-                                                    }
-                                                    @if (CanSeeCustomerDetails && !string.IsNullOrWhiteSpace(b.CustomerPhone))
-                                                    {
-                                                        <a class="action-btn action-btn--whatsapp" href="@WhatsAppHref(b)" target="_blank" rel="noopener">WhatsApp</a>
-                                                        <a class="action-btn action-btn--call" href="@TelHref(b.CustomerPhone)">Call</a>
-                                                    }
-                                                    @if (CanManage)
-                                                    {
-                                                        @if (deleteConfirmId == b.Id)
-                                                        {
-                                                            <button class="action-btn action-btn--cancel" @onclick="() => DeleteBooking(b.Id)">Confirm delete</button>
-                                                            <button class="action-btn action-btn--keep" @onclick="() => deleteConfirmId = null">Keep</button>
-                                                        }
-                                                        else
-                                                        {
-                                                            <button class="action-btn action-btn--cancel" @onclick="() => deleteConfirmId = b.Id">Delete</button>
-                                                        }
-                                                    }
+                                                    @ActionButtons(b)
                                                 </div>
                                             </div>
                                         }
@@ -616,7 +558,7 @@
 
     private StaffMember? loggedInStaff;
 
-    private string activeTab = "bookings";
+    private string activeTab = "calendar";
 
     // Bookings
     private List<Booking> _allBookings = [];
@@ -682,6 +624,54 @@
         }
     }
 
+    // True when a booking has any actionable controls for the current user —
+    // used to decide whether to render the action area / Actions column at all.
+    private bool RowHasActions(Booking b) =>
+        CanManage || (CanSeeCustomerDetails && !string.IsNullOrWhiteSpace(b.CustomerPhone));
+
+    // One shared action set, reused by the Bookings cards, the Bookings table and
+    // the Calendar so every view offers the exact same lifecycle + contact + delete
+    // controls. Each call site keeps its own wrapper element for layout/spacing.
+    private RenderFragment<Booking> ActionButtons => booking => @<text>
+        @if (CanManage && booking.Status == BookingStatus.Pending)
+        {
+            <button class="action-btn action-btn--confirm"
+                    @onclick="() => UpdateStatus(booking.Id, BookingStatus.Confirmed)">Confirm</button>
+        }
+        @if (CanManage && booking.Status == BookingStatus.Confirmed)
+        {
+            <button class="action-btn action-btn--progress"
+                    @onclick="() => UpdateStatus(booking.Id, BookingStatus.InProgress)">In Progress</button>
+        }
+        @if (CanManage && booking.Status == BookingStatus.InProgress)
+        {
+            <button class="action-btn action-btn--complete"
+                    @onclick="() => UpdateStatus(booking.Id, BookingStatus.Completed)">Complete</button>
+        }
+        @if (CanSeeCustomerDetails && !string.IsNullOrWhiteSpace(booking.CustomerPhone))
+        {
+            <a class="action-btn action-btn--whatsapp" href="@WhatsAppHref(booking)" target="_blank" rel="noopener">WhatsApp</a>
+            <a class="action-btn action-btn--call" href="@TelHref(booking.CustomerPhone)">Call</a>
+        }
+        @if (CanManage && booking.Status != BookingStatus.Cancelled && booking.Status != BookingStatus.Completed)
+        {
+            <button class="action-btn action-btn--cancel"
+                    @onclick="() => UpdateStatus(booking.Id, BookingStatus.Cancelled)">Cancel</button>
+        }
+        @if (CanManage)
+        {
+            @if (deleteConfirmId == booking.Id)
+            {
+                <button class="action-btn action-btn--cancel" @onclick="() => DeleteBooking(booking.Id)">Confirm delete</button>
+                <button class="action-btn action-btn--keep" @onclick="() => deleteConfirmId = null">Keep</button>
+            }
+            else
+            {
+                <button class="action-btn action-btn--delete" @onclick="() => deleteConfirmId = booking.Id">Delete</button>
+            }
+        }
+    </text>;
+
     // The cookie carries the staff id; re-fetch the full record so permission and
     // role changes (or a deactivation) take effect on the next page load rather
     // than being frozen into the cookie's claims.
@@ -701,6 +691,7 @@
 
         LoadBookings();
         RefreshStats();
+        LoadCalDay();  // Calendar is the default tab, so it needs data on first render.
         if (IsAdmin) _allStaff = AuthService.GetAllStaff();
     }
 
@@ -727,8 +718,10 @@
     private void UpdateStatus(string id, BookingStatus status)
     {
         BookingService.UpdateStatus(id, status);
+        deleteConfirmId = null;
         LoadBookings();
         RefreshStats();
+        LoadCalDay();  // Keep the calendar view in sync when acted on from either tab.
     }
 
     private void AssignBooking(string bookingId, string? staffId)
@@ -765,14 +758,6 @@
         _calDayBookings = IsAdmin || loggedInStaff?.CanViewAllBookings == true
             ? dayBookings
             : dayBookings.Where(b => b.AssignedStaffId == loggedInStaff!.Id).ToList();
-    }
-
-    private void AcceptBooking(string id)
-    {
-        BookingService.UpdateStatus(id, BookingStatus.Confirmed);
-        LoadCalDay();
-        LoadBookings();
-        RefreshStats();
     }
 
     private void DeleteBooking(string id)
