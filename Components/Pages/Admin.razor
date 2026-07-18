@@ -717,6 +717,7 @@
 
     private void UpdateStatus(string id, BookingStatus status)
     {
+        if (!CanManage) return;  // server-side guard; don't rely on hidden buttons alone
         BookingService.UpdateStatus(id, status);
         deleteConfirmId = null;
         LoadBookings();
@@ -726,6 +727,7 @@
 
     private void AssignBooking(string bookingId, string? staffId)
     {
+        if (!IsAdmin) return;  // assignment is admin-only
         BookingService.AssignStaff(bookingId, staffId);
         LoadBookings();
     }
@@ -762,6 +764,7 @@
 
     private void DeleteBooking(string id)
     {
+        if (!CanManage) return;  // server-side guard
         BookingService.DeleteBooking(id);
         deleteConfirmId = null;
         LoadCalDay();
@@ -791,6 +794,7 @@
 
     private void OpenPricingTab()
     {
+        if (!IsAdmin) return;  // pricing is admin-only
         activeTab = "pricing";
         _servicePricings = BookingService.GetServicePricings();
         _editPrices = _servicePricings.ToDictionary(s => s.Id, s => s.CurrentPrice);
@@ -800,6 +804,7 @@
 
     private void SavePrice(string id)
     {
+        if (!IsAdmin) return;  // pricing is admin-only
         if (!_editPrices.TryGetValue(id, out var price) || price < 0) return;
         BookingService.UpdateServicePrice(id, Math.Round(price, 2));
         _priceSaveMessage = "Price updated.";
@@ -808,6 +813,7 @@
 
     private void SaveAllPrices()
     {
+        if (!IsAdmin) return;  // pricing is admin-only
         foreach (var (id, price) in _editPrices.Where(p => p.Value >= 0))
             BookingService.UpdateServicePrice(id, Math.Round(price, 2));
         _priceSaveMessage = "All prices saved.";
@@ -816,17 +822,20 @@
 
     private void OpenStaffTab()
     {
+        if (!IsAdmin) return;  // staff management is admin-only
         activeTab = "staff";
         _allStaff = AuthService.GetAllStaff();
     }
 
     private void AddStaff()
     {
+        if (!IsAdmin) return;  // staff management is admin-only
         staffFormError = null;
         if (string.IsNullOrWhiteSpace(newStaff.FullName)) { staffFormError = "Name is required."; return; }
-        if (string.IsNullOrWhiteSpace(newStaff.Email)) { staffFormError = "Email is required."; return; }
-        if (string.IsNullOrWhiteSpace(newStaffPassword)) { staffFormError = "Password is required."; return; }
+        if (!AuthService.IsValidEmail(newStaff.Email)) { staffFormError = "Please enter a valid email."; return; }
+        if (AuthService.ValidatePassword(newStaffPassword) is { } pwError) { staffFormError = pwError; return; }
 
+        newStaff.Email = AuthService.NormalizeEmail(newStaff.Email);
         newStaff.PasswordHash = AuthService.HashPassword(newStaffPassword);
         AuthService.SaveStaff(newStaff);
         _allStaff = AuthService.GetAllStaff();
@@ -836,6 +845,7 @@
 
     private void SaveStaffMember(StaffMember member)
     {
+        if (!IsAdmin) return;  // staff management is admin-only
         AuthService.SaveStaff(member);
         _allStaff = AuthService.GetAllStaff();
     }

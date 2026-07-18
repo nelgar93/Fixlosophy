@@ -97,7 +97,7 @@ using (var scope = app.Services.CreateScope())
     EnsureSchema(db, app.Logger);
     SeedServicePricings(db);
     SeedDemoData(db);
-    SeedDefaultAdmin(db, config, app.Logger);
+    SeedDefaultAdmin(db, config, app.Logger, app.Environment.IsDevelopment());
     await ApplyAnnualPriceIncreaseAsync(db, config, inflation);
 }
 
@@ -242,8 +242,6 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
             ""CreatedAt""    timestamp   NOT NULL DEFAULT now(),
             CONSTRAINT ""PK_Customers"" PRIMARY KEY (""Id"")
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Customers_Email"" ON ""Customers"" (""Email"");
-
         CREATE TABLE IF NOT EXISTS ""Staff"" (
             ""Id""                     varchar(36) NOT NULL,
             ""FullName""               text        NOT NULL DEFAULT '',
@@ -257,8 +255,6 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
             ""CanViewCustomerDetails"" boolean     NOT NULL DEFAULT false,
             CONSTRAINT ""PK_Staff"" PRIMARY KEY (""Id"")
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Staff_Email"" ON ""Staff"" (""Email"");
-
         CREATE TABLE IF NOT EXISTS ""ServicePricings"" (
             ""Id""           varchar(36)   NOT NULL,
             ""Name""         text          NOT NULL DEFAULT '',
@@ -317,6 +313,24 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
     {
         logger.LogWarning(ex,
             "Could not create IX_Bookings_NoDuplicateSlot — existing data may contain duplicate bookings.");
+    }
+
+    // Case-insensitive unique email indexes so differing casing can't create
+    // duplicate accounts. Done separately (and after dropping any case-sensitive
+    // predecessor) so pre-existing case-variant duplicates degrade to a warning
+    // rather than blocking startup.
+    try
+    {
+        db.Database.ExecuteSqlRaw(@"
+            DROP INDEX IF EXISTS ""IX_Customers_Email"";
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Customers_Email"" ON ""Customers"" (lower(""Email""));
+            DROP INDEX IF EXISTS ""IX_Staff_Email"";
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Staff_Email"" ON ""Staff"" (lower(""Email""));");
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex,
+            "Could not create case-insensitive email indexes — existing data may contain case-variant duplicate emails.");
     }
 }
 
@@ -403,22 +417,30 @@ static void SeedDemoData(AppDbContext db)
     db.SaveChanges();
 }
 
-static void SeedDefaultAdmin(AppDbContext db, IConfiguration config, ILogger logger)
+static void SeedDefaultAdmin(AppDbContext db, IConfiguration config, ILogger logger, bool isDevelopment)
 {
     if (db.Staff.Any()) return;
 
     var email    = config["SeedAdmin:Email"]?.Trim();
     var password = config["SeedAdmin:Password"];
     if (string.IsNullOrEmpty(email)) email = "admin@fixlosophy.com";
+    email = AuthService.NormalizeEmail(email);
 
     if (string.IsNullOrEmpty(password))
     {
+        // Never mint-and-log a real admin credential in production — fail fast so the
+        // operator sets one deliberately (env var / secret store / appsettings.Local.json).
+        if (!isDevelopment)
+            throw new InvalidOperationException(
+                "SeedAdmin:Password is not configured. Set SeedAdmin:Email/Password before first " +
+                "run (environment variable or appsettings.Local.json) — refusing to seed a logged password.");
+
+        // Development-only convenience so local first-run works out of the box.
         password = RandomNumberGenerator.GetString(
             "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789", 20);
         logger.LogWarning(
-            "No SeedAdmin:Password configured. Seeded initial admin {Email} with generated password: {Password} " +
-            "— store it securely. To choose your own, set SeedAdmin:Email/Password in appsettings.Local.json " +
-            "before first run.", email, password);
+            "No SeedAdmin:Password configured. Seeded initial admin {Email} with a generated DEVELOPMENT " +
+            "password: {Password} — set your own in appsettings.Local.json.", email, password);
     }
 
     db.Staff.Add(new StaffMember
