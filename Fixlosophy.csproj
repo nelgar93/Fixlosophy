@@ -5,11 +5,23 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.*" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.*" />
+    <PackageReference Include="MailKit" Version="4.*" />
+    <PackageReference Include="StackExchange.Redis" Version="3.*" />
+  </ItemGroup>
+
+  <!-- Fixlosophy.Tests lives in a subdirectory of this project; exclude it from the
+       Web SDK's implicit **/*.cs glob so its test files aren't compiled in twice. -->
+  <ItemGroup>
+    <Compile Remove="Fixlosophy.Tests/**/*.cs" />
+    <Content Remove="Fixlosophy.Tests/**" />
+    <None Remove="Fixlosophy.Tests/**" />
   </ItemGroup>
 
 </Project>

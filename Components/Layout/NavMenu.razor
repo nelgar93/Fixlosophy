@@ -4,8 +4,7 @@
 <header class="navbar-wrapper @(scrolled ? "navbar-scrolled" : "")">
     <nav class="navbar container">
         <a class="navbar-brand" href="/">
-            <img src="logo.avif" alt="Fixlosophy" class="navbar-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
-            <span style="display:none">&#9851; Fixlosophy</span>
+            <Logo ImgClass="navbar-logo" />
         </a>
 
         <button class="hamburger @(menuOpen ? "open" : "")" @onclick="ToggleMenu" aria-label="Toggle navigation">
@@ -25,6 +24,10 @@
                     @if (context.User.IsInRole("Admin") || context.User.IsInRole("Worker"))
                     {
                         <NavLink href="/admin" @onclick="CloseMenu">Dashboard</NavLink>
+                    }
+                    @if (context.User.FindFirst(AuthClaims.UserType)?.Value == AuthClaims.CustomerType)
+                    {
+                        <NavLink href="/account" @onclick="CloseMenu">My Account</NavLink>
                     }
                     <span class="nav-user">Hi, @context.User.Identity?.Name</span>
                     <a class="nav-auth-link" href="/auth/logout" data-enhance-nav="false">Sign out</a>

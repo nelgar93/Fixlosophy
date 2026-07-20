@@ -6,12 +6,18 @@
 <div class="admin-login">
     <div class="admin-login__card">
         <div class="admin-login__logo">
-            <img src="logo.avif" alt="Fixlosophy" class="admin-logo-img"
-                 onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
-            <span style="display:none">&#9851; Fixlosophy</span>
+            <Logo ImgClass="admin-logo-img" />
         </div>
         <h2>Staff Access</h2>
         <p>Enter your credentials to access the booking dashboard.</p>
+
+        @if (Reset)
+        {
+            <div class="success-message">
+                <div class="success-icon">&#10003;</div>
+                <p>Your password has been reset. You can sign in now.</p>
+            </div>
+        }
 
         @if (Error is not null)
         {
@@ -36,6 +42,7 @@
                 <input type="checkbox" name="remember" value="true" checked />
                 <span>Remember me on this device</span>
             </label>
+            <p class="auth-alt"><a href="/admin/forgot-password">Forgot password?</a></p>
             <button class="btn btn-primary btn-full" type="submit">Sign In</button>
         </form>
     </div>
@@ -44,4 +51,5 @@
 @code {
     [SupplyParameterFromQuery] public string? Error { get; set; }
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+    [SupplyParameterFromQuery] public bool Reset { get; set; }
 }

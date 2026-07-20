@@ -3,13 +3,33 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Fixlosophy.Services;
 
-public class BookingService(AppDbContext db)
+public class BookingService(AppDbContext db, IStorageService storage, ILogger<BookingService> logger)
 {
     public const int MaxPerSlot = 2;
     public const int MaxActiveBookingsPerEmail = 3;
 
     public static readonly string[] TimeSlots =
         ["09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
+
+    // Atomic booking-reference counter (Postgres sequence "BookingReferenceSeq",
+    // created in Program.cs's EnsureSchema). Static + takes db explicitly so the
+    // startup demo-data seeder can draw from the same counter as real bookings —
+    // a plain Count()+1 read-then-format has a race window between two concurrent
+    // CreateBooking calls that lets them land on the same reference.
+    public static long NextReferenceSequence(AppDbContext db)
+    {
+        db.Database.OpenConnection();
+        try
+        {
+            using var cmd = db.Database.GetDbConnection().CreateCommand();
+            cmd.CommandText = "SELECT nextval('\"BookingReferenceSeq\"')";
+            return (long)cmd.ExecuteScalar()!;
+        }
+        finally
+        {
+            db.Database.CloseConnection();
+        }
+    }
 
     public List<ServiceOption> GetServices() =>
         db.ServicePricings
@@ -27,12 +47,15 @@ public class BookingService(AppDbContext db)
     public List<ServicePricing> GetServicePricings() =>
         db.ServicePricings.OrderBy(s => s.SortOrder).ToList();
 
-    public void UpdateServicePrice(string id, decimal price)
+    // Returns false (a no-op) when id doesn't match any row, so callers can tell
+    // "updated" apart from "target no longer exists" instead of both looking identical.
+    public bool UpdateServicePrice(string id, decimal price)
     {
         var sp = db.ServicePricings.Find(id);
-        if (sp == null) return;
+        if (sp == null) return false;
         sp.CurrentPrice = price;
         db.SaveChanges();
+        return true;
     }
 
     public List<PriceAdjustment> GetPriceAdjustments() =>
@@ -69,7 +92,7 @@ public class BookingService(AppDbContext db)
     public (Booking? booking, string? error) CreateBooking(Booking booking)
     {
         booking.CustomerEmail = booking.CustomerEmail.Trim();
-        var normEmail = booking.CustomerEmail.ToLower();
+        var normEmail = booking.CustomerEmail.ToLowerInvariant();
         var today = DateTime.Today;
 
         var slotTaken = db.Bookings.Count(b =>
@@ -78,6 +101,9 @@ public class BookingService(AppDbContext db)
         if (slotTaken >= MaxPerSlot)
             return (null, "Sorry, this time slot has just filled up. Please pick another time.");
 
+        // ToLower() below is translated to SQL lower(...) by EF Core — the analyzer's
+        // suggested StringComparison overload isn't SQL-translatable and would throw.
+#pragma warning disable CA1304, CA1311, CA1862
         var hasDuplicate = db.Bookings.Any(b =>
             b.CustomerEmail.ToLower() == normEmail &&
             b.SlotDate == booking.SlotDate && b.SlotTime == booking.SlotTime &&
@@ -89,11 +115,11 @@ public class BookingService(AppDbContext db)
             b.CustomerEmail.ToLower() == normEmail &&
             b.SlotDate >= today &&
             b.Status != BookingStatus.Cancelled);
+#pragma warning restore CA1304, CA1311, CA1862
         if (upcoming >= MaxActiveBookingsPerEmail)
             return (null, $"You already have {MaxActiveBookingsPerEmail} upcoming bookings — please contact us if you need to change one.");
 
-        var seq = db.Bookings.Count() + 1;
-        booking.Reference = $"FIX-{DateTime.Now:yyMMdd}-{seq:D3}";
+        booking.Reference = $"FIX-{DateTime.Now:yyMMdd}-{NextReferenceSequence(db):D3}";
         booking.CreatedAt = DateTime.Now;
         booking.Status = BookingStatus.Pending;
         db.Bookings.Add(booking);
@@ -111,16 +137,36 @@ public class BookingService(AppDbContext db)
         return (booking, null);
     }
 
-    public void DeleteBooking(string id)
+    public async Task<bool> DeleteBookingAsync(string id)
     {
-        var booking = db.Bookings.Find(id);
-        if (booking is null) return;
+        var booking = db.Bookings.Include(b => b.Photos).FirstOrDefault(b => b.Id == id);
+        if (booking is null) return false;
+
+        // Best-effort: a storage hiccup shouldn't block deleting the booking itself.
+        foreach (var photo in booking.Photos)
+        {
+            if (!await storage.DeleteAsync(photo.StoragePath))
+                logger.LogWarning("Could not delete Supabase Storage object {Path} for booking {BookingId}",
+                    photo.StoragePath, id);
+        }
+
         db.Bookings.Remove(booking);
+        db.SaveChanges();
+        return true;
+    }
+
+    // Called once a booking row exists (see Book.razor's ConfirmBooking) so photo
+    // storage paths can be scoped under the real booking id.
+    public void AddPhotos(string bookingId, IEnumerable<string> storagePaths)
+    {
+        foreach (var path in storagePaths)
+            db.BookingPhotos.Add(new BookingPhoto { BookingId = bookingId, StoragePath = path });
         db.SaveChanges();
     }
 
     public List<Booking> GetAllBookings() =>
         db.Bookings
+          .Include(b => b.Photos)
           .OrderByDescending(b => b.SlotDate)
           .ThenBy(b => b.SlotTime)
           .ToList();
@@ -130,17 +176,19 @@ public class BookingService(AppDbContext db)
         var start = date.Date;
         var end = start.AddDays(1);
         return db.Bookings
+            .Include(b => b.Photos)
             .Where(b => b.SlotDate >= start && b.SlotDate < end)
             .OrderBy(b => b.SlotTime)
             .ToList();
     }
 
-    public void UpdateStatus(string id, BookingStatus status)
+    public bool UpdateStatus(string id, BookingStatus status)
     {
         var booking = db.Bookings.Find(id);
-        if (booking is null) return;
+        if (booking is null) return false;
         booking.Status = status;
         db.SaveChanges();
+        return true;
     }
 
     // Single DB query: returns true/false availability for every day in the given month.
@@ -188,36 +236,49 @@ public class BookingService(AppDbContext db)
           .ThenBy(b => b.SlotTime)
           .ToList();
 
-    public void AssignStaff(string bookingId, string? staffId)
+    // Only surfaces bookings made while the customer was logged in (ConfirmBooking
+    // only stamps CustomerId then) — guest bookings under the same email won't
+    // retroactively appear here.
+    public List<Booking> GetBookingsForCustomer(string customerId) =>
+        db.Bookings
+          .Where(b => b.CustomerId == customerId)
+          .OrderByDescending(b => b.SlotDate)
+          .ThenByDescending(b => b.SlotTime)
+          .ToList();
+
+    public bool AssignStaff(string bookingId, string? staffId)
     {
         var booking = db.Bookings.Find(bookingId);
-        if (booking is null) return;
+        if (booking is null) return false;
         booking.AssignedStaffId = string.IsNullOrEmpty(staffId) ? null : staffId;
         db.SaveChanges();
+        return true;
     }
 
-    public (int total, int today, int pending, int confirmed) GetStats()
+    public (int total, int today, int pending, int confirmed) GetStats() =>
+        GetStatsCore(db.Bookings);
+
+    public (int total, int today, int pending, int confirmed) GetStatsForStaff(string staffId) =>
+        GetStatsCore(db.Bookings.Where(b => b.AssignedStaffId == staffId));
+
+    // One grouped query with conditional counts instead of 4 separate Count()
+    // round-trips per call site.
+    private static (int total, int today, int pending, int confirmed) GetStatsCore(IQueryable<Booking> query)
     {
         var todayStart = DateTime.Today;
         var tomorrowStart = todayStart.AddDays(1);
-        return (
-            db.Bookings.Count(),
-            db.Bookings.Count(b => b.SlotDate >= todayStart && b.SlotDate < tomorrowStart),
-            db.Bookings.Count(b => b.Status == BookingStatus.Pending),
-            db.Bookings.Count(b => b.Status == BookingStatus.Confirmed)
-        );
-    }
 
-    public (int total, int today, int pending, int confirmed) GetStatsForStaff(string staffId)
-    {
-        var todayStart = DateTime.Today;
-        var tomorrowStart = todayStart.AddDays(1);
-        var q = db.Bookings.Where(b => b.AssignedStaffId == staffId);
-        return (
-            q.Count(),
-            q.Count(b => b.SlotDate >= todayStart && b.SlotDate < tomorrowStart),
-            q.Count(b => b.Status == BookingStatus.Pending),
-            q.Count(b => b.Status == BookingStatus.Confirmed)
-        );
+        var row = query
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                Total     = g.Count(),
+                Today     = g.Count(b => b.SlotDate >= todayStart && b.SlotDate < tomorrowStart),
+                Pending   = g.Count(b => b.Status == BookingStatus.Pending),
+                Confirmed = g.Count(b => b.Status == BookingStatus.Confirmed)
+            })
+            .FirstOrDefault();
+
+        return row is null ? (0, 0, 0, 0) : (row.Total, row.Today, row.Pending, row.Confirmed);
     }
 }

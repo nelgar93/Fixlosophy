@@ -24,7 +24,28 @@
       "PowerShell(dotnet build C:\\\\dev\\\\Fixlosophy\\\\Fixlosophy.csproj --nologo -v q)",
       "PowerShell(Remove-Item C:\\\\dev\\\\Fixlosophy\\\\Services\\\\GoogleCalendarService.cs -Confirm:$false)",
       "WebFetch(domain:speckit.org)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(git check-ignore *)",
+      "Bash(sed 's/.*var\\(//')",
+      "Bash(grep -oE '^\\\\.[a-zA-Z0-9_-]+\\(\\\\s*[,{]\\)' wwwroot/app.css)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(sed 's/^\\\\.//')",
+      "Bash(grep -E \"\\\\.\\(cs|razor\\)$\")",
+      "Bash(awk '$1>1')",
+      "Bash(grep -iE '\\\\.user$|appsettings\\\\.Development')",
+      "Bash(git diff *)",
+      "Read(//c/Users/Raven/AppData/Local/Temp/claude/c--dev-Fixlosophy/5cac63b0-f543-4cd8-8b6d-0b59f3a9d469/scratchpad/**)",
+      "Bash(git -C /c/dev/Fixlosophy status --short)",
+      "Bash(git -C /c/dev/Fixlosophy log --oneline -- Components/Layout/Logo.razor)",
+      "Bash(git -C /c/dev/Fixlosophy ls-files -- Components/Layout/Logo.razor)",
+      "Bash(git -C /c/dev/Fixlosophy check-ignore -v run.log)",
+      "Bash(git -C /c/dev/Fixlosophy status --short --ignored)",
+      "Bash(dotnet test *)",
+      "Bash(rm -rf \"/c/Users/Raven/AppData/Local/Temp/claude/c--dev-Fixlosophy/29a55067-10a5-4adb-889b-1c1e1f119306/scratchpad/check_admin.cs\" \"/c/Users/Raven/AppData/Local/Temp/claude/c--dev-Fixlosophy/29a55067-10a5-4adb-889b-1c1e1f119306/scratchpad/obj\" \"/c/Users/Raven/AppData/Local/Temp/claude/c--dev-Fixlosophy/29a55067-10a5-4adb-889b-1c1e1f119306/scratchpad/bin\" 2>/dev/null; echo done)",
+      "Bash(curl -s -o /dev/null -w \"app alive check: HTTP %{http_code}\\\\n\" http://localhost:5126/)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\Raven\\AppData\\Local\\Temp\\claude\\c--dev-Fixlosophy\\29a55067-10a5-4adb-889b-1c1e1f119306\\scratchpad"
     ]
   }
 }

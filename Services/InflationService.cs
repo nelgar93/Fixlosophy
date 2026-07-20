@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
@@ -20,15 +21,16 @@ public class InflationService(IHttpClientFactory httpFactory)
             var resp = await client.GetFromJsonAsync<OnsResponse>(OnsUrl);
 
             var years = (resp?.Years ?? [])
-                .Where(y => int.TryParse(y.Date, out _) && decimal.TryParse(y.Value, out _))
-                .OrderByDescending(y => int.Parse(y.Date!))
+                .Where(y => int.TryParse(y.Date, NumberStyles.Integer, CultureInfo.InvariantCulture, out _) &&
+                            decimal.TryParse(y.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
+                .OrderByDescending(y => int.Parse(y.Date!, CultureInfo.InvariantCulture))
                 .Take(2)
                 .ToList();
 
             if (years.Count == 2)
             {
-                var current  = decimal.Parse(years[0].Value!);
-                var previous = decimal.Parse(years[1].Value!);
+                var current  = decimal.Parse(years[0].Value!, CultureInfo.InvariantCulture);
+                var previous = decimal.Parse(years[1].Value!, CultureInfo.InvariantCulture);
                 if (previous > 0)
                     return Math.Round((current - previous) / previous, 4);
             }

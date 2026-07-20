@@ -3,6 +3,7 @@
 @inject BookingService BookingService
 @inject AuthService AuthService
 @inject ActionRateLimiter RateLimiter
+@inject IStorageService Storage
 
 <PageTitle>Book a Repair – Fixlosophy</PageTitle>
 
@@ -222,12 +223,45 @@
                         </div>
                         <div class="form-group">
                             <label>Bike Make &amp; Model</label>
+                            @if (loggedInCustomer?.Bikes.Count > 0)
+                            {
+                                <div class="bike-chip-row">
+                                    @foreach (var bike in loggedInCustomer.Bikes)
+                                    {
+                                        var b = bike;
+                                        <button type="button" class="bike-chip @(bikeDescription == b.MakeModel ? "bike-chip--selected" : "")"
+                                                @onclick="() => bikeDescription = b.MakeModel">
+                                            @b.MakeModel
+                                        </button>
+                                    }
+                                </div>
+                            }
                             <input class="form-control" type="text" @bind="bikeDescription" placeholder="e.g. Trek Marlin 7, 2022" />
                         </div>
                     </div>
                     <div class="form-group">
                         <label>Describe the Issue</label>
                         <textarea class="form-control" rows="4" @bind="notes" placeholder="Any extra details that would help our mechanic prepare..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Photos of the Issue (optional, up to @MaxPhotos)</label>
+                        <InputFile OnChange="OnPhotosSelected" multiple accept="image/jpeg,image/png,image/webp,image/heic" class="form-control" />
+                        @if (pendingPhotos.Count > 0)
+                        {
+                            <ul class="photo-picker-list">
+                                @foreach (var photo in pendingPhotos)
+                                {
+                                    <li>
+                                        <span>@photo.FileName</span>
+                                        <button type="button" class="photo-picker-remove" @onclick="() => RemovePendingPhoto(photo)">&times;</button>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        @if (photoError != null)
+                        {
+                            <div class="booking-error">@photoError</div>
+                        }
                     </div>
                 </div>
 
@@ -321,6 +355,11 @@
                 <h2>You're booked in!</h2>
                 <p class="confirmed-subtitle">We've received your booking and will send a confirmation shortly.</p>
 
+                @if (photoUploadWarning != null)
+                {
+                    <div class="booking-error">@photoUploadWarning</div>
+                }
+
                 <div class="confirmed-ref">
                     <span>Booking Reference</span>
                     <strong>@confirmedBooking.Reference</strong>
@@ -382,9 +421,15 @@
     private string notes = "";
     private string? validationError;
 
+    private const int MaxPhotos = 5;
+    private List<PendingPhoto> pendingPhotos = new();
+    private string? photoError;
+    private sealed record PendingPhoto(string FileName, string ContentType, byte[] Bytes);
+
     // Step 4/5
     private bool submitting = false;
     private Booking? confirmedBooking;
+    private string? photoUploadWarning;
 
     // Customer account — identity comes from the auth cookie (sign-in lives in
     // the nav / dedicated /account pages), we just read it here to prefill.
@@ -486,7 +531,41 @@
         LoadMonthAvailability();
     }
 
-    private void ConfirmBooking()
+    // Reads each selected file into memory (capped by MaxFileSizeBytes) but doesn't
+    // touch Supabase Storage yet — uploads only happen once ConfirmBooking has a
+    // real booking id, so an abandoned form never orphans files in the bucket.
+    private async Task OnPhotosSelected(InputFileChangeEventArgs e)
+    {
+        photoError = null;
+
+        if (pendingPhotos.Count + e.FileCount > MaxPhotos)
+        {
+            photoError = $"You can attach up to {MaxPhotos} photos in total.";
+            return;
+        }
+
+        foreach (var file in e.GetMultipleFiles(MaxPhotos))
+        {
+            var error = Storage.ValidatePhoto(file.ContentType, file.Size);
+            if (error != null) { photoError = error; continue; }
+
+            try
+            {
+                using var stream = file.OpenReadStream(Fixlosophy.Services.StorageService.MaxFileSizeBytes);
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer);
+                pendingPhotos.Add(new PendingPhoto(file.Name, file.ContentType, buffer.ToArray()));
+            }
+            catch (IOException)
+            {
+                photoError = "One of the selected photos couldn't be read.";
+            }
+        }
+    }
+
+    private void RemovePendingPhoto(PendingPhoto photo) => pendingPhotos.Remove(photo);
+
+    private async Task ConfirmBooking()
     {
         if (submitting) return;
         if (selectedService == null || selectedDate == null || selectedTime == null) return;
@@ -517,9 +596,33 @@
             submitting = false;
             return;
         }
+
+        photoUploadWarning = await UploadPendingPhotosAsync(created!.Id);
+
         confirmedBooking = created;
         step = 5;
         submitting = false;
+    }
+
+    // Best-effort: a photo failing to upload never rolls back the booking itself.
+    private async Task<string?> UploadPendingPhotosAsync(string bookingId)
+    {
+        if (pendingPhotos.Count == 0) return null;
+
+        var uploadedPaths = new List<string>();
+        var failures = 0;
+        foreach (var photo in pendingPhotos)
+        {
+            var (path, error) = await Storage.UploadCustomerPhotoAsync(bookingId, photo.ContentType, photo.Bytes);
+            if (path != null) uploadedPaths.Add(path);
+            else failures++;
+        }
+
+        if (uploadedPaths.Count > 0)
+            BookingService.AddPhotos(bookingId, uploadedPaths);
+
+        return failures == 0 ? null
+            : $"{failures} photo{(failures == 1 ? "" : "s")} couldn't be uploaded, but your booking is confirmed.";
     }
 
     private void ResetBooking()
@@ -534,6 +637,9 @@
         validationError = null;
         confirmedBooking = null;
         calendarMonth = DateTime.Today;
+        pendingPhotos = new();
+        photoError = null;
+        photoUploadWarning = null;
         // Keep the customer logged in between bookings
     }
 
@@ -543,5 +649,8 @@
         customerName = loggedInCustomer.FullName;
         customerEmail = loggedInCustomer.Email;
         customerPhone = loggedInCustomer.Phone;
+        // Only auto-fill when there's exactly one saved bike — with several,
+        // guessing which one they mean today would be worse than leaving it blank.
+        bikeDescription = loggedInCustomer.Bikes.Count == 1 ? loggedInCustomer.Bikes[0].MakeModel : "";
     }
 }

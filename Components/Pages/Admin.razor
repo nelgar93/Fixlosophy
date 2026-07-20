@@ -4,6 +4,7 @@
 @inject BookingService BookingService
 @inject AuthService AuthService
 @inject NavigationManager Nav
+@inject IStorageService Storage
 
 <PageTitle>Admin – Fixlosophy Bookings</PageTitle>
 
@@ -15,10 +16,10 @@
                 <p class="section-eyebrow">@(IsAdmin ? "Admin Dashboard" : "Staff Dashboard")</p>
                 <h1>Booking Management</h1>
             </div>
-            <div style="display:flex;align-items:center;gap:1rem">
-                <span style="color:rgba(255,255,255,.7);font-size:.9rem">
+            <div class="admin-header-actions">
+                <span class="admin-header-actions__name">
                     @loggedInStaff.FullName &nbsp;·&nbsp;
-                    <span class="status-badge status-badge--@(IsAdmin ? "confirmed" : "pending")" style="font-size:.75rem">
+                    <span class="status-badge status-badge--@(IsAdmin ? "confirmed" : "pending")">
                         @loggedInStaff.Role
                     </span>
                 </span>
@@ -31,7 +32,7 @@
         <div class="container">
 
             <!-- Tab bar -->
-            <div class="admin-filter-scroll" style="margin-bottom:1.5rem">
+            <div class="admin-filter-scroll tab-bar-wrapper">
                 <div class="admin-filter-tabs">
                     <button class="filter-tab @(activeTab == "calendar" ? "active" : "")"
                             @onclick="OpenCalendarTab">Calendar</button>
@@ -152,6 +153,23 @@
                                         {
                                             <div class="admin-card__detail-row"><span>Notes</span><span>@b.Notes</span></div>
                                         }
+                                        @if (b.Photos.Count > 0)
+                                        {
+                                            <div class="admin-card__detail-row">
+                                                <span>Photos</span>
+                                                <div class="admin-photo-thumbs">
+                                                    @foreach (var photo in b.Photos)
+                                                    {
+                                                        @if (_photoUrls.TryGetValue(photo.Id, out var url))
+                                                        {
+                                                            <a href="@url" target="_blank" rel="noopener noreferrer" @onclick:stopPropagation="true">
+                                                                <img src="@url" class="admin-photo-thumb" alt="Issue photo" />
+                                                            </a>
+                                                        }
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
                                         <div class="admin-card__detail-row">
                                             <span>Price</span><span>@(b.ServicePrice > 0 ? $"From £{b.ServicePrice}" : "Quote")</span>
                                         </div>
@@ -162,7 +180,7 @@
                                         {
                                             <div class="admin-card__detail-row">
                                                 <span>Assign to</span>
-                                                <select class="form-control" style="font-size:.85rem;padding:.25rem .5rem"
+                                                <select class="form-control form-control--compact"
                                                         value="@b.AssignedStaffId"
                                                         @onchange="e => AssignBooking(b.Id, e.Value?.ToString())"
                                                         @onclick:stopPropagation="true">
@@ -232,7 +250,7 @@
                                         @if (IsAdmin)
                                         {
                                             <td @onclick:stopPropagation="true">
-                                                <select class="form-control" style="font-size:.82rem;padding:.2rem .4rem;min-width:130px"
+                                                <select class="form-control form-control--compact" style="min-width:130px"
                                                         value="@b.AssignedStaffId"
                                                         @onchange="e => AssignBooking(b.Id, e.Value?.ToString())">
                                                     <option value="">— Unassigned —</option>
@@ -263,6 +281,23 @@
                                                         <div><strong>Booked</strong><span>@b.CreatedAt.ToString("d MMM yyyy, HH:mm")</span></div>
                                                         <div><strong>Notes</strong><span>@(string.IsNullOrWhiteSpace(b.Notes) ? "—" : b.Notes)</span></div>
                                                     </div>
+                                                    @if (b.Photos.Count > 0)
+                                                    {
+                                                        <div class="booking-detail__photos">
+                                                            <strong>Photos</strong>
+                                                            <div class="admin-photo-thumbs">
+                                                                @foreach (var photo in b.Photos)
+                                                                {
+                                                                    @if (_photoUrls.TryGetValue(photo.Id, out var url))
+                                                                    {
+                                                                        <a href="@url" target="_blank" rel="noopener noreferrer">
+                                                                            <img src="@url" class="admin-photo-thumb" alt="Issue photo" />
+                                                                        </a>
+                                                                    }
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                    }
                                                 </div>
                                             </td>
                                         </tr>
@@ -364,8 +399,8 @@
             @if (activeTab == "pricing" && IsAdmin)
             {
                 <div class="staff-mgmt">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.75rem">
-                        <h3 style="margin:0">Service Prices</h3>
+                    <div class="pricing-tab-header">
+                        <h3>Service Prices</h3>
                         <button class="btn btn-primary" @onclick="SaveAllPrices">Save All</button>
                     </div>
 
@@ -402,12 +437,12 @@
                                     var sid = sp.Id;
                                     <tr>
                                         <td><strong>@sp.Name</strong></td>
-                                        <td style="font-size:.85rem;color:rgba(255,255,255,0.45)">@sp.Category</td>
-                                        <td style="font-size:.85rem;color:rgba(255,255,255,0.45)">@sp.Duration</td>
+                                        <td class="text-muted-sm">@sp.Category</td>
+                                        <td class="text-muted-sm">@sp.Duration</td>
                                         <td>
                                             @if (sp.IsQuoteOnly)
                                             {
-                                                <span style="font-size:.85rem;color:rgba(255,255,255,0.35)">Quote only</span>
+                                                <span class="text-faint-sm">Quote only</span>
                                             }
                                             else
                                             {
@@ -417,13 +452,12 @@
                                         <td>
                                             @if (sp.IsQuoteOnly)
                                             {
-                                                <span style="font-size:.85rem;color:rgba(255,255,255,0.35)">—</span>
+                                                <span class="text-faint-sm">—</span>
                                             }
                                             else
                                             {
-                                                <input class="form-control"
+                                                <input class="form-control form-control--price"
                                                        type="number" min="0" step="1"
-                                                       style="font-size:.875rem;padding:.3rem .5rem;width:100px"
                                                        value="@_editPrices[sid]"
                                                        @oninput="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _editPrices[sid] = v; }" />
                                             }
@@ -482,7 +516,7 @@
                     </div>
 
                     <!-- Staff list -->
-                    <h3 style="margin-top:2rem;margin-bottom:1rem">Current Staff</h3>
+                    <h3 class="admin-subheading">Current Staff</h3>
                     <div class="admin-table-wrapper">
                         <table class="admin-table">
                             <thead>
@@ -503,8 +537,8 @@
                                     var m = member;
                                     var isCurrentUser = m.Id == loggedInStaff.Id;
                                     <tr>
-                                        <td><strong>@m.FullName</strong> @if (isCurrentUser) { <span style="font-size:.75rem;color:#888">(you)</span> }</td>
-                                        <td style="font-size:.85rem;color:#666">@m.Email</td>
+                                        <td><strong>@m.FullName</strong> @if (isCurrentUser) { <span class="text-muted-sm">(you)</span> }</td>
+                                        <td class="text-muted-sm">@m.Email</td>
                                         <td>
                                             <span class="status-badge status-badge--@(m.Role == StaffRole.Admin ? "confirmed" : "pending")">
                                                 @m.Role
@@ -512,17 +546,17 @@
                                         </td>
                                         @if (m.Role == StaffRole.Admin)
                                         {
-                                            <td colspan="3" style="color:#888;font-size:.85rem;text-align:center">Full access (Admin)</td>
+                                            <td colspan="3" class="text-center text-muted-sm">Full access (Admin)</td>
                                         }
                                         else
                                         {
-                                            <td style="text-align:center">
+                                            <td class="text-center">
                                                 <input type="checkbox" @bind="m.CanViewAllBookings" />
                                             </td>
-                                            <td style="text-align:center">
+                                            <td class="text-center">
                                                 <input type="checkbox" @bind="m.CanManageBookings" />
                                             </td>
-                                            <td style="text-align:center">
+                                            <td class="text-center">
                                                 <input type="checkbox" @bind="m.CanViewCustomerDetails" />
                                             </td>
                                         }
@@ -530,11 +564,11 @@
                                             @if (!isCurrentUser)
                                             {
                                                 <input type="checkbox" @bind="m.IsActive" title="Active" />
-                                                <span style="font-size:.8rem;margin-left:.3rem">Active</span>
+                                                <span class="text-muted-sm" style="margin-left:.3rem">Active</span>
                                             }
                                             else
                                             {
-                                                <span style="font-size:.8rem;color:#888">—</span>
+                                                <span class="text-muted-sm">—</span>
                                             }
                                         </td>
                                         <td>
@@ -566,6 +600,11 @@
     private string searchTerm = "";
     private string? expandedId;
     private (int total, int today, int pending, int confirmed) stats;
+
+    // BookingPhoto.Id -> signed URL, lazily filled the first time a booking with
+    // photos is expanded (see ToggleExpand) rather than signing every booking's
+    // photos up front on every load.
+    private readonly Dictionary<string, string> _photoUrls = new();
 
     // Calendar tab
     private DateTime calDay = DateTime.Today;
@@ -712,7 +751,22 @@
     }
 
     private void SetFilter(string f) { activeFilter = f; expandedId = null; }
-    private void ToggleExpand(string id) => expandedId = expandedId == id ? null : id;
+    private async Task ToggleExpand(string id)
+    {
+        var opening = expandedId != id;
+        expandedId = opening ? id : null;
+        if (!opening) return;
+
+        var booking = FilteredBookings.FirstOrDefault(b => b.Id == id);
+        if (booking is null) return;
+
+        foreach (var photo in booking.Photos)
+        {
+            if (_photoUrls.ContainsKey(photo.Id)) continue;
+            var url = await Storage.GetSignedPhotoUrlAsync(photo.StoragePath, TimeSpan.FromMinutes(15));
+            if (url is not null) _photoUrls[photo.Id] = url;
+        }
+    }
     private void OnSearch(ChangeEventArgs e) => searchTerm = e.Value?.ToString() ?? "";
 
     private void UpdateStatus(string id, BookingStatus status)
@@ -762,10 +816,10 @@
             : dayBookings.Where(b => b.AssignedStaffId == loggedInStaff!.Id).ToList();
     }
 
-    private void DeleteBooking(string id)
+    private async Task DeleteBooking(string id)
     {
         if (!CanManage) return;  // server-side guard
-        BookingService.DeleteBooking(id);
+        await BookingService.DeleteBookingAsync(id);
         deleteConfirmId = null;
         LoadCalDay();
         LoadBookings();

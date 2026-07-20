@@ -1,0 +1,47 @@
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{razor,cshtml}]
+indent_size = 4
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+# File-scoped namespaces and Allman braces are already used throughout this codebase.
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_new_line_before_open_brace = all
+csharp_prefer_braces = true:silent
+
+# var preferred when the type is apparent (matches existing usage).
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# Primary constructors and collection expressions are already used throughout.
+csharp_style_prefer_primary_constructors = true:suggestion
+csharp_style_prefer_top_level_statements = true:suggestion
+
+dotnet_sort_system_directives_first = true
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+
+# Nullable reference types are enabled project-wide (Fixlosophy.csproj); keep warnings visible.
+dotnet_diagnostic.CS8600.severity = warning
+dotnet_diagnostic.CS8602.severity = warning
+dotnet_diagnostic.CS8618.severity = warning
+
+# CA1848 (prefer LoggerMessage source-gen delegates) — not worth the ceremony for this
+# app's handful of rare, cold-path startup warning logs.
+dotnet_diagnostic.CA1848.severity = none

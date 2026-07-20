@@ -5,7 +5,8 @@ namespace Fixlosophy.Services;
 public enum LimitedAction
 {
     CreateBooking,
-    ContactMessage
+    ContactMessage,
+    ChangePassword
 }
 
 // Registered as scoped, which in Blazor Server means one instance per circuit
@@ -32,6 +33,12 @@ public sealed class ActionRateLimiter : IDisposable
         [LimitedAction.ContactMessage] = new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
         {
             PermitLimit = 3,
+            Window = TimeSpan.FromMinutes(10),
+            QueueLimit = 0
+        }),
+        [LimitedAction.ChangePassword] = new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
             Window = TimeSpan.FromMinutes(10),
             QueueLimit = 0
         })

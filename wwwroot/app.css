@@ -13,17 +13,30 @@
     --dark-3: #1C1C1C;
     --dark-4: #2A2A2A;
     --mid: #888888;
-    --light: #f4f4f4;
     --white: #ffffff;
-    --border: #e5e7eb;
     --border-dark: #2A2A2A;
-    --success: #3DBB48;
     --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     --radius: 12px;
     --radius-sm: 8px;
     --shadow: 0 4px 24px rgba(0,0,0,0.10);
     --shadow-lg: 0 12px 40px rgba(0,0,0,0.20);
     --nav-h: 64px;
+
+    /* Spacing scale — new rules should use these; existing declarations
+       weren't mass-migrated to avoid an oversized, hard-to-review diff. */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+
+    /* Font-size scale — same rationale as --space-*: new/touched rules use these. */
+    --fs-eyebrow: 0.8rem;    /* uppercase "eyebrow" label above a heading */
+    --fs-h3-compact: 1.05rem; /* card/table sub-heading, smaller than default h3 */
+    --fs-sm: 0.875rem;       /* small body text: labels, footer copy, error text */
+    --fs-xs: 0.85rem;        /* muted caption/meta text */
 }
 
 /* ---------- Reset / Base ---------- */
@@ -39,8 +52,6 @@ body {
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
 }
-
-h1, h2, h3, h4 { color: var(--white); }
 
 img { max-width: 100%; display: block; }
 a { color: var(--green); text-decoration: none; }
@@ -166,10 +177,6 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     margin-bottom: 0.85rem;
 }
 
-/* ---------- Admin login logo ---------- */
-.admin-login__logo { margin-bottom: 1.5rem; }
-.admin-logo-img   { height: 64px; width: auto; display: block; margin: 0 auto; mix-blend-mode: screen; }
-
 .nav-links {
     display: flex;
     align-items: center;
@@ -269,7 +276,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 .hero-eyebrow {
     color: var(--green);
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: var(--fs-eyebrow);
     text-transform: uppercase;
     letter-spacing: 2px;
     margin-bottom: 1rem;
@@ -361,7 +368,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 .section-eyebrow {
     color: var(--green);
-    font-size: 0.8rem;
+    font-size: var(--fs-eyebrow);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 2px;
@@ -602,7 +609,6 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     margin-bottom: 1.5rem;
     padding-bottom: 0.75rem;
     border-bottom: 2px solid var(--border-dark);
-    font-size: 1.4rem;
 }
 
 .cat-icon { font-size: 1.4rem; }
@@ -746,7 +752,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     margin-bottom: 0.4rem;
 }
 
-.stat-label { color: rgba(255,255,255,0.6); font-size: 0.8rem; }
+.stat-label { color: rgba(255,255,255,0.6); font-size: var(--fs-xs); }
 
 .team-section { background: var(--dark-2); border-top: 1px solid var(--dark-3); border-bottom: 1px solid var(--dark-3); }
 
@@ -783,7 +789,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 .team-role {
     color: var(--green);
-    font-size: 0.85rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     margin-bottom: 0.75rem !important;
 }
@@ -824,7 +830,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 .form-group label {
     display: block;
-    font-size: 0.875rem;
+    font-size: var(--fs-sm);
     font-weight: 600;
     margin-bottom: 0.4rem;
     color: rgba(255,255,255,0.85);
@@ -859,8 +865,10 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 textarea.form-control { resize: vertical; min-height: 130px; }
 
 .validation-message {
+    /* Per-field validation text (Blazor's <ValidationMessage>) is a different UI
+       role from .booking-error's banner, so only the size converges, not the color. */
     color: #dc2626;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
     margin-top: 0.3rem;
 }
 
@@ -876,7 +884,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     width: 64px;
     height: 64px;
     border-radius: 50%;
-    background: var(--success);
+    background: var(--green);
     color: var(--white);
     font-size: 1.75rem;
     display: flex;
@@ -897,7 +905,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     margin-bottom: 1.25rem;
 }
 
-.info-card h3 { margin-bottom: 1rem; font-size: 1.05rem; }
+.info-card h3 { margin-bottom: 1rem; font-size: var(--fs-h3-compact); }
 
 .info-item {
     display: flex;
@@ -949,7 +957,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
 /* .footer-logo replaced by .footer-logo-img */
 
-.footer-brand p { font-size: 0.875rem; line-height: 1.6; }
+.footer-brand p { font-size: var(--fs-sm); line-height: 1.6; }
 
 .footer-links h6, .footer-contact h6 {
     color: var(--white);
@@ -1001,7 +1009,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 #blazor-error-ui .dismiss { cursor: pointer; margin-left: 0.5rem; }
 
 /* ---------- Blazor validation ---------- */
-.valid.modified:not([type=checkbox]) { border-color: var(--success) !important; }
+.valid.modified:not([type=checkbox]) { border-color: var(--green) !important; }
 .invalid { border-color: #dc2626 !important; }
 
 /* ============================================================
@@ -1168,127 +1176,5 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     .turnaround-item { flex-wrap: wrap; gap: 0.25rem; }
 }
 
-/* ============================================================
-   BOOKING WIZARD MOBILE FIXES
-   ============================================================ */
-@media (max-width: 479px) {
-
-    /* Booking card: reduce padding */
-    .booking-card { padding: 1.25rem; }
-
-    /* Step indicator: shrink dots and hide labels on tiny screens */
-    .step-indicator__dot { width: 28px; height: 28px; font-size: 0.75rem; }
-    .step-indicator__label { display: none; }
-    .step-indicator__line { margin-bottom: 0; min-width: 16px; }
-    .steps-indicator { margin-bottom: 1.75rem; }
-
-    /* Booking nav buttons: stack on tiny screens */
-    .booking-nav { flex-direction: column-reverse; }
-    .booking-nav .btn { width: 100%; justify-content: center; }
-    .booking-nav > span { display: none; }
-
-    /* Calendar: tighten up */
-    .cal-day { font-size: 0.8rem; border-radius: 6px; }
-    .cal-head { font-size: 0.6rem; }
-
-    /* Service picker: reduce padding */
-    .service-pick-card { padding: 0.75rem 0.9rem; }
-
-    /* Review items: allow wrapping */
-    .review-item { flex-wrap: wrap; gap: 0.25rem; }
-    .review-value { text-align: left; }
-
-    /* Confirmed page */
-    .confirmed-ref { padding: 0.85rem 1.25rem; }
-    .confirmed-ref strong { font-size: 1.1rem; }
-    .confirmed-actions { flex-direction: column; align-items: center; }
-    .confirmed-actions .btn { width: 100%; max-width: 320px; justify-content: center; }
-}
-
-/* ── Customer auth strip (booking page) ───────────────────────── */
-.customer-auth-strip {
-    display: flex;
-    align-items: center;
-    gap: .6rem;
-    flex-wrap: wrap;
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: .5rem;
-    padding: .6rem 1rem;
-    margin-bottom: 1.5rem;
-    font-size: .9rem;
-    color: rgba(255,255,255,0.65);
-}
-.customer-auth-strip strong { color: var(--white); }
-.customer-auth-strip__link {
-    background: none;
-    border: none;
-    color: var(--green);
-    font-size: .9rem;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 0;
-}
-.customer-auth-strip__link:hover { color: var(--green-dark); text-decoration: underline; }
-
-.customer-auth-panel {
-    width: 100%;
-    margin-top: .75rem;
-    background: var(--dark-4);
-    border: 1px solid var(--border-dark);
-    border-radius: .5rem;
-    padding: 1.25rem;
-}
-.customer-auth-tabs {
-    display: flex;
-    gap: .25rem;
-    margin-bottom: 1rem;
-    border-bottom: 2px solid var(--border-dark);
-    padding-bottom: .5rem;
-}
-.customer-auth-tabs button {
-    background: none;
-    border: none;
-    font-size: .9rem;
-    font-weight: 600;
-    color: rgba(255,255,255,0.4);
-    cursor: pointer;
-    padding: .3rem .75rem;
-    border-radius: .25rem .25rem 0 0;
-    transition: color .15s;
-}
-.customer-auth-tabs button:hover { color: var(--white); }
-.customer-auth-tabs button.active { color: var(--green); border-bottom: 2px solid var(--green); margin-bottom: -2px; }
-
-/* ── Staff management / Pricing tab ──────────────────────────── */
-.staff-mgmt { margin-top: .5rem; }
-.staff-add-card {
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: .75rem;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-}
-.staff-add-card h3 { margin: 0 0 1rem; font-size: 1.05rem; color: var(--white); }
-
-/* ── Admin utility: success banner & info banner ─────────────── */
-.admin-success {
-    background: rgba(61,187,72,0.10);
-    border: 1px solid rgba(61,187,72,0.3);
-    color: var(--green);
-    padding: .75rem 1rem;
-    border-radius: var(--radius-sm);
-    margin-bottom: 1rem;
-    font-size: .875rem;
-}
-
-.pricing-info-banner {
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: .5rem;
-    padding: .75rem 1rem;
-    margin-bottom: 1.5rem;
-    font-size: .875rem;
-    color: rgba(255,255,255,0.5);
-}
-.pricing-info-banner strong { color: var(--white); }
+/* Booking-page, customer-auth, and admin-only styles live in booking.css,
+   not here — app.css is the public-site stylesheet. */
