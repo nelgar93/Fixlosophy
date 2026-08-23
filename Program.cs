@@ -13,6 +13,16 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
+// CreateBuilder has already loaded appsettings.json and
+// appsettings.{Environment}.json, followed by environment variables and
+// command-line arguments. Later sources win, so re-adding those JSON files here
+// would let the checked-in appsettings.json shadow the environment. Add only the
+// gitignored local-overrides file, then re-add the environment and command-line
+// sources so they keep the last word.
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -81,11 +91,6 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
-
-builder.Configuration
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-    .AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: true)
-    .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
 var app = builder.Build();
 
@@ -197,42 +202,6 @@ static string SafeReturn(string? url, string fallback) =>
 static void EnsureSchema(AppDbContext db, ILogger logger)
 {
     db.Database.ExecuteSqlRaw(@"
-        CREATE TABLE IF NOT EXISTS ""Bookings"" (
-            ""Id""              varchar(36)   NOT NULL,
-            ""Reference""       text          NOT NULL DEFAULT '',
-            ""CreatedAt""       timestamp     NOT NULL DEFAULT now(),
-            ""CustomerName""    text          NOT NULL DEFAULT '',
-            ""CustomerEmail""   text          NOT NULL DEFAULT '',
-            ""CustomerPhone""   text          NOT NULL DEFAULT '',
-            ""ServiceCategory"" text          NOT NULL DEFAULT '',
-            ""ServiceName""     text          NOT NULL DEFAULT '',
-            ""ServicePrice""    numeric(18,2) NOT NULL DEFAULT 0,
-            ""SlotDate""        timestamp     NOT NULL DEFAULT now(),
-            ""SlotTime""        text          NOT NULL DEFAULT '',
-            ""BikeDescription"" text          NOT NULL DEFAULT '',
-            ""Notes""           text          NOT NULL DEFAULT '',
-            ""Status""          integer       NOT NULL DEFAULT 0,
-            CONSTRAINT ""PK_Bookings"" PRIMARY KEY (""Id"")
-        );
-
-        ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""CustomerId""       varchar(36) NULL;
-        ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""AssignedStaffId""  varchar(36) NULL;
-
-        -- Relational FK constraints (idempotent via pg_constraint check)
-        DO $$ BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_Bookings_Customers') THEN
-                ALTER TABLE ""Bookings"" ADD CONSTRAINT ""FK_Bookings_Customers""
-                    FOREIGN KEY (""CustomerId"") REFERENCES ""Customers""(""Id"") ON DELETE SET NULL;
-            END IF;
-        END $$;
-
-        DO $$ BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_Bookings_Staff') THEN
-                ALTER TABLE ""Bookings"" ADD CONSTRAINT ""FK_Bookings_Staff""
-                    FOREIGN KEY (""AssignedStaffId"") REFERENCES ""Staff""(""Id"") ON DELETE SET NULL;
-            END IF;
-        END $$;
-
         CREATE TABLE IF NOT EXISTS ""Customers"" (
             ""Id""           varchar(36) NOT NULL,
             ""Email""        text        NOT NULL DEFAULT '',
@@ -278,6 +247,42 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
             ""AppliedAt"" timestamp    NOT NULL DEFAULT now(),
             CONSTRAINT ""PK_PriceAdjustments"" PRIMARY KEY (""Id"")
         );
+
+        CREATE TABLE IF NOT EXISTS ""Bookings"" (
+            ""Id""              varchar(36)   NOT NULL,
+            ""Reference""       text          NOT NULL DEFAULT '',
+            ""CreatedAt""       timestamp     NOT NULL DEFAULT now(),
+            ""CustomerName""    text          NOT NULL DEFAULT '',
+            ""CustomerEmail""   text          NOT NULL DEFAULT '',
+            ""CustomerPhone""   text          NOT NULL DEFAULT '',
+            ""ServiceCategory"" text          NOT NULL DEFAULT '',
+            ""ServiceName""     text          NOT NULL DEFAULT '',
+            ""ServicePrice""    numeric(18,2) NOT NULL DEFAULT 0,
+            ""SlotDate""        timestamp     NOT NULL DEFAULT now(),
+            ""SlotTime""        text          NOT NULL DEFAULT '',
+            ""BikeDescription"" text          NOT NULL DEFAULT '',
+            ""Notes""           text          NOT NULL DEFAULT '',
+            ""Status""          integer       NOT NULL DEFAULT 0,
+            CONSTRAINT ""PK_Bookings"" PRIMARY KEY (""Id"")
+        );
+
+        ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""CustomerId""       varchar(36) NULL;
+        ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""AssignedStaffId""  varchar(36) NULL;
+
+        -- Relational FK constraints, added after every referenced table exists (idempotent via pg_constraint check)
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_Bookings_Customers') THEN
+                ALTER TABLE ""Bookings"" ADD CONSTRAINT ""FK_Bookings_Customers""
+                    FOREIGN KEY (""CustomerId"") REFERENCES ""Customers""(""Id"") ON DELETE SET NULL;
+            END IF;
+        END $$;
+
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_Bookings_Staff') THEN
+                ALTER TABLE ""Bookings"" ADD CONSTRAINT ""FK_Bookings_Staff""
+                    FOREIGN KEY (""AssignedStaffId"") REFERENCES ""Staff""(""Id"") ON DELETE SET NULL;
+            END IF;
+        END $$;
 
         -- Enable RLS on all public tables to prevent exposure via PostgREST.
         -- The app connects as postgres (superuser) which bypasses RLS, so this
