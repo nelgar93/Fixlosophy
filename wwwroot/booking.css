@@ -276,6 +276,11 @@
     color: var(--white);
 }
 
+/* line-height: 1 matters — flex centres the line box, not the glyph inside it,
+   so the UA's default `normal` line-height left the arrows sitting visibly high
+   in the square. The icons are inline SVG rather than text arrows for the same
+   reason: a symmetric viewBox centres exactly, where U+2190/2192 are drawn on
+   the font's math axis and shift with whatever fallback face resolves them. */
 .cal-nav__btn {
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
@@ -285,10 +290,17 @@
     border-radius: 8px;
     cursor: pointer;
     font-size: 1rem;
-    transition: all 0.2s;
+    line-height: 1;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.cal-nav__btn svg {
+    width: 16px;
+    height: 16px;
+    display: block;
 }
 
 .cal-nav__btn:hover:not(:disabled) { background: var(--green); border-color: var(--green); }

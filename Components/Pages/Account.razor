@@ -80,7 +80,7 @@
                 <h2 class="booking-card__title">Your Details</h2>
                 @if (profileMessage != null)
                 {
-                    <div class="admin-success">&#10003; @profileMessage</div>
+                    <div class="admin-success"><Icon Name="check" /> @profileMessage</div>
                 }
                 @if (profileError != null)
                 {
@@ -97,8 +97,8 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Phone</label>
-                    <input class="form-control" type="tel" @bind="profilePhone" />
+                    <label>Phone *</label>
+                    <input class="form-control" type="tel" @bind="profilePhone" required />
                 </div>
                 <button class="btn btn-primary" @onclick="SaveProfile">Save Details</button>
             </div>
@@ -108,7 +108,7 @@
                 <h2 class="booking-card__title">Change Password</h2>
                 @if (passwordMessage != null)
                 {
-                    <div class="admin-success">&#10003; @passwordMessage</div>
+                    <div class="admin-success"><Icon Name="check" /> @passwordMessage</div>
                 }
                 @if (passwordError != null)
                 {

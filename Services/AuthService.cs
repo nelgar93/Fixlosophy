@@ -47,6 +47,17 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
     // accounts or block a returning user (matches the booking dedupe's lower()).
     public static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 
+    /// Shortest number the shop could actually dial. UK landlines without the area
+    /// code are 6 digits, so anything under 7 is a typo rather than a number.
+    public const int MinPhoneDigits = 7;
+
+    /// Counts digits rather than pattern-matching a format: customers write numbers
+    /// with spaces, dashes, brackets and +44 prefixes, and rejecting those would be
+    /// worse than accepting a loosely-formatted but dialable number. This is also
+    /// what stops "call me" reaching the admin panel as a dead Call/WhatsApp link.
+    public static bool IsValidPhone(string? phone) =>
+        phone is not null && phone.Count(char.IsDigit) >= MinPhoneDigits;
+
     public StaffMember? AuthenticateStaff(string email, string password)
     {
         var normEmail = NormalizeEmail(email);
@@ -109,6 +120,8 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
             return (null, "Please enter your name.");
         if (!IsValidEmail(email))
             return (null, "Please enter a valid email address.");
+        if (!IsValidPhone(phone))
+            return (null, "Please enter a phone number we can reach you on.");
         if (ValidatePassword(password) is { } pwError)
             return (null, pwError);
 
@@ -136,6 +149,10 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             return (null, "Please enter your name.");
+        // Required here too, so a phone number can't be cleared from the profile
+        // page after registration made it mandatory.
+        if (!IsValidPhone(phone))
+            return (null, "Please enter a phone number we can reach you on.");
 
         var customer = db.Customers.Find(customerId);
         if (customer is null) return (null, "Account not found.");

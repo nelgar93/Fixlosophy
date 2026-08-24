@@ -108,6 +108,7 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
     public (Booking? booking, string? error) CreateBooking(Booking booking)
     {
         booking.CustomerEmail = booking.CustomerEmail.Trim();
+        booking.CustomerPhone = booking.CustomerPhone.Trim();
         var normEmail = booking.CustomerEmail.ToLowerInvariant();
         var today = DateTime.Today;
 

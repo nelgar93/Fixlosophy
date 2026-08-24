@@ -11,60 +11,57 @@
     </div>
 </div>
 
-<section class="section">
+<section class="section gallery-page">
     <div class="container">
         <div class="gallery-grid">
-            <figure class="gallery-item">
-                <img src="@Images.Url("shop/shopfront.jpg")" alt="The blue shopfront with bikes displayed in the window"
-                     width="1200" height="900" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
-                <figcaption>The blue front — you can't miss it.</figcaption>
-            </figure>
-            <figure class="gallery-item">
-                <img src="@Images.Url("shop/street-view.jpg")" alt="The full shop seen from the street on a sunny day"
-                     width="900" height="1200" loading="lazy" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
-                <figcaption>Find us tucked between the workshops.</figcaption>
-            </figure>
-            <figure class="gallery-item">
-                <img src="@Images.Url("shop/bikes-outside.jpg")" alt="Customer bikes lined up outside the Fixlosophy window"
-                     width="1200" height="900" loading="lazy" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
-                <figcaption>A normal morning's queue of jobs.</figcaption>
-            </figure>
-            <figure class="gallery-item">
-                <img src="@Images.Url("shop/new-bikes.jpg")" alt="A row of new bikes lined up outside the shop"
-                     width="1200" height="900" loading="lazy" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
-                <figcaption>New arrivals, still in their wrapping.</figcaption>
-            </figure>
-            <figure class="gallery-item">
-                <img src="@Images.Url("shop/logo-window.jpg")" alt="The Fixlosophy logo painted on the shop window"
-                     width="1200" height="900" loading="lazy" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
-                <figcaption>The sign on the glass.</figcaption>
-            </figure>
-            <figure class="gallery-item">
-                <img src="@Images.Url("shop/window-art.jpg")" alt="Bicycles hand-painted across the shop window"
-                     width="1200" height="900" loading="lazy" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
-                <figcaption>Every bike we love, painted on the window.</figcaption>
-            </figure>
-            <figure class="gallery-item">
-                <img src="@Images.Url("shop/window-art-detail.jpg")" alt="Close-up of the hand-painted bicycles on the window glass"
-                     width="900" height="1200" loading="lazy" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
-                <figcaption>Tandems, folders and fixies included.</figcaption>
-            </figure>
-            <figure class="gallery-item">
-                <img src="@Images.Url("shop/opening-hours.jpg")" alt="Hand-painted sign showing the shop's opening times"
-                     width="900" height="1200" loading="lazy" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
-                <figcaption>Open seven days — including Sunday afternoons.</figcaption>
-            </figure>
+            @foreach (var (photo, index) in Photos.Select((p, i) => (p, i)))
+            {
+                var i = index;
+                <figure class="gallery-item">
+                    @* A button rather than a click handler on the figure so the photo
+                       is reachable and operable by keyboard. The alt text is the
+                       button's accessible name, which is why the img isn't hidden. *@
+                    <button type="button" class="gallery-item__trigger"
+                            @onclick="() => Open(i)">
+                        <img src="@Images.Url(photo.Path)" alt="@photo.Alt"
+                             width="@photo.Width" height="@photo.Height"
+                             loading="@(i == 0 ? null : "lazy")" decoding="async"
+                             onerror="this.closest('figure').style.display='none'" />
+                    </button>
+                </figure>
+            }
         </div>
     </div>
 </section>
+
+@if (_openIndex is int open)
+{
+    var photo = Photos[open];
+    <div class="lightbox" role="dialog" aria-modal="true" aria-label="@photo.Alt"
+         tabindex="0" @ref="_overlay" @onkeydown="OnKeyDown" @onclick="Close">
+        <button type="button" class="lightbox__close" aria-label="Close" @onclick="Close">
+            <Icon Name="close" />
+        </button>
+
+        @* stopPropagation so clicking the controls or the photo itself doesn't
+           fall through to the backdrop's close handler. *@
+        <button type="button" class="lightbox__nav lightbox__nav--prev" aria-label="Previous photo"
+                @onclick="Prev" @onclick:stopPropagation="true">
+            <Icon Name="chevron-left" />
+        </button>
+
+        <figure class="lightbox__figure" @onclick:stopPropagation="true">
+            <img src="@Images.Url(photo.Path)" alt="@photo.Alt" decoding="async" />
+        </figure>
+
+        <button type="button" class="lightbox__nav lightbox__nav--next" aria-label="Next photo"
+                @onclick="Next" @onclick:stopPropagation="true">
+            <Icon Name="chevron-right" />
+        </button>
+
+        <p class="lightbox__count">@(open + 1) / @Photos.Length</p>
+    </div>
+}
 
 <!-- CTA -->
 <section class="cta-banner">
@@ -77,3 +74,58 @@
         </div>
     </div>
 </section>
+
+@code {
+    private record Photo(string Path, string Alt, int Width, int Height);
+
+    // Alt text is kept (it's what a screen reader announces, and the lightbox's
+    // accessible name); the visible figcaptions were removed so the photos speak
+    // for themselves. Intrinsic sizes vary — five landscape, three portrait — and
+    // are declared so the column layout doesn't reflow as images load.
+    private static readonly Photo[] Photos =
+    [
+        new("shop/shopfront.jpg",          "The blue shopfront with bikes displayed in the window",      1200, 900),
+        new("shop/street-view.jpg",        "The full shop seen from the street on a sunny day",           900, 1200),
+        new("shop/bikes-outside.jpg",      "Customer bikes lined up outside the Fixlosophy window",      1200, 900),
+        new("shop/new-bikes.jpg",          "A row of new bikes lined up outside the shop",               1200, 900),
+        new("shop/logo-window.jpg",        "The Fixlosophy logo painted on the shop window",             1200, 900),
+        new("shop/window-art.jpg",         "Bicycles hand-painted across the shop window",               1200, 900),
+        new("shop/window-art-detail.jpg",  "Close-up of the hand-painted bicycles on the window glass",   900, 1200),
+        new("shop/opening-hours.jpg",      "Hand-painted sign showing the shop's opening times",          900, 1200)
+    ];
+
+    private int? _openIndex;
+    private ElementReference _overlay;
+    private bool _focusOverlay;
+
+    private void Open(int index)
+    {
+        _openIndex = index;
+        _focusOverlay = true;
+    }
+
+    private void Close() => _openIndex = null;
+
+    // Wraps at both ends so the arrows never dead-end mid-gallery.
+    private void Prev() => _openIndex = (_openIndex!.Value - 1 + Photos.Length) % Photos.Length;
+    private void Next() => _openIndex = (_openIndex!.Value + 1) % Photos.Length;
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "Escape":     Close(); break;
+            case "ArrowLeft":  Prev();  break;
+            case "ArrowRight": Next();  break;
+        }
+    }
+
+    // The overlay only exists after the render that opens it, so focus has to move
+    // there afterwards — otherwise the key handler above never receives anything.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusOverlay) return;
+        _focusOverlay = false;
+        await _overlay.FocusAsync();
+    }
+}

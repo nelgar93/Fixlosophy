@@ -2,12 +2,20 @@
 
 @code {
     // Rendered by AuthorizeRouteView when an unauthenticated visitor hits a
-    // protected page (only /admin today). Bounce them to the staff login,
-    // preserving where they were headed so they land back there after signing in.
+    // protected page. Which login they get depends on where they were headed:
+    // /admin is staff-only, everything else belongs to customers. Sending a
+    // customer to the staff sign-in was a dead end — there's no link across to
+    // the customer form from there. The intended destination is preserved either
+    // way so they land back on it after signing in.
     protected override void OnInitialized()
     {
-        var returnUrl = Nav.ToBaseRelativePath(Nav.Uri);
-        var target = $"/admin/login?returnUrl={Uri.EscapeDataString("/" + returnUrl)}";
-        Nav.NavigateTo(target, forceLoad: false, replace: true);
+        var returnUrl = "/" + Nav.ToBaseRelativePath(Nav.Uri);
+        var loginPath = returnUrl.StartsWith("/admin", StringComparison.OrdinalIgnoreCase)
+            ? "/admin/login"
+            : "/account/login";
+
+        Nav.NavigateTo(
+            $"{loginPath}?returnUrl={Uri.EscapeDataString(returnUrl)}",
+            forceLoad: false, replace: true);
     }
 }

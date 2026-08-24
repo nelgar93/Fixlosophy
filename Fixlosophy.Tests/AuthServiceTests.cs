@@ -71,7 +71,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, error) = svc.RegisterCustomer("Jane@Example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, error) = svc.RegisterCustomer("Jane@Example.com", "Jane Doe", "07700 900000", "hunter2pass");
         Assert.Null(error);
         Assert.NotNull(customer);
 
@@ -85,7 +85,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
 
         Assert.Null(svc.AuthenticateCustomer("jane@example.com", "wrong-password"));
     }
@@ -103,7 +103,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, error) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "short");
+        var (customer, error) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "short");
         Assert.Null(customer);
         Assert.NotNull(error);
     }
@@ -113,7 +113,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, error) = svc.RegisterCustomer("not-an-email", "Jane Doe", "", "hunter2pass");
+        var (customer, error) = svc.RegisterCustomer("not-an-email", "Jane Doe", "07700 900000", "hunter2pass");
         Assert.Null(customer);
         Assert.NotNull(error);
     }
@@ -123,9 +123,9 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
 
-        var (customer, error) = svc.RegisterCustomer("JANE@EXAMPLE.COM", "Impersonator", "", "hunter2pass");
+        var (customer, error) = svc.RegisterCustomer("JANE@EXAMPLE.COM", "Impersonator", "07700 900000", "hunter2pass");
         Assert.Null(customer);
         Assert.Equal("An account with this email already exists.", error);
     }
@@ -171,7 +171,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         Assert.False(customer!.EmailConfirmed);
     }
 
@@ -180,7 +180,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         var token = svc.GenerateEmailVerificationToken(customer!);
 
         Assert.True(svc.ConfirmEmail(customer!.Email, token));
@@ -197,7 +197,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         svc.GenerateEmailVerificationToken(customer!);
 
         Assert.False(svc.ConfirmEmail(customer!.Email, "not-the-real-token"));
@@ -209,7 +209,7 @@ public class AuthServiceTests
         using var db = NewDb();
         var store = new InMemoryVerificationTokenStore();
         var svc = new AuthService(db, store);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         var token = svc.GenerateEmailVerificationToken(customer!);
 
         // Overwrite with a negative TTL to simulate the 24h window having already
@@ -224,7 +224,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         svc.GenerateEmailVerificationToken(customer!);
 
         Assert.Null(svc.RegenerateEmailVerificationTokenIfNeeded(customer!));
@@ -236,7 +236,7 @@ public class AuthServiceTests
         using var db = NewDb();
         var store = new InMemoryVerificationTokenStore();
         var svc = new AuthService(db, store);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         var firstToken = svc.GenerateEmailVerificationToken(customer!);
 
         // Cooldown already elapsed, but the 24h verification token is still live.
@@ -256,7 +256,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         var token = svc.GenerateEmailVerificationToken(customer!);
         svc.ConfirmEmail(customer!.Email, token);
 
@@ -278,7 +278,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
 
         Assert.NotNull(svc.RequestCustomerPasswordReset("jane@example.com"));
         Assert.Null(svc.RequestCustomerPasswordReset("jane@example.com"));
@@ -289,7 +289,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         var firstToken = svc.RequestCustomerPasswordReset("jane@example.com");
         Assert.NotNull(firstToken);
 
@@ -321,7 +321,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         var token = svc.RequestCustomerPasswordReset("jane@example.com")!;
 
         var (ok, isStaff, error) = svc.ResetPasswordByToken(token, "newpassword1");
@@ -369,7 +369,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         var token = svc.RequestCustomerPasswordReset("jane@example.com")!;
         customer!.ResetTokenExpiresAt = DateTime.Now.AddSeconds(-1);
         db.SaveChanges();
@@ -383,7 +383,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         var token = svc.RequestCustomerPasswordReset("jane@example.com")!;
 
         var (ok, _, error) = svc.ResetPasswordByToken(token, "short");
@@ -398,7 +398,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
 
         var (updated, error) = svc.UpdateCustomerProfile(customer!.Id, "Jane Smith", "+1 555 0100");
         Assert.Null(error);
@@ -411,7 +411,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
 
         var (updated, error) = svc.UpdateCustomerProfile(customer!.Id, "   ", "+1 555 0100");
         Assert.Null(updated);
@@ -423,7 +423,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
 
         var (ok, error) = svc.ChangeCustomerPassword(customer!.Id, "hunter2pass", "newpassword1");
         Assert.True(ok);
@@ -437,7 +437,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
 
         var (ok, error) = svc.ChangeCustomerPassword(customer!.Id, "wrong-password", "newpassword1");
         Assert.False(ok);
@@ -450,7 +450,7 @@ public class AuthServiceTests
     {
         using var db = NewDb();
         var svc = NewSvc(db);
-        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
 
         var (ok, error) = svc.ChangeCustomerPassword(customer!.Id, "hunter2pass", "short");
         Assert.False(ok);
@@ -489,7 +489,7 @@ public class AuthServiceTests
         using var db = NewDb();
 
         var (customer, _) = NewSvc(db)
-            .RegisterCustomer("jane@example.com", "Jane Doe", "", "s3cretpass");
+            .RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "s3cretpass");
 
         Assert.NotEqual("s3cretpass", customer!.PasswordHash);
         Assert.True(AuthService.VerifyPassword(customer.PasswordHash, "s3cretpass"));
@@ -542,5 +542,46 @@ public class AuthServiceTests
         var staff = NewSvc(db).GetAllStaff();
 
         Assert.Equal(["Ada Admin", "Bob Builder", "Zoe Zephyr"], staff.Select(s => s.FullName));
+    }
+
+    // ── Phone is required ────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    [InlineData("call me", false)]   // passes a blank check, but has no digits
+    [InlineData("12345", false)]     // too short to dial
+    [InlineData("07700 900000", true)]
+    [InlineData("+44 7700 900000", true)]
+    [InlineData("(0161) 496 0000", true)]
+    public void IsValidPhone_RequiresEnoughDialableDigits(string? phone, bool expected) =>
+        Assert.Equal(expected, AuthService.IsValidPhone(phone));
+
+    [Fact]
+    public void RegisterCustomer_RejectsMissingPhone()
+    {
+        using var db = NewDb();
+
+        var (customer, error) = NewSvc(db)
+            .RegisterCustomer("jane@example.com", "Jane Doe", "", "hunter2pass");
+
+        Assert.Null(customer);
+        Assert.Contains("phone number", error);
+        Assert.Empty(db.Customers);
+    }
+
+    [Fact]
+    public void UpdateCustomerProfile_RejectsClearingThePhone()
+    {
+        using var db = NewDb();
+        var svc = NewSvc(db);
+        var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
+
+        var (updated, error) = svc.UpdateCustomerProfile(customer!.Id, "Jane Smith", "");
+
+        Assert.Null(updated);
+        Assert.Contains("phone number", error);
+        Assert.Equal("07700 900000", db.Customers.Single().Phone);
     }
 }

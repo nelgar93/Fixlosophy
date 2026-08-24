@@ -16,7 +16,7 @@
 
         <!-- SERVICING PACKAGES -->
         <div class="services-category">
-            <h2 class="category-title"><span class="cat-icon">&#128736;</span> Servicing Packages</h2>
+            <h2 class="category-title"><span class="cat-icon"><Icon Name="wrench" /></span> Servicing Packages</h2>
             <div class="package-grid">
                 @{
                     var basicPrice = _priceMap.GetValueOrDefault("Basic Service");
@@ -29,11 +29,11 @@
                         <div class="package-price">£@basicPrice</div>
                     </div>
                     <ul>
-                        <li>&#10003; Gear indexing (front &amp; rear)</li>
-                        <li>&#10003; Brake adjustment</li>
-                        <li>&#10003; Tyre pressure check</li>
-                        <li>&#10003; Chain lube &amp; inspection</li>
-                        <li>&#10003; Safety check</li>
+                        <li><Icon Name="check" /> Gear indexing (front &amp; rear)</li>
+                        <li><Icon Name="check" /> Brake adjustment</li>
+                        <li><Icon Name="check" /> Tyre pressure check</li>
+                        <li><Icon Name="check" /> Chain lube &amp; inspection</li>
+                        <li><Icon Name="check" /> Safety check</li>
                     </ul>
                     <a href="/book" class="btn btn-outline">Book Now</a>
                 </div>
@@ -44,11 +44,11 @@
                         <div class="package-price">£@fullPrice</div>
                     </div>
                     <ul>
-                        <li>&#10003; Everything in Basic Service</li>
-                        <li>&#10003; Full drivetrain clean</li>
-                        <li>&#10003; Cable &amp; housing check</li>
-                        <li>&#10003; Wheel true &amp; spoke check</li>
-                        <li>&#10003; Bearing inspection</li>
+                        <li><Icon Name="check" /> Everything in Basic Service</li>
+                        <li><Icon Name="check" /> Full drivetrain clean</li>
+                        <li><Icon Name="check" /> Cable &amp; housing check</li>
+                        <li><Icon Name="check" /> Wheel true &amp; spoke check</li>
+                        <li><Icon Name="check" /> Bearing inspection</li>
                     </ul>
                     <a href="/book" class="btn btn-primary">Book Now</a>
                 </div>
@@ -58,12 +58,12 @@
                         <div class="package-price">£@goldPrice</div>
                     </div>
                     <ul>
-                        <li>&#10003; Complete disassembly</li>
-                        <li>&#10003; Deep clean &amp; degrease</li>
-                        <li>&#10003; New cables &amp; housing</li>
-                        <li>&#10003; Bearing service &amp; repack</li>
-                        <li>&#10003; Full drivetrain overhaul</li>
-                        <li>&#10003; Written service report</li>
+                        <li><Icon Name="check" /> Complete disassembly</li>
+                        <li><Icon Name="check" /> Deep clean &amp; degrease</li>
+                        <li><Icon Name="check" /> New cables &amp; housing</li>
+                        <li><Icon Name="check" /> Bearing service &amp; repack</li>
+                        <li><Icon Name="check" /> Full drivetrain overhaul</li>
+                        <li><Icon Name="check" /> Written service report</li>
                     </ul>
                     <a href="/book" class="btn btn-outline">Book Now</a>
                 </div>
@@ -74,7 +74,7 @@
         @if (_servicesByCategory.Contains("Specialist"))
         {
             <div class="services-category">
-                <h2 class="category-title"><span class="cat-icon">&#9889;</span> Specialist Services</h2>
+                <h2 class="category-title"><span class="cat-icon"><Icon Name="bolt" /></span> Specialist Services</h2>
                 <div class="pricing-table">
                     @foreach (var svc in _servicesByCategory["Specialist"])
                     {
@@ -94,7 +94,7 @@
         @if (_servicesByCategory.Contains("Components"))
         {
             <div class="services-category">
-                <h2 class="category-title"><span class="cat-icon">&#128295;</span> Components &amp; Repairs</h2>
+                <h2 class="category-title"><span class="cat-icon"><Icon Name="link" /></span> Components &amp; Repairs</h2>
                 <div class="pricing-table">
                     @foreach (var svc in _servicesByCategory["Components"])
                     {
@@ -134,7 +134,7 @@
         }
 
         <div class="services-note">
-            <p>&#9432; Prices shown are for labour only. Parts quoted separately. Final price confirmed before work begins.</p>
+            <p><Icon Name="info" /> Prices shown are for labour only. Parts quoted separately. Final price confirmed before work begins.</p>
             <a href="/book" class="btn btn-primary btn-lg">Book Now</a>
         </div>
 

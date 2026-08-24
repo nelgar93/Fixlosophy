@@ -44,7 +44,7 @@
                 {
                     <div class="step-indicator @(step == i ? "active" : step > i ? "done" : "")">
                         <div class="step-indicator__dot">
-                            @if (step > i) { <span>&#10003;</span> }
+                            @if (step > i) { <span><Icon Name="check" /></span> }
                             else { <span>@i</span> }
                         </div>
                         <span class="step-indicator__label">@label</span>
@@ -73,7 +73,7 @@
                             {
                                 var isSelected = selectedService?.Name == svc.Name;
                                 <div class="service-pick-card @(isSelected ? "selected" : "")" @onclick="() => SelectService(svc)">
-                                    <div class="service-pick-card__icon">@((MarkupString)svc.Icon)</div>
+                                    <div class="service-pick-card__icon"><Icon Name="@CategoryIcon(svc.Category)" /></div>
                                     <div class="service-pick-card__info">
                                         <strong>@svc.Name</strong>
                                         <span>@svc.Duration</span>
@@ -83,7 +83,7 @@
                                     </div>
                                     @if (isSelected)
                                     {
-                                        <div class="service-pick-card__check">&#10003;</div>
+                                        <div class="service-pick-card__check"><Icon Name="check" /></div>
                                     }
                                 </div>
                             }
@@ -94,7 +94,7 @@
                 <div class="booking-nav">
                     <span></span>
                     <button class="btn btn-primary btn-lg" @onclick="GoToStep2" disabled="@(selectedService == null)">
-                        Continue <span>&#8594;</span>
+                        Continue <Icon Name="arrow-right" />
                     </button>
                 </div>
             </div>
@@ -111,9 +111,9 @@
                     <!-- Calendar -->
                     <div class="calendar-wrapper">
                         <div class="cal-nav">
-                            <button class="cal-nav__btn" @onclick="PrevMonth" disabled="@(calendarMonth.Year == DateTime.Today.Year && calendarMonth.Month == DateTime.Today.Month)">&#8592;</button>
+                            <button class="cal-nav__btn" @onclick="PrevMonth" disabled="@(calendarMonth.Year == DateTime.Today.Year && calendarMonth.Month == DateTime.Today.Month)" aria-label="Previous month"><Icon Name="chevron-left" /></button>
                             <span class="cal-nav__title">@calendarMonth.ToString("MMMM yyyy")</span>
-                            <button class="cal-nav__btn" @onclick="NextMonth">&#8594;</button>
+                            <button class="cal-nav__btn" @onclick="NextMonth" aria-label="Next month"><Icon Name="chevron-right" /></button>
                         </div>
 
                         <div class="cal-grid">
@@ -176,7 +176,7 @@
                         else
                         {
                             <div class="timeslot-prompt">
-                                <span>&#128197;</span>
+                                <span><Icon Name="calendar" /></span>
                                 <p>Select a date to see available time slots.</p>
                             </div>
                         }
@@ -184,9 +184,9 @@
                 </div>
 
                 <div class="booking-nav">
-                    <button class="btn btn-outline" @onclick="() => GoToStep(1)">&#8592; Back</button>
+                    <button class="btn btn-outline" @onclick="() => GoToStep(1)"><Icon Name="arrow-left" /> Back</button>
                     <button class="btn btn-primary btn-lg" @onclick="GoToStep3" disabled="@(selectedDate == null || selectedTime == null)">
-                        Continue <span>&#8594;</span>
+                        Continue <Icon Name="arrow-right" />
                     </button>
                 </div>
             </div>
@@ -217,8 +217,8 @@
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Phone Number</label>
-                            <input class="form-control" type="tel" @bind="customerPhone" placeholder="07700 900000" />
+                            <label>Phone Number *</label>
+                            <input class="form-control" type="tel" @bind="customerPhone" placeholder="07700 900000" required />
                         </div>
                         <div class="form-group">
                             <label>Bike Make &amp; Model</label>
@@ -265,8 +265,8 @@
                 </div>
 
                 <div class="booking-nav">
-                    <button class="btn btn-outline" @onclick="() => GoToStep(2)">&#8592; Back</button>
-                    <button class="btn btn-primary btn-lg" @onclick="GoToStep4">Continue <span>&#8594;</span></button>
+                    <button class="btn btn-outline" @onclick="() => GoToStep(2)"><Icon Name="arrow-left" /> Back</button>
+                    <button class="btn btn-primary btn-lg" @onclick="GoToStep4">Continue <Icon Name="arrow-right" /></button>
                 </div>
             </div>
         }
@@ -333,12 +333,12 @@
                 </div>
 
                 <div class="review-note">
-                    <span>&#9432;</span>
+                    <span><Icon Name="info" /></span>
                     Final price confirmed after assessment. You won't be charged until you approve the quote.
                 </div>
 
                 <div class="booking-nav">
-                    <button class="btn btn-outline" @onclick="() => GoToStep(3)">&#8592; Back</button>
+                    <button class="btn btn-outline" @onclick="() => GoToStep(3)"><Icon Name="arrow-left" /> Back</button>
                     <button class="btn btn-primary btn-lg" @onclick="ConfirmBooking" disabled="@submitting">
                         @(submitting ? "Confirming…" : "Confirm Booking ✓")
                     </button>
@@ -350,7 +350,7 @@
         @if (step == 5 && confirmedBooking != null)
         {
             <div class="booking-confirmed">
-                <div class="confirmed-icon">&#10003;</div>
+                <div class="confirmed-icon"><Icon Name="check" /></div>
                 <h2>You're booked in!</h2>
                 <p class="confirmed-subtitle">We've received your booking and will send a confirmation shortly.</p>
 
@@ -366,21 +366,21 @@
 
                 <div class="confirmed-summary">
                     <div class="confirmed-row">
-                        <span>&#128736;</span>
+                        <span><Icon Name="wrench" /></span>
                         <div>
                             <strong>@confirmedBooking.ServiceName</strong>
                             <span>@(confirmedBooking.ServicePrice > 0 ? $"From £{confirmedBooking.ServicePrice}" : "Quote on arrival")</span>
                         </div>
                     </div>
                     <div class="confirmed-row">
-                        <span>&#128197;</span>
+                        <span><Icon Name="calendar" /></span>
                         <div>
                             <strong>@confirmedBooking.SlotDate.ToString("dddd, d MMMM yyyy")</strong>
                             <span>at @confirmedBooking.SlotTime</span>
                         </div>
                     </div>
                     <div class="confirmed-row">
-                        <span>&#128205;</span>
+                        <span><Icon Name="pin" /></span>
                         <div>
                             <strong>42 Spoke Street, Chainring Quarter</strong>
                             <span>Bring your bike 5 minutes early</span>
@@ -404,6 +404,18 @@
     // Step 1
     private List<ServiceOption> _services = [];
     private ServiceOption? selectedService;
+
+    // ServicePricing.Icon holds emoji entities from the original seed data and was
+    // rendered here as a MarkupString. Deriving the icon from the category instead
+    // keeps the picker consistent with the rest of the site without a data
+    // migration, and drops the MarkupString-over-a-DB-value injection risk.
+    private static string CategoryIcon(string category) => category switch
+    {
+        "Servicing Packages" => "wrench",
+        "Specialist"         => "bolt",
+        "Components"         => "link",
+        _                    => "wrench"
+    };
 
     // Step 2
     private DateTime calendarMonth = DateTime.Today;
@@ -500,6 +512,12 @@
         { validationError = "Please enter your name."; return; }
         if (string.IsNullOrWhiteSpace(customerEmail) || !customerEmail.Contains('@'))
         { validationError = "Please enter a valid email address."; return; }
+        // The shop rings or texts when the bike is ready, so a reachable number is
+        // required. Counting digits rather than checking for non-empty rejects
+        // "call me" and similar, which would otherwise reach the admin panel as a
+        // Call/WhatsApp button that goes nowhere.
+        if (!AuthService.IsValidPhone(customerPhone))
+        { validationError = "Please enter a phone number we can reach you on."; return; }
         step = 4;
     }
 

@@ -42,6 +42,13 @@
 /* ---------- Reset / Base ---------- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Form controls don't inherit font from their ancestors — the UA applies its own
+   `font` shorthand instead. Without this, <button class="btn"> rendered in the
+   browser's default face while <a class="btn"> used --font, so the same class
+   produced two different-looking buttons. The shorthand also resets line-height
+   to `normal`, which is what threw the calendar's arrow glyphs off-centre. */
+button, input, select, textarea { font: inherit; }
+
 html { scroll-behavior: smooth; }
 
 body {
@@ -88,13 +95,31 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     font-weight: 600;
     cursor: pointer;
     border: 2px solid transparent;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease,
+                box-shadow 0.2s ease, transform 0.2s ease;
     white-space: nowrap;
     text-decoration: none;
 }
 
 .btn-lg { padding: 0.875rem 2rem; font-size: 1rem; }
 .btn-full { width: 100%; }
+
+/* The booking wizard disables Continue/Confirm until each step is valid. Without
+   this the button stayed fully saturated and still lifted on hover, so there was
+   nothing to tell you why the click did nothing. */
+.btn:disabled,
+.btn[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    pointer-events: none;
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--white);
+    outline-offset: 2px;
+}
 
 .btn-primary {
     background: var(--green);
@@ -260,18 +285,30 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     pointer-events: none;
 }
 
+/* A faint circle texture over the hero photo. The circles are drawn as strokes,
+   so the opacity has to be stroke-opacity — fill-opacity alone leaves the rings
+   at full white and tiles a hard lattice across the whole hero, hiding the photo
+   behind it. */
 .hero-overlay {
     position: absolute;
     inset: 0;
-    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.02'%3E%3Ccircle cx='30' cy='30' r='28' stroke='%23ffffff' stroke-width='1'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.02'%3E%3Ccircle cx='30' cy='30' r='28' stroke='%23ffffff' stroke-width='1' stroke-opacity='0.05'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
     pointer-events: none;
 }
 
+/* This element is both .container and .hero-content. Capping it at 680px let
+   .container's `margin: 0 auto` centre the whole text block, which pushed the
+   buttons into the middle of the hero where the scrim is thinnest — so they read
+   as washed out. Keep the container's own width so the text lines up with the
+   gutter every other section uses, and cap the children instead. */
 .hero-content {
     position: relative;
     padding: 4rem 1.25rem;
-    max-width: 680px;
 }
+
+.hero-eyebrow,
+.hero-title,
+.hero-actions { max-width: 680px; }
 
 .hero-eyebrow {
     color: var(--green);
@@ -338,9 +375,23 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     color: var(--white);
 }
 
+/* ---------- Icons ---------- */
+/* <Icon /> renders a 1em square, so the icon takes its size from whatever
+   font-size the surrounding rule already set and its colour from currentColor. */
+.icon {
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    vertical-align: -0.125em;
+    flex-shrink: 0;
+}
+
 .trust-icon {
     font-size: 1.75rem;
     flex-shrink: 0;
+    color: var(--green);
+    display: flex;
+    align-items: center;
 }
 
 .trust-item strong {
@@ -435,6 +486,8 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 .service-icon {
     font-size: 2rem;
     margin-bottom: 0.75rem;
+    color: var(--green);
+    line-height: 1;
 }
 
 .service-card h3 { margin-bottom: 0.5rem; }
@@ -507,7 +560,13 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     padding: 1.75rem;
 }
 
-.stars { font-size: 1rem; margin-bottom: 0.75rem; }
+.stars {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+    color: #F5B301;
+    display: flex;
+    gap: 0.15rem;
+}
 
 .testimonial-card p {
     color: rgba(255,255,255,0.65);
@@ -1029,18 +1088,23 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 }
 
 /* The hero title is white and the photo behind it is a bright overcast street,
-   so it needs a scrim to stay readable. Heavier on the left, where the text sits. */
+   so it needs a scrim to stay readable. Heavier on the left, where the text sits.
+   These two gradients multiply where they overlap, so keep them light: at 0.92
+   and 0.80 the bottom-left corner composited to ~98% black and erased the photo
+   entirely. The values below still clear AA for white text over the photo. */
 .hero-scrim {
     position: absolute;
     inset: 0;
     z-index: 1;
     background:
-        linear-gradient(to right, rgba(10,10,10,0.92) 0%, rgba(10,10,10,0.72) 50%, rgba(10,10,10,0.40) 100%),
-        linear-gradient(to top, rgba(10,10,10,0.80) 0%, transparent 50%);
+        linear-gradient(to right, rgba(10,10,10,0.78) 0%, rgba(10,10,10,0.45) 55%, rgba(10,10,10,0.15) 100%),
+        linear-gradient(to top, rgba(10,10,10,0.55) 0%, transparent 40%);
     pointer-events: none;
 }
 
-.hero::before { z-index: 2; }
+/* The green wash sits under the scrim rather than over it — stacked on top it
+   tinted the photo and the buttons along with everything else. */
+.hero::before { z-index: 1; }
 .hero-overlay { z-index: 2; }
 .hero-content { z-index: 3; }
 
@@ -1074,10 +1138,110 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     height: auto;
 }
 
-.gallery-item figcaption {
-    padding: 0.9rem 1.1rem;
-    color: rgba(255,255,255,0.6);
-    font-size: 0.85rem;
+/* Click-to-enlarge, scoped to .gallery-page so the Home teaser — which shares
+   .gallery-grid / .gallery-item but isn't clickable — is left alone. */
+.gallery-page .gallery-item__trigger {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: zoom-in;
+}
+
+.gallery-page .gallery-item__trigger:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 3px;
+}
+
+/* ---------- Gallery lightbox ---------- */
+.lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: rgba(10,10,10,0.94);
+    backdrop-filter: blur(4px);
+    cursor: zoom-out;
+}
+
+.lightbox:focus { outline: none; }
+
+.lightbox__figure {
+    max-width: 92vw;
+    max-height: 88vh;
+    cursor: default;
+}
+
+.lightbox__figure img {
+    max-width: 92vw;
+    max-height: 88vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+}
+
+.lightbox__nav,
+.lightbox__close {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.08);
+    color: var(--white);
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.lightbox__nav:hover,
+.lightbox__close:hover {
+    background: var(--green);
+    border-color: var(--green);
+}
+
+.lightbox__nav:focus-visible,
+.lightbox__close:focus-visible {
+    outline: 2px solid var(--white);
+    outline-offset: 2px;
+}
+
+.lightbox__close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.lightbox__count {
+    position: absolute;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,0.55);
+    font-size: var(--fs-sm);
+}
+
+/* On narrow screens the arrows would squeeze the photo, so they move to the
+   bottom corners and the photo gets the full width. */
+@media (max-width: 639px) {
+    .lightbox__nav {
+        position: absolute;
+        bottom: 1rem;
+    }
+    .lightbox__nav--prev { left: 1rem; }
+    .lightbox__nav--next { right: 1rem; }
+    .lightbox__figure,
+    .lightbox__figure img { max-width: 96vw; max-height: 74vh; }
 }
 
 /* About: photo sits above the stat cards in the narrower right-hand column. */

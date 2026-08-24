@@ -91,7 +91,7 @@
                 @if (TodayBookings.Any() && activeFilter == "All")
                 {
                     <div class="today-schedule">
-                        <h3>&#128337; Today's Schedule</h3>
+                        <h3><Icon Name="clock" /> Today's Schedule</h3>
                         <div class="today-slots">
                             @foreach (var b in TodayBookings.OrderBy(x => x.SlotTime))
                             {
@@ -125,7 +125,7 @@
                                     <span class="ref-badge">@b.Reference</span>
                                     <div class="admin-card__header-right">
                                         <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
-                                        <span class="admin-card__chevron @(isOpen ? "open" : "")">&#8250;</span>
+                                        <span class="admin-card__chevron @(isOpen ? "open" : "")"><Icon Name="chevron-right" /></span>
                                     </div>
                                 </div>
                                 <div class="admin-card__name">@b.CustomerName</div>
@@ -314,7 +314,7 @@
             {
                 <div class="day-cal">
                     <div class="day-cal__nav">
-                        <button class="cal-nav__btn" @onclick="() => ChangeCalDay(-1)">&#8592;</button>
+                        <button class="cal-nav__btn" @onclick="() => ChangeCalDay(-1)" aria-label="Previous day"><Icon Name="chevron-left" /></button>
                         <div class="day-cal__title">
                             <strong>@calDay.ToString("dddd, d MMMM yyyy")</strong>
                             @if (calDay.Date == DateTime.Today)
@@ -322,7 +322,7 @@
                                 <span class="status-badge status-badge--confirmed">Today</span>
                             }
                         </div>
-                        <button class="cal-nav__btn" @onclick="() => ChangeCalDay(1)">&#8594;</button>
+                        <button class="cal-nav__btn" @onclick="() => ChangeCalDay(1)" aria-label="Next day"><Icon Name="chevron-right" /></button>
                         <input type="date" class="form-control day-cal__picker"
                                value="@calDay.ToString("yyyy-MM-dd")" @onchange="OnCalDatePicked" />
                         @if (calDay.Date != DateTime.Today)
@@ -406,7 +406,7 @@
 
                     @if (_priceSaveMessage != null)
                     {
-                        <div class="admin-success">&#10003; @_priceSaveMessage</div>
+                        <div class="admin-success"><Icon Name="check" /> @_priceSaveMessage</div>
                     }
 
                     @if (_priceAdjustments.Any())
@@ -677,7 +677,7 @@
     // True when a booking has any actionable controls for the current user —
     // used to decide whether to render the action area / Actions column at all.
     private bool RowHasActions(Booking b) =>
-        CanManage || (CanSeeCustomerDetails && !string.IsNullOrWhiteSpace(b.CustomerPhone));
+        CanManage || (CanSeeCustomerDetails && AuthService.IsValidPhone(b.CustomerPhone));
 
     // One shared action set, reused by the Bookings cards, the Bookings table and
     // the Calendar so every view offers the exact same lifecycle + contact + delete
@@ -698,7 +698,10 @@
             <button class="action-btn action-btn--complete"
                     @onclick="() => UpdateStatus(booking.Id, BookingStatus.Completed)">Complete</button>
         }
-        @if (CanSeeCustomerDetails && !string.IsNullOrWhiteSpace(booking.CustomerPhone))
+        @* IsValidPhone rather than a blank check: older bookings predate the phone
+           being required, and a value with no dialable digits produced a WhatsApp
+           link to wa.me/ with no number and an empty tel: link. *@
+        @if (CanSeeCustomerDetails && AuthService.IsValidPhone(booking.CustomerPhone))
         {
             <a class="action-btn action-btn--whatsapp" href="@WhatsAppHref(booking)" target="_blank" rel="noopener">WhatsApp</a>
             <a class="action-btn action-btn--call" href="@TelHref(booking.CustomerPhone)">Call</a>
