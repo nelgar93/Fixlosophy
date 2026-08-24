@@ -104,7 +104,7 @@
         {
             <div class="booking-card">
                 <h2 class="booking-card__title">Pick a Date &amp; Time</h2>
-                <p class="booking-card__subtitle">We're open Monday – Saturday, 9am – 5pm. Closed Sundays.</p>
+                <p class="booking-card__subtitle">We're open Mon–Fri 9am – 7pm, Sat 9am – 6pm and Sun 11am – 5pm.</p>
 
                 <div class="schedule-grid">
                     <!-- Calendar -->
@@ -131,8 +131,7 @@
                                 var day = d;
                                 var date = new DateTime(calendarMonth.Year, calendarMonth.Month, day);
                                 var isPast = date.Date < DateTime.Today;
-                                var isSun = date.DayOfWeek == DayOfWeek.Sunday;
-                                var avail = !isPast && !isSun && GetDateAvailable(date);
+                                var avail = !isPast && GetDateAvailable(date);
                                 var isSelected = selectedDate.HasValue && selectedDate.Value.Date == date.Date;
                                 var isToday = date.Date == DateTime.Today;
 
@@ -218,7 +217,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>Phone Number</label>
-                            <input class="form-control" type="tel" @bind="customerPhone" placeholder="+1 555 000 000" />
+                            <input class="form-control" type="tel" @bind="customerPhone" placeholder="07700 900000" />
                         </div>
                         <div class="form-group">
                             <label>Bike Make &amp; Model</label>

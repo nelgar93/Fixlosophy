@@ -1,4 +1,5 @@
 @page "/about"
+@inject SiteImages Images
 
 <PageTitle>About – Fixlosophy Bike Repair</PageTitle>
 
@@ -19,22 +20,30 @@
                 <p>Today, Fixlosophy is a full-service bike repair shop built on three simple principles: <strong>honesty, expertise, and speed.</strong> We tell you exactly what's wrong, what it'll cost, and we get it done fast — no waffle, no surprises.</p>
                 <p>We've worked on everything from beat-up commuters to high-end race machines, and we treat every bike with the same level of care. Because every ride matters.</p>
             </div>
-            <div class="about-stats">
-                <div class="stat-card">
-                    <div class="stat-number">9+</div>
-                    <div class="stat-label">Years in business</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">12k+</div>
-                    <div class="stat-label">Bikes repaired</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">4.9&#11088;</div>
-                    <div class="stat-label">Average rating</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">6</div>
-                    <div class="stat-label">Certified mechanics</div>
+            <div class="about-aside">
+                <figure class="about-photo">
+                    <img src="@Images.Url("shop/street-view.jpg")" alt="The Fixlosophy shop seen from the street, bikes parked outside"
+                         width="900" height="1200" loading="lazy" decoding="async"
+                         onerror="this.closest('figure').style.display='none'" />
+                    <figcaption>The shop, on a rare sunny afternoon.</figcaption>
+                </figure>
+                <div class="about-stats">
+                    <div class="stat-card">
+                        <div class="stat-number">9+</div>
+                        <div class="stat-label">Years in business</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">12k+</div>
+                        <div class="stat-label">Bikes repaired</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">4.9&#11088;</div>
+                        <div class="stat-label">Average rating</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">6</div>
+                        <div class="stat-label">Certified mechanics</div>
+                    </div>
                 </div>
             </div>
         </div>

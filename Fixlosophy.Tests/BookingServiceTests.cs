@@ -11,9 +11,10 @@ public class BookingServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    // The service filters out Sundays, past dates, and (for today only) slots whose
-    // time has already passed. Anchoring on a future weekday keeps these tests from
-    // depending on the wall clock at the moment they run.
+    // The service filters out past dates and (for today only) slots whose time has
+    // already passed. Sundays are open but run a shorter 11–17 slot list, so
+    // anchoring on a future non-Sunday keeps these tests off both the wall clock
+    // and the Sunday branch.
     private static DateTime FutureWorkday(int daysAhead = 7)
     {
         var date = DateTime.Today.AddDays(daysAhead);
@@ -62,10 +63,15 @@ public class BookingServiceTests
     };
 
     [Fact]
-    public void GetAvailableSlots_ReturnsEmpty_OnSunday()
+    public void GetAvailableSlots_ReturnsShorterSundayList_OnSunday()
     {
         using var db = NewDb();
-        Assert.Empty(new BookingService(db).GetAvailableSlots(NextSunday()));
+        var slots = new BookingService(db).GetAvailableSlots(NextSunday());
+
+        Assert.Equal(BookingService.SundayTimeSlots, slots);
+        // The 9am and 6pm weekday slots fall outside Sunday's 11–17 trading hours.
+        Assert.DoesNotContain("09:00", slots);
+        Assert.DoesNotContain("18:00", slots);
     }
 
     [Fact]
@@ -207,7 +213,7 @@ public class BookingServiceTests
     }
 
     [Fact]
-    public void GetDateAvailabilityForMonth_MarksSundaysUnavailable()
+    public void GetDateAvailabilityForMonth_MarksSundaysAvailable()
     {
         using var db = NewDb();
         var nextMonth = DateTime.Today.AddMonths(1);
@@ -216,8 +222,24 @@ public class BookingServiceTests
             .GetDateAvailabilityForMonth(nextMonth.Year, nextMonth.Month);
 
         Assert.All(availability.Where(kv => kv.Key.DayOfWeek == DayOfWeek.Sunday),
-                   kv => Assert.False(kv.Value));
-        Assert.Contains(availability, kv => kv.Value);
+                   kv => Assert.True(kv.Value));
+    }
+
+    [Fact]
+    public void GetDateAvailabilityForMonth_MarksSundayUnavailable_WhenItsShorterSlotListIsFull()
+    {
+        using var db = NewDb();
+        var target = NextSunday().AddDays(7);
+
+        var filler = 0;
+        foreach (var slot in BookingService.SundayTimeSlots)
+            for (var i = 0; i < BookingService.MaxPerSlot; i++)
+                Seed(db, target, slot, email: $"filler{filler++}@example.com");
+
+        var availability = new BookingService(db)
+            .GetDateAvailabilityForMonth(target.Year, target.Month);
+
+        Assert.False(availability[target]);
     }
 
     [Fact]

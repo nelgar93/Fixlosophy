@@ -342,12 +342,12 @@
                         }
                         @if (calDay.DayOfWeek == DayOfWeek.Sunday)
                         {
-                            <span class="day-cal__closed">Closed on Sundays</span>
+                            <span class="day-cal__closed">Sunday hours — 11am to 5pm</span>
                         }
                     </div>
 
                     <div class="day-cal__slots">
-                        @foreach (var slot in BookingService.TimeSlots)
+                        @foreach (var slot in BookingService.SlotsFor(calDay))
                         {
                             var slotBookings = _calDayBookings.Where(b => b.SlotTime == slot).ToList();
                             <div class="day-cal-slot @(slotBookings.Count == 0 ? "day-cal-slot--free" : "")">

@@ -1,6 +1,7 @@
 @page "/contact"
 @rendermode InteractiveServer
 @inject ActionRateLimiter RateLimiter
+@inject SiteImages Images
 
 <PageTitle>Contact – Fixlosophy Bike Repair</PageTitle>
 
@@ -48,7 +49,7 @@
                             </div>
                             <div class="form-group">
                                 <label for="phone">Phone (optional)</label>
-                                <InputText id="phone" class="form-control" @bind-Value="model.Phone" placeholder="+1 555 000 000" />
+                                <InputText id="phone" class="form-control" @bind-Value="model.Phone" placeholder="07700 900000" />
                             </div>
                         </div>
 
@@ -98,6 +99,13 @@
 
             <!-- INFO SIDEBAR -->
             <div class="contact-info">
+                <figure class="contact-photo">
+                    <img src="@Images.Url("shop/opening-hours.jpg")" alt="Hand-painted sign in the shop window showing the opening times"
+                         width="900" height="1200" loading="lazy" decoding="async"
+                         onerror="this.closest('figure').style.display='none'" />
+                    <figcaption>Our opening times, straight off the window.</figcaption>
+                </figure>
+
                 <div class="info-card">
                     <h3>Visit the Shop</h3>
                     <div class="info-item">
@@ -111,14 +119,14 @@
                         <span class="info-icon">&#128337;</span>
                         <div>
                             <strong>Opening Hours</strong>
-                            <p>Monday – Friday: 9am – 6pm<br />Saturday: 9am – 5pm<br />Sunday: Closed</p>
+                            <p>Monday – Friday: 9am – 7pm<br />Saturday: 9am – 6pm<br />Sunday: 11am – 5pm</p>
                         </div>
                     </div>
                     <div class="info-item">
                         <span class="info-icon">&#128222;</span>
                         <div>
                             <strong>Phone</strong>
-                            <p><a href="tel:+15551234567">+1 (555) 123-4567</a></p>
+                            <p><a href="tel:+447840041100">07840 041100</a></p>
                         </div>
                     </div>
                     <div class="info-item">
@@ -126,6 +134,13 @@
                         <div>
                             <strong>Email</strong>
                             <p><a href="mailto:hello@fixlosophy.com">hello&#64;fixlosophy.com</a></p>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">&#128247;</span>
+                        <div>
+                            <strong>Instagram</strong>
+                            <p><a href="https://instagram.com/fixlosophy" target="_blank" rel="noopener">&#64;fixlosophy</a></p>
                         </div>
                     </div>
                 </div>

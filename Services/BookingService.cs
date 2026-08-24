@@ -11,6 +11,15 @@ public class BookingService(AppDbContext db)
     public static readonly string[] TimeSlots =
         ["09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
 
+    // The shop trades 11–17 on Sundays rather than 9–19, so Sunday gets a shorter
+    // list. Both follow the same rule as the weekday one: the last slot starts an
+    // hour before closing, and 13:00 is lunch.
+    public static readonly string[] SundayTimeSlots =
+        ["11:00", "12:00", "14:00", "15:00", "16:00"];
+
+    public static string[] SlotsFor(DateTime date) =>
+        date.DayOfWeek == DayOfWeek.Sunday ? SundayTimeSlots : TimeSlots;
+
     public List<ServiceOption> GetServices() =>
         db.ServicePricings
           .OrderBy(s => s.SortOrder)
@@ -40,7 +49,7 @@ public class BookingService(AppDbContext db)
 
     public List<string> GetAvailableSlots(DateTime date)
     {
-        if (date.DayOfWeek == DayOfWeek.Sunday || date.Date < DateTime.Today)
+        if (date.Date < DateTime.Today)
             return [];
 
         var start = date.Date;
@@ -52,7 +61,7 @@ public class BookingService(AppDbContext db)
             .Select(g => new { Slot = g.Key, Count = g.Count() })
             .ToDictionary(x => x.Slot, x => x.Count);
 
-        return TimeSlots.Where(slot =>
+        return SlotsFor(date).Where(slot =>
         {
             if (date.Date == DateTime.Today && TimeOnly.TryParse(slot, out var t) && t <= TimeOnly.FromDateTime(DateTime.Now))
                 return false;
@@ -62,7 +71,7 @@ public class BookingService(AppDbContext db)
 
     public bool IsDateAvailable(DateTime date)
     {
-        if (date.DayOfWeek == DayOfWeek.Sunday || date.Date < DateTime.Today) return false;
+        if (date.Date < DateTime.Today) return false;
         return GetAvailableSlots(date).Count > 0;
     }
 
@@ -168,10 +177,10 @@ public class BookingService(AppDbContext db)
         var result = new Dictionary<DateTime, bool>();
         for (var d = start; d < end; d = d.AddDays(1))
         {
-            if (d.DayOfWeek == DayOfWeek.Sunday || d.Date < today) { result[d] = false; continue; }
+            if (d.Date < today) { result[d] = false; continue; }
 
             var full = fullSlotsByDate.TryGetValue(d, out var set) ? set : [];
-            result[d] = TimeSlots.Any(slot =>
+            result[d] = SlotsFor(d).Any(slot =>
             {
                 if (d == today && TimeOnly.TryParse(slot, out var t) && t <= TimeOnly.FromDateTime(now))
                     return false;

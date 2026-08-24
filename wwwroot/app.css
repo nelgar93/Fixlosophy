@@ -999,6 +999,107 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .valid.modified:not([type=checkbox]) { border-color: var(--success) !important; }
 .invalid { border-color: #dc2626 !important; }
 
+/* ---------- Shop Photography ---------- */
+/* Photos are served from the public Supabase bucket via SiteImages, not wwwroot.
+   Each one carries an onerror that hides itself, so if the bucket is unreachable
+   the dark theme underneath shows through instead of a broken-image icon.
+   Note: do NOT add mix-blend-mode here — that rule exists only to punch out the
+   logo's solid black background and would wash a photograph out. */
+
+.hero-photo {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* The hero title is white and the photo behind it is a bright overcast street,
+   so it needs a scrim to stay readable. Heavier on the left, where the text sits. */
+.hero-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background:
+        linear-gradient(to right, rgba(10,10,10,0.92) 0%, rgba(10,10,10,0.72) 50%, rgba(10,10,10,0.40) 100%),
+        linear-gradient(to top, rgba(10,10,10,0.80) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+.hero::before { z-index: 2; }
+.hero-overlay { z-index: 2; }
+.hero-content { z-index: 3; }
+
+/* Columns rather than a grid: three of these photos are portrait and five are
+   landscape, and forcing them all to one ratio would crop the opening-times sign
+   past legibility. Columns let every photo keep its own shape with no ragged
+   rows. break-inside stops a card splitting across a column. */
+.gallery-grid {
+    column-count: 1;
+    column-gap: 1.25rem;
+}
+
+.gallery-item {
+    margin: 0 0 1.25rem;
+    break-inside: avoid;
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
+}
+
+.gallery-item:hover {
+    transform: translateY(-3px);
+    border-color: var(--green);
+    box-shadow: var(--shadow);
+}
+
+.gallery-item img {
+    width: 100%;
+    height: auto;
+}
+
+.gallery-item figcaption {
+    padding: 0.9rem 1.1rem;
+    color: rgba(255,255,255,0.6);
+    font-size: 0.85rem;
+}
+
+/* About: photo sits above the stat cards in the narrower right-hand column. */
+.about-aside {
+    display: grid;
+    gap: 1.5rem;
+    align-content: start;
+}
+
+/* Both are portrait originals, and the opening-times photo is only useful if the
+   sign stays readable — so never crop them. Capping the width keeps them from
+   running absurdly tall while their column is still full-width below 1024px. */
+.about-photo,
+.contact-photo {
+    margin: 0;
+    max-width: 420px;
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.about-photo img,
+.contact-photo img {
+    width: 100%;
+    height: auto;
+}
+
+.about-photo figcaption,
+.contact-photo figcaption {
+    padding: 0.8rem 1rem;
+    color: rgba(255,255,255,0.55);
+    font-size: 0.82rem;
+}
+
 /* ============================================================
    RESPONSIVE BREAKPOINTS
    ============================================================ */
@@ -1051,6 +1152,9 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     .trust-bar-grid {
         grid-template-columns: repeat(4, 1fr);
     }
+    .gallery-grid {
+        column-count: 2;
+    }
 }
 
 /* ---- LG: 1024px ---- */
@@ -1074,6 +1178,9 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     .contact-grid {
         grid-template-columns: 3fr 2fr;
         align-items: start;
+    }
+    .gallery-grid {
+        column-count: 3;
     }
     .section { padding: 5rem 0; }
 }

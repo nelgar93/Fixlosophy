@@ -1,10 +1,15 @@
 @page "/"
 @inject BookingService BookingService
+@inject SiteImages Images
 
 <PageTitle>Fixlosophy – Bike Repair Shop</PageTitle>
 
 <!-- HERO -->
 <section class="hero">
+    <img class="hero-photo" src="@Images.Url("shop/hero-bikes-outside.jpg")" alt=""
+         width="1920" height="1440" fetchpriority="high" decoding="async"
+         onerror="this.style.display='none'" />
+    <div class="hero-scrim"></div>
     <div class="hero-overlay"></div>
     <div class="container hero-content">
         <p class="hero-eyebrow">Expert Bike Repairs &amp; Servicing</p>
@@ -140,6 +145,37 @@
     </div>
 </section>
 
+<!-- SHOP GALLERY TEASER -->
+<section class="section shop-preview">
+    <div class="container">
+        <div class="section-header">
+            <p class="section-eyebrow">The Shop</p>
+            <h2>Come and See Us</h2>
+            <p class="section-subtitle">A proper workshop with bikes out front and hand-painted windows — not a warehouse counter.</p>
+        </div>
+        <div class="gallery-grid">
+            <figure class="gallery-item">
+                <img src="@Images.Url("shop/logo-window.jpg")" alt="The Fixlosophy logo painted on the shop window"
+                     width="1200" height="900" loading="lazy" decoding="async"
+                     onerror="this.closest('figure').style.display='none'" />
+            </figure>
+            <figure class="gallery-item">
+                <img src="@Images.Url("shop/new-bikes.jpg")" alt="A row of new bikes lined up outside the shop"
+                     width="1200" height="900" loading="lazy" decoding="async"
+                     onerror="this.closest('figure').style.display='none'" />
+            </figure>
+            <figure class="gallery-item">
+                <img src="@Images.Url("shop/window-art.jpg")" alt="Bicycles hand-painted across the shop window"
+                     width="1200" height="900" loading="lazy" decoding="async"
+                     onerror="this.closest('figure').style.display='none'" />
+            </figure>
+        </div>
+        <div class="section-cta">
+            <a href="/gallery" class="btn btn-outline">See the Shop</a>
+        </div>
+    </div>
+</section>
+
 <!-- TESTIMONIALS -->
 <section class="section testimonials">
     <div class="container">
@@ -192,7 +228,7 @@
         <p>Book a repair online or swing by the shop — no appointment needed for quick fixes.</p>
         <div class="cta-actions">
             <a href="/book" class="btn btn-primary btn-lg">Book a Repair</a>
-            <a href="tel:+15551234567" class="btn btn-ghost btn-lg">&#128222; Call Us Now</a>
+            <a href="tel:+447840041100" class="btn btn-ghost btn-lg">&#128222; Call Us Now</a>
         </div>
     </div>
 </section>

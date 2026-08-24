@@ -31,6 +31,7 @@ builder.Services.AddScoped<BookingService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<InflationService>();
 builder.Services.AddScoped<ActionRateLimiter>();
+builder.Services.AddSingleton<SiteImages>();
 
 // HTTP-level rate limit per client IP: covers page loads and SignalR circuit
 // negotiation. In-circuit actions are throttled separately by ActionRateLimiter.
