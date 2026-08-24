@@ -93,3 +93,9 @@ docker-compose.override.yml
 coverage/
 *.coverage
 *.coveragexml
+
+## =====================
+## Local debug artifacts
+## =====================
+cookies*.txt
+conf_*.html

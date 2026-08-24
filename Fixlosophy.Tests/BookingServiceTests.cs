@@ -1,11 +1,29 @@
 using Fixlosophy.Data;
 using Fixlosophy.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Fixlosophy.Tests;
 
 public class BookingServiceTests
 {
+    // No-op IStorageService — these tests exercise booking logic, not Supabase
+    // Storage, and a real StorageService needs HttpClient/config neither of which
+    // exist in this in-memory-DB test setup.
+    private sealed class FakeStorageService : IStorageService
+    {
+        public string? ValidatePhoto(string contentType, long size) => null;
+        public Task<(string? path, string? error)> UploadCustomerPhotoAsync(string bookingId, string contentType, byte[] content) =>
+            Task.FromResult<(string?, string?)>(("fake/path.jpg", null));
+        public Task<string?> GetSignedPhotoUrlAsync(string storagePath, TimeSpan expiry) =>
+            Task.FromResult<string?>("https://example.com/signed");
+        public Task<bool> DeleteAsync(string storagePath) => Task.FromResult(true);
+        public string GetPublicWebsiteImageUrl(string fileName) => $"https://example.com/{fileName}";
+    }
+
+    private static BookingService NewService(AppDbContext db) =>
+        new(db, new FakeStorageService(), NullLogger<BookingService>.Instance);
+
     private static AppDbContext NewDb() =>
         new(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -66,7 +84,7 @@ public class BookingServiceTests
     public void GetAvailableSlots_ReturnsShorterSundayList_OnSunday()
     {
         using var db = NewDb();
-        var slots = new BookingService(db).GetAvailableSlots(NextSunday());
+        var slots = NewService(db).GetAvailableSlots(NextSunday());
 
         Assert.Equal(BookingService.SundayTimeSlots, slots);
         // The 9am and 6pm weekday slots fall outside Sunday's 11–17 trading hours.
@@ -78,14 +96,14 @@ public class BookingServiceTests
     public void GetAvailableSlots_ReturnsEmpty_ForPastDate()
     {
         using var db = NewDb();
-        Assert.Empty(new BookingService(db).GetAvailableSlots(DateTime.Today.AddDays(-1)));
+        Assert.Empty(NewService(db).GetAvailableSlots(DateTime.Today.AddDays(-1)));
     }
 
     [Fact]
     public void GetAvailableSlots_ReturnsEverySlot_WhenNothingIsBooked()
     {
         using var db = NewDb();
-        var slots = new BookingService(db).GetAvailableSlots(FutureWorkday());
+        var slots = NewService(db).GetAvailableSlots(FutureWorkday());
         Assert.Equal(BookingService.TimeSlots, slots);
     }
 
@@ -97,7 +115,7 @@ public class BookingServiceTests
         for (var i = 0; i < BookingService.MaxPerSlot; i++)
             Seed(db, date, "09:00", email: $"filler{i}@example.com");
 
-        var slots = new BookingService(db).GetAvailableSlots(date);
+        var slots = NewService(db).GetAvailableSlots(date);
 
         Assert.DoesNotContain("09:00", slots);
         Assert.Contains("10:00", slots);
@@ -110,7 +128,7 @@ public class BookingServiceTests
         var date = FutureWorkday();
         Seed(db, date, "09:00");
 
-        Assert.Contains("09:00", new BookingService(db).GetAvailableSlots(date));
+        Assert.Contains("09:00", NewService(db).GetAvailableSlots(date));
     }
 
     [Fact]
@@ -121,7 +139,7 @@ public class BookingServiceTests
         for (var i = 0; i < BookingService.MaxPerSlot; i++)
             Seed(db, date, "09:00", email: $"filler{i}@example.com", status: BookingStatus.Cancelled);
 
-        Assert.Contains("09:00", new BookingService(db).GetAvailableSlots(date));
+        Assert.Contains("09:00", NewService(db).GetAvailableSlots(date));
     }
 
     [Fact]
@@ -130,7 +148,7 @@ public class BookingServiceTests
         using var db = NewDb();
         var date = FutureWorkday();
 
-        var (created, error) = new BookingService(db)
+        var (created, error) = NewService(db)
             .CreateBooking(NewBooking(date, "09:00", "jane@example.com"));
 
         Assert.Null(error);
@@ -145,7 +163,7 @@ public class BookingServiceTests
     {
         using var db = NewDb();
 
-        var (created, error) = new BookingService(db)
+        var (created, error) = NewService(db)
             .CreateBooking(NewBooking(FutureWorkday(), "09:00", "  jane@example.com  "));
 
         Assert.Null(error);
@@ -160,7 +178,7 @@ public class BookingServiceTests
         for (var i = 0; i < BookingService.MaxPerSlot; i++)
             Seed(db, date, "09:00", email: $"filler{i}@example.com");
 
-        var (created, error) = new BookingService(db)
+        var (created, error) = NewService(db)
             .CreateBooking(NewBooking(date, "09:00", "jane@example.com"));
 
         Assert.Null(created);
@@ -174,7 +192,7 @@ public class BookingServiceTests
         var date = FutureWorkday();
         Seed(db, date, "09:00", email: "Jane@Example.com");
 
-        var (created, error) = new BookingService(db)
+        var (created, error) = NewService(db)
             .CreateBooking(NewBooking(date, "09:00", "jane@example.com"));
 
         Assert.Null(created);
@@ -190,7 +208,7 @@ public class BookingServiceTests
         for (var i = 0; i < BookingService.MaxActiveBookingsPerEmail; i++)
             Seed(db, FutureWorkday(i + 1), "09:00", email: "jane@example.com");
 
-        var (created, error) = new BookingService(db).CreateBooking(
+        var (created, error) = NewService(db).CreateBooking(
             NewBooking(FutureWorkday(BookingService.MaxActiveBookingsPerEmail + 2), "11:00", "jane@example.com"));
 
         Assert.Null(created);
@@ -205,7 +223,7 @@ public class BookingServiceTests
             Seed(db, FutureWorkday(i + 1), "09:00", email: "jane@example.com",
                  status: BookingStatus.Cancelled);
 
-        var (created, error) = new BookingService(db).CreateBooking(
+        var (created, error) = NewService(db).CreateBooking(
             NewBooking(FutureWorkday(BookingService.MaxActiveBookingsPerEmail + 2), "11:00", "jane@example.com"));
 
         Assert.Null(error);
@@ -218,7 +236,7 @@ public class BookingServiceTests
         using var db = NewDb();
         var nextMonth = DateTime.Today.AddMonths(1);
 
-        var availability = new BookingService(db)
+        var availability = NewService(db)
             .GetDateAvailabilityForMonth(nextMonth.Year, nextMonth.Month);
 
         Assert.All(availability.Where(kv => kv.Key.DayOfWeek == DayOfWeek.Sunday),
@@ -236,7 +254,7 @@ public class BookingServiceTests
             for (var i = 0; i < BookingService.MaxPerSlot; i++)
                 Seed(db, target, slot, email: $"filler{filler++}@example.com");
 
-        var availability = new BookingService(db)
+        var availability = NewService(db)
             .GetDateAvailabilityForMonth(target.Year, target.Month);
 
         Assert.False(availability[target]);
@@ -255,7 +273,7 @@ public class BookingServiceTests
             for (var i = 0; i < BookingService.MaxPerSlot; i++)
                 Seed(db, target, slot, email: $"filler{filler++}@example.com");
 
-        var availability = new BookingService(db)
+        var availability = NewService(db)
             .GetDateAvailabilityForMonth(target.Year, target.Month);
 
         Assert.False(availability[target]);
@@ -267,7 +285,7 @@ public class BookingServiceTests
         using var db = NewDb();
         var booking = Seed(db, FutureWorkday(), "09:00", status: BookingStatus.Pending);
 
-        new BookingService(db).UpdateStatus(booking.Id, BookingStatus.Confirmed);
+        NewService(db).UpdateStatus(booking.Id, BookingStatus.Confirmed);
 
         Assert.Equal(BookingStatus.Confirmed, db.Bookings.Single().Status);
     }
@@ -278,22 +296,22 @@ public class BookingServiceTests
         using var db = NewDb();
         Seed(db, FutureWorkday(), "09:00", status: BookingStatus.Pending);
 
-        new BookingService(db).UpdateStatus("does-not-exist", BookingStatus.Cancelled);
+        NewService(db).UpdateStatus("does-not-exist", BookingStatus.Cancelled);
 
         Assert.Equal(BookingStatus.Pending, db.Bookings.Single().Status);
     }
 
     [Fact]
-    public void DeleteBooking_RemovesBooking_AndIsNoOpForUnknownId()
+    public async Task DeleteBooking_RemovesBooking_AndIsNoOpForUnknownId()
     {
         using var db = NewDb();
         var booking = Seed(db, FutureWorkday(), "09:00");
-        var service = new BookingService(db);
+        var service = NewService(db);
 
-        service.DeleteBooking("does-not-exist");
+        Assert.False(await service.DeleteBookingAsync("does-not-exist"));
         Assert.Single(db.Bookings);
 
-        service.DeleteBooking(booking.Id);
+        Assert.True(await service.DeleteBookingAsync(booking.Id));
         Assert.Empty(db.Bookings);
     }
 
@@ -302,7 +320,7 @@ public class BookingServiceTests
     {
         using var db = NewDb();
         var booking = Seed(db, FutureWorkday(), "09:00");
-        var service = new BookingService(db);
+        var service = NewService(db);
 
         service.AssignStaff(booking.Id, "staff-1");
         Assert.Equal("staff-1", db.Bookings.Single().AssignedStaffId);
@@ -323,7 +341,7 @@ public class BookingServiceTests
         Seed(db, future, "11:00", email: "c@example.com", status: BookingStatus.Completed);
         Seed(db, today, "12:00", email: "d@example.com", status: BookingStatus.Pending);
 
-        var stats = new BookingService(db).GetStats();
+        var stats = NewService(db).GetStats();
 
         Assert.Equal(4, stats.total);
         Assert.Equal(1, stats.today);
@@ -341,7 +359,7 @@ public class BookingServiceTests
         Seed(db, future, "11:00", email: "c@example.com", status: BookingStatus.Pending, assignedStaffId: "staff-2");
         Seed(db, future, "12:00", email: "d@example.com", status: BookingStatus.Pending);
 
-        var stats = new BookingService(db).GetStatsForStaff("staff-1");
+        var stats = NewService(db).GetStatsForStaff("staff-1");
 
         Assert.Equal(2, stats.total);
         Assert.Equal(1, stats.pending);
@@ -357,7 +375,7 @@ public class BookingServiceTests
         Seed(db, future, "10:00", email: "b@example.com", assignedStaffId: "staff-2");
         Seed(db, future, "11:00", email: "c@example.com");
 
-        var bookings = new BookingService(db).GetBookingsForStaff("staff-1");
+        var bookings = NewService(db).GetBookingsForStaff("staff-1");
 
         Assert.Equal("a@example.com", Assert.Single(bookings).CustomerEmail);
     }
@@ -371,8 +389,64 @@ public class BookingServiceTests
         Seed(db, date, "09:00", email: "early@example.com");
         Seed(db, date.AddDays(1), "10:00", email: "other@example.com");
 
-        var bookings = new BookingService(db).GetBookingsByDate(date);
+        var bookings = NewService(db).GetBookingsByDate(date);
 
         Assert.Equal(["09:00", "15:00"], bookings.Select(b => b.SlotTime));
+    }
+
+    // ── Ported from the dev-branch suite ─────────────────────────────────────
+    // dev's GetAvailableSlots_ReturnsEmpty_OnSunday is deliberately NOT carried
+    // over: it asserted the shop is shut on Sundays, which this branch superseded
+    // with the shorter 11–17 Sunday slot list (see SundayTimeSlots).
+
+    [Fact]
+    public void AssignStaff_ReturnsFalse_WhenBookingDoesNotExist()
+    {
+        using var db = NewDb();
+        Assert.False(NewService(db).AssignStaff("nonexistent-id", "staff-id"));
+    }
+
+    [Fact]
+    public void UpdateServicePrice_ReturnsFalse_WhenPricingDoesNotExist()
+    {
+        using var db = NewDb();
+        Assert.False(NewService(db).UpdateServicePrice("nonexistent-id", 42));
+    }
+
+    [Fact]
+    public void UpdateServicePrice_ReturnsTrue_AndAppliesNewPrice()
+    {
+        using var db = NewDb();
+        var pricing = new ServicePricing { Name = "Basic Service", CurrentPrice = 35 };
+        db.ServicePricings.Add(pricing);
+        db.SaveChanges();
+
+        Assert.True(NewService(db).UpdateServicePrice(pricing.Id, 40));
+        Assert.Equal(40, db.ServicePricings.Find(pricing.Id)!.CurrentPrice);
+    }
+
+    [Fact]
+    public void GetStats_ReturnsZeros_WhenNoBookingsExist()
+    {
+        using var db = NewDb();
+        Assert.Equal((0, 0, 0, 0), NewService(db).GetStats());
+    }
+
+    [Fact]
+    public void GetBookingsForCustomer_OnlyReturnsMatchingCustomerId_ExcludesGuestBookings()
+    {
+        using var db = NewDb();
+        var date = FutureWorkday(3);
+        var mine = Seed(db, date, "09:00", "a@example.com");
+        var someoneElses = Seed(db, date, "10:00", "b@example.com");
+        Seed(db, date, "11:00", "c@example.com"); // guest booking — CustomerId left null
+        mine.CustomerId = "customer-1";
+        someoneElses.CustomerId = "customer-2";
+        db.SaveChanges();
+
+        var results = NewService(db).GetBookingsForCustomer("customer-1");
+
+        Assert.Single(results);
+        Assert.Equal("a@example.com", results[0].CustomerEmail);
     }
 }

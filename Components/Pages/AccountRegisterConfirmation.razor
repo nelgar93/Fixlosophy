@@ -1,0 +1,60 @@
+@page "/account/register-confirmation"
+@attribute [ExcludeFromInteractiveRouting]
+
+<PageTitle>Check Your Email – Fixlosophy</PageTitle>
+
+<div class="admin-login">
+    <div class="admin-login__card">
+        <div class="admin-login__logo">
+            <Logo ImgClass="admin-logo-img" />
+        </div>
+
+        <div class="success-message">
+            <div class="success-icon">&#10003;</div>
+            <h3>Check your inbox</h3>
+            <p>We've sent a verification link to your email address. Click it to activate your account, then sign in. Check your spam folder if it doesn't arrive within a minute or two.</p>
+        </div>
+
+        <p>Didn't get it? Enter your email to resend the link.</p>
+
+        <form method="post" action="/auth/resend-verification">
+            <AntiforgeryToken />
+            <div class="form-group">
+                <label>Email</label>
+                <input class="form-control" type="email" name="email" required
+                       autocomplete="username" placeholder="you@example.com" />
+            </div>
+            <button class="btn btn-outline btn-full" type="submit" id="resend-btn">Resend Verification Email</button>
+        </form>
+
+        <script>
+            (function () {
+                var btn = document.getElementById('resend-btn');
+                if (!btn) return;
+                var seconds = 60; // matches AuthService.ResendCooldownSeconds
+                var label = btn.textContent;
+                function tick() {
+                    if (seconds <= 0) { btn.disabled = false; btn.textContent = label; return; }
+                    btn.disabled = true;
+                    btn.textContent = 'Resend available in ' + seconds + 's';
+                    seconds--;
+                    setTimeout(tick, 1000);
+                }
+                tick();
+            })();
+        </script>
+
+        <p class="auth-alt">
+            <a href="@LoginHref">Back to sign in</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    private string LoginHref =>
+        string.IsNullOrEmpty(ReturnUrl)
+            ? "/account/login"
+            : $"/account/login?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
+}

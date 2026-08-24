@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 // Allow DateTime.Now / DateTime.Today to be stored as Postgres "timestamp without time zone"
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -32,6 +33,8 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<InflationService>();
 builder.Services.AddScoped<ActionRateLimiter>();
 builder.Services.AddSingleton<SiteImages>();
+builder.Services.AddScoped<IStorageService, StorageService>();
+builder.Services.AddScoped<BikeService>();
 
 // HTTP-level rate limit per client IP: covers page loads and SignalR circuit
 // negotiation. In-circuit actions are throttled separately by ActionRateLimiter.
@@ -93,6 +96,37 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
 
+// The configuration sources are set up at the top of this file, so
+// appsettings.Local.json's Smtp:Host (if any) is already visible here. Singleton is
+// safe even for the SMTP implementation: it holds no per-request state and
+// constructs a fresh MailKit SmtpClient inside every send.
+// Falls back to a console-logging sender in Development when no SMTP host is
+// configured, so local dev works end-to-end without a real email account.
+if (builder.Environment.IsDevelopment() && string.IsNullOrEmpty(builder.Configuration["Smtp:Host"]))
+    builder.Services.AddSingleton<IEmailSender, ConsoleEmailSender>();
+else
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+
+// Verification-token expiry is backed by Redis (TTL-based) rather than a Postgres
+// column. Falls back to an in-memory store in Development when no Redis connection
+// string is configured; fails fast everywhere else, since silently falling back
+// there would quietly defeat the point of the migration (tokens wouldn't survive an
+// app restart) with no visible symptom until someone can't verify after a deploy.
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+if (string.IsNullOrEmpty(redisConnectionString))
+{
+    if (!builder.Environment.IsDevelopment())
+        throw new InvalidOperationException(
+            "ConnectionStrings:Redis is not configured. Set it in appsettings.Local.json or environment.");
+    builder.Services.AddSingleton<IVerificationTokenStore, InMemoryVerificationTokenStore>();
+}
+else
+{
+    builder.Services.AddSingleton<IConnectionMultiplexer>(
+        _ => ConnectionMultiplexer.Connect(BuildRedisOptions(redisConnectionString)));
+    builder.Services.AddSingleton<IVerificationTokenStore, RedisVerificationTokenStore>();
+}
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -103,7 +137,7 @@ using (var scope = app.Services.CreateScope())
     EnsureSchema(db, app.Logger);
     SeedServicePricings(db);
     SeedDemoData(db);
-    SeedDefaultAdmin(db, config, app.Logger);
+    SeedDefaultAdmin(db, config, app.Logger, app.Environment.IsDevelopment());
     await ApplyAnnualPriceIncreaseAsync(db, config, inflation);
 }
 
@@ -157,6 +191,10 @@ app.MapPost("/auth/customer-login", async (
     var customer = auth.AuthenticateCustomer(email, password);
     if (customer is null)
         return Results.Redirect($"/account/login?error=1&returnUrl={Uri.EscapeDataString(SafeReturn(returnUrl, "/"))}");
+    if (!customer.EmailConfirmed)
+        return Results.Redirect(
+            $"/account/login?error=unverified&email={Uri.EscapeDataString(customer.Email)}" +
+            $"&returnUrl={Uri.EscapeDataString(SafeReturn(returnUrl, "/"))}");
 
     await http.SignInAsync(
         CookieAuthenticationDefaults.AuthenticationScheme,
@@ -167,21 +205,87 @@ app.MapPost("/auth/customer-login", async (
 }).RequireRateLimiting("auth");
 
 app.MapPost("/auth/customer-register", async (
-    HttpContext http, AuthService auth,
+    HttpContext http, AuthService auth, IEmailSender emailSender, IConfiguration config,
     [FromForm] string fullName, [FromForm] string email,
     [FromForm] string? phone, [FromForm] string password,
-    [FromForm] string? remember, [FromForm] string? returnUrl) =>
+    [FromForm] string? returnUrl) =>
 {
     var (customer, error) = auth.RegisterCustomer(email, fullName, phone ?? "", password);
     if (error is not null || customer is null)
         return Results.Redirect($"/account/register?error={Uri.EscapeDataString(error ?? "Could not create account.")}");
 
-    await http.SignInAsync(
-        CookieAuthenticationDefaults.AuthenticationScheme,
-        AuthClaims.BuildCustomerPrincipal(customer),
-        new AuthenticationProperties { IsPersistent = !string.IsNullOrEmpty(remember) });
+    var token = auth.GenerateEmailVerificationToken(customer);
+    var link  = BuildVerifyEmailLink(http, config, customer.Email, token);
+    await emailSender.SendVerificationEmailAsync(customer.Email, customer.FullName, link);
 
-    return Results.Redirect(SafeReturn(returnUrl, "/"));
+    // No SignInAsync: verification is enforced, so no session is issued until the
+    // customer clicks the link and logs in — otherwise an unverified session could
+    // persist up to 30 days via "remember me", defeating the point of enforcing it.
+    return Results.Redirect($"/account/register-confirmation?returnUrl={Uri.EscapeDataString(SafeReturn(returnUrl, "/"))}");
+}).RequireRateLimiting("auth");
+
+app.MapGet("/auth/verify-email", (AuthService auth, string? email, string? token) =>
+{
+    var ok = !string.IsNullOrEmpty(email) && !string.IsNullOrEmpty(token) && auth.ConfirmEmail(email, token);
+    return Results.Redirect(ok ? "/account/login?verified=true" : "/account/login?error=verify-failed");
+}).RequireRateLimiting("auth");
+
+app.MapPost("/auth/resend-verification", async (
+    HttpContext http, AuthService auth, IEmailSender emailSender, IConfiguration config,
+    [FromForm] string email) =>
+{
+    var customer = auth.GetCustomerByEmail(email);
+    if (customer is not null)
+    {
+        var token = auth.RegenerateEmailVerificationTokenIfNeeded(customer);
+        if (token is not null)
+        {
+            var link = BuildVerifyEmailLink(http, config, customer.Email, token);
+            await emailSender.SendVerificationEmailAsync(customer.Email, customer.FullName, link);
+        }
+    }
+    // Identical redirect regardless of match — anti-enumeration.
+    return Results.Redirect("/account/login?resent=true");
+}).RequireRateLimiting("auth");
+
+app.MapPost("/auth/forgot-password", async (
+    HttpContext http, AuthService auth, IEmailSender emailSender, IConfiguration config,
+    [FromForm] string email) =>
+{
+    var token = auth.RequestCustomerPasswordReset(email);
+    if (token is not null)
+    {
+        var customer = auth.GetCustomerByEmail(email)!;
+        var link = BuildAbsoluteUrl(http, config, $"/reset-password?token={Uri.EscapeDataString(token)}");
+        await emailSender.SendPasswordResetEmailAsync(customer.Email, customer.FullName, link);
+    }
+    // Identical redirect whether or not the email matched an account — anti-enumeration.
+    return Results.Redirect("/account/forgot-password?sent=true");
+}).RequireRateLimiting("auth");
+
+app.MapPost("/auth/staff-forgot-password", async (
+    HttpContext http, AuthService auth, IEmailSender emailSender, IConfiguration config,
+    [FromForm] string email) =>
+{
+    var token = auth.RequestStaffPasswordReset(email);
+    if (token is not null)
+    {
+        var staff = auth.GetStaffByEmail(email)!;
+        var link = BuildAbsoluteUrl(http, config, $"/reset-password?token={Uri.EscapeDataString(token)}");
+        await emailSender.SendPasswordResetEmailAsync(staff.Email, staff.FullName, link);
+    }
+    return Results.Redirect("/admin/forgot-password?sent=true");
+}).RequireRateLimiting("auth");
+
+app.MapPost("/auth/reset-password", (
+    AuthService auth, [FromForm] string token, [FromForm] string password) =>
+{
+    var (ok, isStaff, error) = auth.ResetPasswordByToken(token, password);
+    if (!ok)
+        return Results.Redirect(
+            $"/reset-password?token={Uri.EscapeDataString(token)}&error={Uri.EscapeDataString(error ?? "Reset failed.")}");
+
+    return Results.Redirect(isStaff ? "/admin/login?reset=true" : "/account/login?reset=true");
 }).RequireRateLimiting("auth");
 
 // GET so the Sign Out button inside interactive components is a simple
@@ -197,8 +301,54 @@ app.Run();
 // Only allow same-site relative redirects to avoid open-redirect via returnUrl.
 static string SafeReturn(string? url, string fallback) =>
     !string.IsNullOrEmpty(url) && Uri.IsWellFormedUriString(url, UriKind.Relative)
-        && url.StartsWith('/') && !url.StartsWith("//") && !url.StartsWith("/\\")
+        && url.StartsWith('/') && !url.StartsWith("//", StringComparison.Ordinal)
+        && !url.StartsWith("/\\", StringComparison.Ordinal)
         ? url : fallback;
+
+// Builds an absolute link for emailed verification/reset URLs. Prefers the
+// configured App:BaseUrl (needed behind a reverse proxy that doesn't forward the
+// original scheme), falling back to the current request's scheme/host otherwise.
+static string BuildAbsoluteUrl(HttpContext http, IConfiguration config, string path)
+{
+    var baseUrl = config["App:BaseUrl"];
+    return string.IsNullOrEmpty(baseUrl)
+        ? $"{http.Request.Scheme}://{http.Request.Host}{path}"
+        : $"{baseUrl.TrimEnd('/')}{path}";
+}
+
+// The verification token is keyed by email in the token store (Redis can't
+// efficiently reverse-lookup "which key has this value"), so the link carries both.
+static string BuildVerifyEmailLink(HttpContext http, IConfiguration config, string email, string token) =>
+    BuildAbsoluteUrl(http, config,
+        $"/auth/verify-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}");
+
+// StackExchange.Redis doesn't natively parse redis://rediss:// URI-scheme connection
+// strings (only its own host:port,key=value token format), so this parses the URI by
+// hand. AbortOnConnectFail=false + KeepAlive so a transient blip or Upstash's idle-
+// connection kill self-heal instead of throwing/staying dead.
+static ConfigurationOptions BuildRedisOptions(string connectionString)
+{
+    var uri = new Uri(connectionString);
+    var options = new ConfigurationOptions
+    {
+        EndPoints          = { { uri.Host, uri.Port == -1 ? 6379 : uri.Port } },
+        Ssl                = uri.Scheme.Equals("rediss", StringComparison.OrdinalIgnoreCase),
+        AbortOnConnectFail = false,
+        ConnectRetry       = 3,
+        ConnectTimeout     = 10_000,
+        KeepAlive          = 30,
+    };
+    if (!string.IsNullOrEmpty(uri.UserInfo))
+    {
+        var parts = uri.UserInfo.Split(':', 2);
+        if (parts.Length == 2)
+        {
+            options.User     = Uri.UnescapeDataString(parts[0]);
+            options.Password = Uri.UnescapeDataString(parts[1]);
+        }
+    }
+    return options;
+}
 
 static void EnsureSchema(AppDbContext db, ILogger logger)
 {
@@ -212,8 +362,6 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
             ""CreatedAt""    timestamp   NOT NULL DEFAULT now(),
             CONSTRAINT ""PK_Customers"" PRIMARY KEY (""Id"")
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Customers_Email"" ON ""Customers"" (""Email"");
-
         CREATE TABLE IF NOT EXISTS ""Staff"" (
             ""Id""                     varchar(36) NOT NULL,
             ""FullName""               text        NOT NULL DEFAULT '',
@@ -227,8 +375,24 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
             ""CanViewCustomerDetails"" boolean     NOT NULL DEFAULT false,
             CONSTRAINT ""PK_Staff"" PRIMARY KEY (""Id"")
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Staff_Email"" ON ""Staff"" (""Email"");
 
+        -- Email verification (customers only — staff are admin-provisioned, not
+        -- self-registered) + forgot-password (both). DEFAULT true on EmailConfirmed
+        -- grandfathers every pre-existing customer row; new rows always specify
+        -- false explicitly via the Customer model, so the column default never
+        -- applies to them.
+        ALTER TABLE ""Customers"" ADD COLUMN IF NOT EXISTS ""EmailConfirmed""              boolean   NOT NULL DEFAULT true;
+        ALTER TABLE ""Customers"" ADD COLUMN IF NOT EXISTS ""ResetTokenHash""               text      NULL;
+        ALTER TABLE ""Customers"" ADD COLUMN IF NOT EXISTS ""ResetTokenExpiresAt""          timestamp NULL;
+        ALTER TABLE ""Customers"" ADD COLUMN IF NOT EXISTS ""ResetCooldownUntil""           timestamp NULL;
+
+        -- Verification tokens moved to Redis (TTL-based expiry, see
+        -- IVerificationTokenStore) — these columns are no longer used.
+        ALTER TABLE ""Customers"" DROP COLUMN IF EXISTS ""VerificationTokenHash"";
+        ALTER TABLE ""Customers"" DROP COLUMN IF EXISTS ""VerificationTokenExpiresAt"";
+        ALTER TABLE ""Staff""     ADD COLUMN IF NOT EXISTS ""ResetTokenHash""               text      NULL;
+        ALTER TABLE ""Staff""     ADD COLUMN IF NOT EXISTS ""ResetTokenExpiresAt""          timestamp NULL;
+        ALTER TABLE ""Staff""     ADD COLUMN IF NOT EXISTS ""ResetCooldownUntil""           timestamp NULL;
         CREATE TABLE IF NOT EXISTS ""ServicePricings"" (
             ""Id""           varchar(36)   NOT NULL,
             ""Name""         text          NOT NULL DEFAULT '',
@@ -285,6 +449,37 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
             END IF;
         END $$;
 
+        -- Depends on Bookings, so it must be created after the block above.
+        CREATE TABLE IF NOT EXISTS ""BookingPhotos"" (
+            ""Id""          varchar(36) NOT NULL,
+            ""BookingId""   varchar(36) NOT NULL,
+            ""StoragePath"" text        NOT NULL DEFAULT '',
+            ""CreatedAt""   timestamp   NOT NULL DEFAULT now(),
+            CONSTRAINT ""PK_BookingPhotos"" PRIMARY KEY (""Id"")
+        );
+
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_BookingPhotos_Bookings') THEN
+                ALTER TABLE ""BookingPhotos"" ADD CONSTRAINT ""FK_BookingPhotos_Bookings""
+                    FOREIGN KEY (""BookingId"") REFERENCES ""Bookings""(""Id"") ON DELETE CASCADE;
+            END IF;
+        END $$;
+
+        CREATE TABLE IF NOT EXISTS ""Bikes"" (
+            ""Id""         varchar(36) NOT NULL,
+            ""CustomerId"" varchar(36) NOT NULL,
+            ""MakeModel""  text        NOT NULL DEFAULT '',
+            ""CreatedAt""  timestamp   NOT NULL DEFAULT now(),
+            CONSTRAINT ""PK_Bikes"" PRIMARY KEY (""Id"")
+        );
+
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_Bikes_Customers') THEN
+                ALTER TABLE ""Bikes"" ADD CONSTRAINT ""FK_Bikes_Customers""
+                    FOREIGN KEY (""CustomerId"") REFERENCES ""Customers""(""Id"") ON DELETE CASCADE;
+            END IF;
+        END $$;
+
         -- Enable RLS on all public tables to prevent exposure via PostgREST.
         -- The app connects as postgres (superuser) which bypasses RLS, so this
         -- only affects the anon / authenticated roles used by the REST API.
@@ -293,6 +488,8 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
         ALTER TABLE ""Staff""            ENABLE ROW LEVEL SECURITY;
         ALTER TABLE ""ServicePricings""  ENABLE ROW LEVEL SECURITY;
         ALTER TABLE ""PriceAdjustments"" ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE ""BookingPhotos""    ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE ""Bikes""            ENABLE ROW LEVEL SECURITY;
 
         -- ServicePricings is a public price catalogue; allow anonymous reads.
         -- All other tables have no policies, so PostgREST access is fully blocked.
@@ -323,6 +520,59 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
     {
         logger.LogWarning(ex,
             "Could not create IX_Bookings_NoDuplicateSlot — existing data may contain duplicate bookings.");
+    }
+
+    // Case-insensitive unique email indexes so differing casing can't create
+    // duplicate accounts. Done separately (and after dropping any case-sensitive
+    // predecessor) so pre-existing case-variant duplicates degrade to a warning
+    // rather than blocking startup.
+    try
+    {
+        db.Database.ExecuteSqlRaw(@"
+            DROP INDEX IF EXISTS ""IX_Customers_Email"";
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Customers_Email"" ON ""Customers"" (lower(""Email""));
+            DROP INDEX IF EXISTS ""IX_Staff_Email"";
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Staff_Email"" ON ""Staff"" (lower(""Email""));");
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex,
+            "Could not create case-insensitive email indexes — existing data may contain case-variant duplicate emails.");
+    }
+
+    // Case-insensitive per-customer unique bike names — the real backstop against
+    // two concurrent "add bike" requests racing past BikeService.AddBike's own
+    // duplicate check (same relationship IX_Bookings_NoDuplicateSlot has to
+    // CreateBooking's check).
+    try
+    {
+        db.Database.ExecuteSqlRaw(@"
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Bikes_CustomerId_MakeModel""
+            ON ""Bikes"" (""CustomerId"", lower(""MakeModel""));");
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex,
+            "Could not create IX_Bikes_CustomerId_MakeModel — existing data may contain duplicate bike names.");
+    }
+
+    // Atomic counter backing booking references (see BookingService.NextReferenceSequence).
+    // Replaces a Count()+1 read-then-format, which raced under concurrent bookings.
+    // Seeded from the current row count on first creation only, so numbering continues
+    // roughly where it left off instead of restarting at 1 on an existing database.
+    try
+    {
+        db.Database.ExecuteSqlRaw(@"
+            DO $$ BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_sequences WHERE schemaname = 'public' AND sequencename = 'BookingReferenceSeq') THEN
+                    CREATE SEQUENCE ""BookingReferenceSeq"";
+                    PERFORM setval('""BookingReferenceSeq""', (SELECT COUNT(*) FROM ""Bookings""));
+                END IF;
+            END $$;");
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Could not create BookingReferenceSeq.");
     }
 }
 
@@ -394,7 +644,10 @@ static void SeedDemoData(AppDbContext db)
         while (date.DayOfWeek == DayOfWeek.Sunday) date = date.AddDays(1);
         db.Bookings.Add(new Booking
         {
-            Reference       = $"FIX-{date:yyMMdd}-{i:D3}",
+            // Dated by creation day (today) and numbered from the same sequence as
+            // real bookings, to match CreateBooking's semantics rather than dating
+            // the reference by the appointment's slot date.
+            Reference       = $"FIX-{today:yyMMdd}-{BookingService.NextReferenceSequence(db):D3}",
             CreatedAt       = DateTime.Now.AddHours(-i * 3),
             CustomerName    = names[i],
             CustomerEmail   = emails[i],
@@ -412,22 +665,30 @@ static void SeedDemoData(AppDbContext db)
     db.SaveChanges();
 }
 
-static void SeedDefaultAdmin(AppDbContext db, IConfiguration config, ILogger logger)
+static void SeedDefaultAdmin(AppDbContext db, IConfiguration config, ILogger logger, bool isDevelopment)
 {
     if (db.Staff.Any()) return;
 
     var email    = config["SeedAdmin:Email"]?.Trim();
     var password = config["SeedAdmin:Password"];
     if (string.IsNullOrEmpty(email)) email = "admin@fixlosophy.com";
+    email = AuthService.NormalizeEmail(email);
 
     if (string.IsNullOrEmpty(password))
     {
+        // Never mint-and-log a real admin credential in production — fail fast so the
+        // operator sets one deliberately (env var / secret store / appsettings.Local.json).
+        if (!isDevelopment)
+            throw new InvalidOperationException(
+                "SeedAdmin:Password is not configured. Set SeedAdmin:Email/Password before first " +
+                "run (environment variable or appsettings.Local.json) — refusing to seed a logged password.");
+
+        // Development-only convenience so local first-run works out of the box.
         password = RandomNumberGenerator.GetString(
             "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789", 20);
         logger.LogWarning(
-            "No SeedAdmin:Password configured. Seeded initial admin {Email} with generated password: {Password} " +
-            "— store it securely. To choose your own, set SeedAdmin:Email/Password in appsettings.Local.json " +
-            "before first run.", email, password);
+            "No SeedAdmin:Password configured. Seeded initial admin {Email} with a generated DEVELOPMENT " +
+            "password: {Password} — set your own in appsettings.Local.json.", email, password);
     }
 
     db.Staff.Add(new StaffMember

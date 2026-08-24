@@ -1,0 +1,8 @@
+<img src="@SupabaseImageUrls.LogoAvif" alt="Fixlosophy" class="@ImgClass"
+     onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
+<span class="@FallbackClass" style="display:none">&#9851; Fixlosophy</span>
+
+@code {
+    [Parameter, EditorRequired] public string ImgClass { get; set; } = "";
+    [Parameter] public string? FallbackClass { get; set; }
+}

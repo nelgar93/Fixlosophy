@@ -38,7 +38,7 @@
     background: var(--green);
     border-color: var(--green);
     color: var(--white);
-    box-shadow: 0 0 0 4px rgba(61,187,72,0.2);
+    box-shadow: 0 0 0 4px var(--green-glow);
 }
 
 .step-indicator.done .step-indicator__dot {
@@ -100,8 +100,34 @@
     padding: 0.75rem 1rem;
     border-radius: var(--radius-sm);
     margin-bottom: 1.25rem;
-    font-size: 0.875rem;
+    font-size: var(--fs-sm);
 }
+
+/* ---------- Account page ---------- */
+.account-section { padding-top: 2rem; }
+.account-section .booking-card { margin-bottom: 1.5rem; }
+
+.account-booking-list { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.account-booking-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+}
+
+.account-booking-row__info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.85rem;
+}
+
+.account-booking-row__info span { color: rgba(255,255,255,0.5); }
 
 .booking-nav {
     display: flex;
@@ -113,6 +139,32 @@
     gap: 1rem;
     flex-wrap: wrap;
 }
+
+/* ---------- Customer Auth Strip ---------- */
+.customer-auth-strip {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    flex-wrap: wrap;
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: .5rem;
+    padding: .6rem 1rem;
+    margin-bottom: 1.5rem;
+    font-size: .9rem;
+    color: rgba(255,255,255,0.65);
+}
+.customer-auth-strip strong { color: var(--white); }
+.customer-auth-strip__link {
+    background: none;
+    border: none;
+    color: var(--green);
+    font-size: .9rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+}
+.customer-auth-strip__link:hover { color: var(--green-dark); text-decoration: underline; }
 
 /* ---------- Service Picker ---------- */
 .service-category-group {
@@ -282,7 +334,7 @@
     cursor: pointer;
 }
 
-.cal-day--available:hover { background: rgba(61,187,72,0.2); color: var(--green); }
+.cal-day--available:hover { background: var(--green-glow); color: var(--green); }
 
 .cal-day--today {
     border: 1.5px solid rgba(255,255,255,0.2);
@@ -379,6 +431,56 @@
 /* ---------- Details Form ---------- */
 .details-form { display: flex; flex-direction: column; gap: 0; }
 
+.bike-chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.6rem; }
+
+.bike-chip {
+    padding: 0.4rem 0.85rem;
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: 50px;
+    color: rgba(255,255,255,0.65);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.bike-chip:hover { border-color: var(--green); color: var(--white); }
+.bike-chip--selected { background: var(--green); border-color: var(--green); color: var(--dark); font-weight: 700; }
+
+.photo-picker-list {
+    list-style: none;
+    margin: 0.6rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.photo-picker-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+}
+
+.photo-picker-remove {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.5);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.25rem;
+}
+
+.photo-picker-remove:hover { color: var(--white); }
+
 /* ---------- Review ---------- */
 .review-grid {
     display: grid;
@@ -424,7 +526,7 @@
     gap: 0.6rem;
     padding: 0.9rem 1rem;
     background: rgba(61,187,72,0.07);
-    border: 1px solid rgba(61,187,72,0.2);
+    border: 1px solid var(--green-glow);
     border-radius: var(--radius-sm);
     font-size: 0.8rem;
     color: rgba(255,255,255,0.55);
@@ -535,6 +637,7 @@
     justify-content: center;
     margin-bottom: 1.5rem;
 }
+.admin-logo-img { height: 64px; width: auto; display: block; margin: 0 auto; mix-blend-mode: screen; }
 
 .admin-login__card h2 { margin-bottom: 0.5rem; }
 .admin-login__card p { color: rgba(255,255,255,0.5); margin-bottom: 1.5rem; font-size: 0.9rem; }
@@ -556,7 +659,80 @@
 .auth-alt a { color: var(--green); font-weight: 600; }
 
 /* ---------- Admin Dashboard ---------- */
-.admin-section { padding-top: 2.5rem; }
+/* Tighter than the public page heroes so the dashboard header takes ~50px less
+   vertical space (and stays compact on phones). */
+.page-hero--admin { padding-top: 2rem; padding-bottom: 1.5rem; }
+.admin-section { padding-top: 1.75rem; }
+
+@media (max-width: 479px) {
+    .page-hero--admin { padding-top: 1.5rem; padding-bottom: 1.25rem; }
+    .admin-section { padding-top: 1.25rem; }
+
+    /* Booking card: reduce padding */
+    .booking-card { padding: 1.25rem; }
+
+    /* Step indicator: shrink dots and hide labels on tiny screens */
+    .step-indicator__dot { width: 28px; height: 28px; font-size: 0.75rem; }
+    .step-indicator__label { display: none; }
+    .step-indicator__line { margin-bottom: 0; min-width: 16px; }
+    .steps-indicator { margin-bottom: 1.75rem; }
+
+    /* Booking nav buttons: stack on tiny screens */
+    .booking-nav { flex-direction: column-reverse; }
+    .booking-nav .btn { width: 100%; justify-content: center; }
+    .booking-nav > span { display: none; }
+
+    /* Calendar: tighten up */
+    .cal-day { font-size: 0.8rem; border-radius: 6px; }
+    .cal-head { font-size: 0.6rem; }
+
+    /* Service picker: reduce padding */
+    .service-pick-card { padding: 0.75rem 0.9rem; }
+
+    /* Review items: allow wrapping */
+    .review-item { flex-wrap: wrap; gap: 0.25rem; }
+    .review-value { text-align: left; }
+
+    /* Confirmed page */
+    .confirmed-ref { padding: 0.85rem 1.25rem; }
+    .confirmed-ref strong { font-size: 1.1rem; }
+    .confirmed-actions { flex-direction: column; align-items: center; }
+    .confirmed-actions .btn { width: 100%; max-width: 320px; justify-content: center; }
+}
+
+/* Small utilities for the admin dashboard markup — replace repeated inline
+   styles in Admin.razor rather than hand-writing the same declarations per
+   element. */
+.text-center { text-align: center; }
+.text-muted-sm { font-size: var(--fs-xs); color: rgba(255,255,255,0.45); }
+.text-faint-sm { font-size: var(--fs-xs); color: rgba(255,255,255,0.35); }
+
+.admin-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.admin-header-actions__name {
+    color: rgba(255,255,255,0.7);
+    font-size: var(--fs-sm);
+}
+.admin-header-actions__name .status-badge { font-size: 0.75rem; }
+
+.form-control--compact { font-size: var(--fs-xs); padding: 0.25rem 0.5rem; }
+.form-control--price   { font-size: var(--fs-sm); padding: 0.3rem 0.5rem; width: 100px; }
+.admin-subheading      { font-size: var(--fs-h3-compact); margin: 2rem 0 1rem; }
+
+.tab-bar-wrapper { margin-bottom: 1.5rem; }
+
+.pricing-tab-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+.pricing-tab-header h3 { margin: 0; }
 
 .admin-stats {
     display: grid;
@@ -644,7 +820,7 @@
     margin-bottom: 1.5rem;
 }
 
-.today-schedule h3 { font-size: 1rem; margin-bottom: 1rem; }
+.today-schedule h3 { font-size: var(--fs-h3-compact); margin-bottom: 1rem; }
 
 .today-slots { display: flex; flex-direction: column; gap: 0.5rem; }
 
@@ -726,6 +902,31 @@
 .booking-detail__grid strong { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.35); }
 .booking-detail__grid span { font-size: 0.875rem; color: rgba(255,255,255,0.75); }
 
+.booking-detail__photos { margin-top: 0.75rem; }
+.booking-detail__photos strong {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: rgba(255,255,255,0.35);
+}
+
+.admin-photo-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+}
+
+.admin-photo-thumb {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-dark);
+}
+
 /* Table cells */
 .ref-badge {
     font-size: 0.75rem;
@@ -769,10 +970,19 @@
 .action-buttons { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
 .action-btn {
+    /* inline-flex + inherited font + fixed line-height so <button> and <a>
+       action buttons render at an identical height everywhere (the calendar
+       row centres them, so any intrinsic size difference would show). */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0.3rem 0.7rem;
+    min-height: 28px;
     border-radius: 6px;
+    font-family: inherit;
     font-size: 0.75rem;
     font-weight: 600;
+    line-height: 1.35;
     cursor: pointer;
     border: 1px solid transparent;
     transition: all 0.15s;
@@ -794,6 +1004,39 @@
     color: rgba(255,255,255,0.35);
     font-size: 0.9rem;
 }
+
+/* Staff management / Pricing tab */
+.staff-mgmt { margin-top: .5rem; }
+.staff-add-card {
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: .75rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+.staff-add-card h3 { margin: 0 0 1rem; font-size: var(--fs-h3-compact); color: var(--white); }
+
+/* Admin utility: success banner & info banner */
+.admin-success {
+    background: rgba(61,187,72,0.10);
+    border: 1px solid rgba(61,187,72,0.3);
+    color: var(--green);
+    padding: .75rem 1rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1rem;
+    font-size: .875rem;
+}
+
+.pricing-info-banner {
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: .5rem;
+    padding: .75rem 1rem;
+    margin-bottom: 1.5rem;
+    font-size: .875rem;
+    color: rgba(255,255,255,0.5);
+}
+.pricing-info-banner strong { color: var(--white); }
 
 /* ============================================================
    ADMIN CARD VIEW (mobile only)
@@ -1072,11 +1315,7 @@
     flex-wrap: wrap;
 }
 
-a.action-btn {
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-}
+a.action-btn { text-decoration: none; }
 
 .action-btn--whatsapp { background: rgba(37,211,102,0.12); color: #25d366; border-color: rgba(37,211,102,0.3); }
 .action-btn--whatsapp:hover { background: #25d366; color: var(--dark); }
@@ -1084,3 +1323,7 @@ a.action-btn {
 .action-btn--call:hover { background: #3b82f6; color: var(--white); }
 .action-btn--keep { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.15); }
 .action-btn--keep:hover { background: rgba(255,255,255,0.15); color: var(--white); }
+/* Delete is permanent (two-step), so it stays muted until hover — distinct from
+   the always-red "Cancel" which only changes a booking's status. */
+.action-btn--delete { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.5); border-color: rgba(255,255,255,0.12); }
+.action-btn--delete:hover { background: #dc2626; color: var(--white); border-color: #dc2626; }

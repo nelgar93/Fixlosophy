@@ -1,0 +1,266 @@
+@page "/account"
+@rendermode InteractiveServer
+@inject AuthService AuthService
+@inject BookingService BookingService
+@inject BikeService BikeService
+@inject ActionRateLimiter RateLimiter
+@inject NavigationManager Nav
+
+<PageTitle>My Account – Fixlosophy</PageTitle>
+
+@if (loggedInCustomer != null)
+{
+    <div class="page-hero page-hero--sm page-hero--admin">
+        <div class="container admin-hero-row">
+            <div>
+                <p class="section-eyebrow">My Account</p>
+                <h1>@loggedInCustomer.FullName</h1>
+            </div>
+            <div class="admin-header-actions">
+                <button class="btn btn-outline" @onclick="Logout">Sign Out</button>
+            </div>
+        </div>
+    </div>
+
+    <section class="section account-section">
+        <div class="container">
+
+            <!-- Upcoming Bookings -->
+            <div class="booking-card">
+                <h2 class="booking-card__title">Upcoming Bookings</h2>
+                @if (UpcomingBookings.Count == 0)
+                {
+                    <p class="booking-card__subtitle">No upcoming bookings. <a href="/book">Book a repair</a></p>
+                }
+                else
+                {
+                    <div class="account-booking-list">
+                        @foreach (var b in UpcomingBookings)
+                        {
+                            <div class="account-booking-row">
+                                <span class="ref-badge">@b.Reference</span>
+                                <div class="account-booking-row__info">
+                                    <strong>@b.ServiceName</strong>
+                                    <span>@b.SlotDate.ToString("d MMM yyyy") &middot; @b.SlotTime</span>
+                                    @if (!string.IsNullOrWhiteSpace(b.BikeDescription))
+                                    {
+                                        <span>@b.BikeDescription</span>
+                                    }
+                                </div>
+                                <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Booking History -->
+            @if (BookingHistory.Count > 0)
+            {
+                <div class="booking-card">
+                    <h2 class="booking-card__title">Booking History</h2>
+                    <div class="account-booking-list">
+                        @foreach (var b in BookingHistory)
+                        {
+                            <div class="account-booking-row">
+                                <span class="ref-badge">@b.Reference</span>
+                                <div class="account-booking-row__info">
+                                    <strong>@b.ServiceName</strong>
+                                    <span>@b.SlotDate.ToString("d MMM yyyy") &middot; @b.SlotTime</span>
+                                </div>
+                                <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Your Details -->
+            <div class="booking-card">
+                <h2 class="booking-card__title">Your Details</h2>
+                @if (profileMessage != null)
+                {
+                    <div class="admin-success">&#10003; @profileMessage</div>
+                }
+                @if (profileError != null)
+                {
+                    <div class="booking-error">@profileError</div>
+                }
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input class="form-control" type="text" @bind="profileName" />
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input class="form-control" type="email" value="@loggedInCustomer.Email" disabled />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input class="form-control" type="tel" @bind="profilePhone" />
+                </div>
+                <button class="btn btn-primary" @onclick="SaveProfile">Save Details</button>
+            </div>
+
+            <!-- Change Password -->
+            <div class="booking-card">
+                <h2 class="booking-card__title">Change Password</h2>
+                @if (passwordMessage != null)
+                {
+                    <div class="admin-success">&#10003; @passwordMessage</div>
+                }
+                @if (passwordError != null)
+                {
+                    <div class="booking-error">@passwordError</div>
+                }
+                <div class="form-group">
+                    <label>Current Password</label>
+                    <input class="form-control" type="password" @bind="currentPassword" autocomplete="current-password" />
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>New Password</label>
+                        <input class="form-control" type="password" @bind="newPassword" autocomplete="new-password" />
+                    </div>
+                    <div class="form-group">
+                        <label>Confirm New Password</label>
+                        <input class="form-control" type="password" @bind="confirmPassword" autocomplete="new-password" />
+                    </div>
+                </div>
+                <button class="btn btn-primary" @onclick="SavePassword">Update Password</button>
+            </div>
+
+            <!-- Your Bikes -->
+            <div class="booking-card">
+                <h2 class="booking-card__title">Your Bikes</h2>
+                <p class="booking-card__subtitle">Saved bikes appear as quick-select shortcuts when booking a repair.</p>
+                @if (bikeError != null)
+                {
+                    <div class="booking-error">@bikeError</div>
+                }
+                @if (loggedInCustomer.Bikes.Count > 0)
+                {
+                    <ul class="photo-picker-list">
+                        @foreach (var bike in loggedInCustomer.Bikes)
+                        {
+                            <li>
+                                <span>@bike.MakeModel</span>
+                                <button type="button" class="photo-picker-remove" @onclick="() => RemoveBike(bike.Id)">&times;</button>
+                            </li>
+                        }
+                    </ul>
+                }
+                <div class="form-row">
+                    <div class="form-group">
+                        <input class="form-control" type="text" @bind="newBikeName" placeholder="e.g. Trek Marlin 7, 2022" />
+                    </div>
+                    <button class="btn btn-outline" @onclick="AddBike">Add Bike</button>
+                </div>
+            </div>
+
+        </div>
+    </section>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private Customer? loggedInCustomer;
+    private List<Booking> _bookings = [];
+
+    private string profileName = "";
+    private string profilePhone = "";
+    private string? profileMessage;
+    private string? profileError;
+
+    private string currentPassword = "";
+    private string newPassword = "";
+    private string confirmPassword = "";
+    private string? passwordMessage;
+    private string? passwordError;
+
+    private string newBikeName = "";
+    private string? bikeError;
+
+    private List<Booking> UpcomingBookings =>
+        _bookings.Where(b => b.SlotDate.Date >= DateTime.Today && b.Status != BookingStatus.Cancelled)
+                 .OrderBy(b => b.SlotDate).ThenBy(b => b.SlotTime).ToList();
+
+    private List<Booking> BookingHistory =>
+        _bookings.Where(b => !(b.SlotDate.Date >= DateTime.Today && b.Status != BookingStatus.Cancelled))
+                 .OrderByDescending(b => b.SlotDate).ThenByDescending(b => b.SlotTime).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is null) { RedirectToLogin(); return; }
+        var user = (await AuthState).User;
+        if (user.FindFirst(AuthClaims.UserType)?.Value != AuthClaims.CustomerType)
+        { RedirectToLogin(); return; }
+
+        var id = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        loggedInCustomer = id is null ? null : AuthService.GetCustomerById(id);
+        if (loggedInCustomer is null)
+        {
+            // Cookie says "customer" but the account is gone — clear the stale cookie
+            // (same recovery Admin.razor uses when a staff account is deactivated).
+            Nav.NavigateTo("/auth/logout", forceLoad: true);
+            return;
+        }
+
+        LoadProfile();
+        LoadBookings();
+    }
+
+    private void RedirectToLogin() => Nav.NavigateTo("/account/login?returnUrl=%2Faccount", forceLoad: true);
+
+    private void LoadProfile()
+    {
+        profileName = loggedInCustomer!.FullName;
+        profilePhone = loggedInCustomer.Phone;
+    }
+
+    private void LoadBookings() => _bookings = BookingService.GetBookingsForCustomer(loggedInCustomer!.Id);
+
+    private void SaveProfile()
+    {
+        profileMessage = null;
+        profileError = null;
+        var (customer, error) = AuthService.UpdateCustomerProfile(loggedInCustomer!.Id, profileName, profilePhone);
+        if (error != null) { profileError = error; return; }
+        loggedInCustomer = customer;
+        LoadProfile();
+        profileMessage = "Details saved.";
+    }
+
+    private void SavePassword()
+    {
+        passwordMessage = null;
+        passwordError = null;
+        if (newPassword != confirmPassword)
+        { passwordError = "New passwords don't match."; return; }
+        if (!RateLimiter.TryAcquire(LimitedAction.ChangePassword))
+        { passwordError = "Too many attempts. Please wait a while and try again."; return; }
+
+        var (ok, error) = AuthService.ChangeCustomerPassword(loggedInCustomer!.Id, currentPassword, newPassword);
+        if (!ok) { passwordError = error; return; }
+        currentPassword = newPassword = confirmPassword = "";
+        passwordMessage = "Password updated.";
+    }
+
+    private void AddBike()
+    {
+        bikeError = null;
+        var (bike, error) = BikeService.AddBike(loggedInCustomer!.Id, newBikeName);
+        if (error != null) { bikeError = error; return; }
+        newBikeName = "";
+        loggedInCustomer = AuthService.GetCustomerById(loggedInCustomer.Id);
+    }
+
+    private void RemoveBike(string bikeId)
+    {
+        BikeService.RemoveBike(loggedInCustomer!.Id, bikeId);
+        loggedInCustomer = AuthService.GetCustomerById(loggedInCustomer.Id);
+    }
+
+    private void Logout() => Nav.NavigateTo("/auth/logout", forceLoad: true);
+}

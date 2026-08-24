@@ -10,6 +10,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<StaffMember> Staff => Set<StaffMember>();
     public DbSet<ServicePricing> ServicePricings => Set<ServicePricing>();
     public DbSet<PriceAdjustment> PriceAdjustments => Set<PriceAdjustment>();
+    public DbSet<BookingPhoto> BookingPhotos => Set<BookingPhoto>();
+    public DbSet<Bike> Bikes => Set<Bike>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,11 +34,36 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .OnDelete(DeleteBehavior.SetNull);
         });
 
+        modelBuilder.Entity<BookingPhoto>(p =>
+        {
+            p.HasKey(e => e.Id);
+            p.Property(e => e.Id).HasMaxLength(36).ValueGeneratedNever();
+            p.Property(e => e.BookingId).HasMaxLength(36);
+
+            p.HasOne(e => e.Booking)
+             .WithMany(b => b.Photos)
+             .HasForeignKey(e => e.BookingId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<Customer>(c =>
         {
             c.HasKey(e => e.Id);
             c.Property(e => e.Id).HasMaxLength(36).ValueGeneratedNever();
             c.HasIndex(e => e.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<Bike>(bk =>
+        {
+            bk.HasKey(e => e.Id);
+            bk.Property(e => e.Id).HasMaxLength(36).ValueGeneratedNever();
+            bk.Property(e => e.CustomerId).HasMaxLength(36);
+            bk.HasIndex(e => new { e.CustomerId, e.MakeModel }).IsUnique();
+
+            bk.HasOne(e => e.Customer)
+              .WithMany(c => c.Bikes)
+              .HasForeignKey(e => e.CustomerId)
+              .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<StaffMember>(s =>
