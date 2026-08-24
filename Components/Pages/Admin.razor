@@ -293,7 +293,7 @@
                                     @if (expandedId == b.Id && CanSeeCustomerDetails)
                                     {
                                         <tr class="row-detail">
-                                            <td colspan="7">
+                                            <td colspan="@BookingColumnCount">
                                                 <div class="booking-detail">
                                                     <div class="booking-detail__grid">
                                                         <div><strong>Phone</strong><span>@(string.IsNullOrWhiteSpace(b.CustomerPhone) ? "—" : b.CustomerPhone)</span></div>
@@ -541,6 +541,10 @@
 
                     <!-- Staff list -->
                     <h3 style="margin-top:2rem;margin-bottom:1rem">Current Staff</h3>
+                    @if (staffRowError != null)
+                    {
+                        <div class="booking-error" style="margin-bottom:.75rem">@staffRowError</div>
+                    }
                     <div class="admin-table-wrapper">
                         <table class="admin-table">
                             <thead>
@@ -635,6 +639,7 @@
     private StaffMember newStaff = new();
     private string newStaffPassword = "";
     private string? staffFormError;
+    private string? staffRowError;
 
     // Pricing management
     private List<ServicePricing> _servicePricings = [];
@@ -648,6 +653,10 @@
     private bool IsAdmin => loggedInStaff?.Role == StaffRole.Admin;
     private bool CanManage => IsAdmin || loggedInStaff?.CanManageBookings == true;
     private bool CanSeeCustomerDetails => IsAdmin || loggedInStaff?.CanViewCustomerDetails == true;
+
+    // Reference, Customer, Service, Date & Time, Status — plus the two columns the
+    // header row adds conditionally. Drives the expanded detail row's colspan.
+    private int BookingColumnCount => 5 + (IsAdmin ? 1 : 0) + (CanManage ? 1 : 0);
     private List<Booking> TodayBookings =>
         FilteredBookings.Where(b => b.SlotDate.Date == DateTime.Today).ToList();
 
@@ -843,7 +852,9 @@
         if (string.IsNullOrWhiteSpace(newStaffPassword)) { staffFormError = "Password is required."; return; }
 
         newStaff.PasswordHash = AuthService.HashPassword(newStaffPassword);
-        AuthService.SaveStaff(newStaff);
+        staffFormError = AuthService.SaveStaff(newStaff);
+        if (staffFormError != null) return;
+
         _allStaff = AuthService.GetAllStaff();
         newStaff = new StaffMember();
         newStaffPassword = "";
@@ -851,7 +862,7 @@
 
     private void SaveStaffMember(StaffMember member)
     {
-        AuthService.SaveStaff(member);
+        staffRowError = AuthService.SaveStaff(member);
         _allStaff = AuthService.GetAllStaff();
     }
 }

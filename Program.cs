@@ -359,7 +359,10 @@ static async Task ApplyAnnualPriceIncreaseAsync(
     if (today < april1) return;
     if (db.PriceAdjustments.Any(a => a.Year == today.Year)) return;
 
-    // Fetch live UK CPI (ONS CPIH L55O series); fall back to configured minimum
+    // Fetch live UK CPI (ONS CPIH L55O series). PriceIncrease:InflationRate is the
+    // fallback used only when the ONS API is unavailable — it is not the floor.
+    // The business floor is a deliberate 5% a year, so any rate below it (live or
+    // configured) is raised to 5%; only a rate above 5% is used as-is.
     var liveRate       = await inflation.GetLatestAnnualRateAsync();
     var configuredMin  = config.GetValue<decimal>("PriceIncrease:InflationRate", 0.03m);
     var rate           = Math.Max(liveRate ?? configuredMin, 0.05m);

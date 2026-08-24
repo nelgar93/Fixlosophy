@@ -1,5 +1,6 @@
 using Fixlosophy.Data;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace Fixlosophy.Services;
 
@@ -50,18 +51,53 @@ public class AuthService(AppDbContext db)
 
     // Restore a persisted session: re-fetch from the DB so we honour any
     // deactivation/role change since the cookie was issued.
+    // Untracked: this feeds read-only UI, and in Blazor Server the DbContext is
+    // scoped to the whole circuit, so a tracked entity here would let unrelated
+    // SaveChanges() calls pick up edits the admin never confirmed.
     public StaffMember? GetStaffById(string id) =>
-        db.Staff.FirstOrDefault(s => s.Id == id && s.IsActive);
+        db.Staff.AsNoTracking().FirstOrDefault(s => s.Id == id && s.IsActive);
 
+    // Untracked for the same reason: the admin dashboard binds permission
+    // checkboxes straight to these instances, and those edits must not reach the
+    // database until SaveStaff is called.
     public List<StaffMember> GetAllStaff() =>
-        db.Staff.OrderBy(s => s.FullName).ToList();
+        db.Staff.AsNoTracking().OrderBy(s => s.FullName).ToList();
 
-    public void SaveStaff(StaffMember staff)
+    // Returns null on success, or a message to show the admin. The unique index
+    // IX_Staff_Email turns a repeated address into a DbUpdateException, which
+    // would otherwise escape a Blazor event handler, tear down the circuit and
+    // leave the failed entry poisoning every later save in that session.
+    public string? SaveStaff(StaffMember staff)
     {
-        if (db.Staff.Any(s => s.Id == staff.Id))
-            db.Staff.Update(staff);
-        else
+        staff.Email = staff.Email.Trim();
+        if (string.IsNullOrEmpty(staff.Email))
+            return "Email is required.";
+
+        var normEmail = staff.Email.ToLower();
+        if (db.Staff.Any(s => s.Email.ToLower() == normEmail && s.Id != staff.Id))
+            return "A staff member with this email already exists.";
+
+        // Find checks the change tracker before the database, so an admin editing
+        // their own row reuses the instance GetStaffById may already have loaded
+        // instead of tripping "another instance with the same key is already
+        // being tracked". SetValues copies scalars only, leaving navigations alone.
+        var existing = db.Staff.Find(staff.Id);
+        if (existing is null)
             db.Staff.Add(staff);
-        db.SaveChanges();
+        else
+            db.Entry(existing).CurrentValues.SetValues(staff);
+
+        try
+        {
+            db.SaveChanges();
+        }
+        catch (DbUpdateException)
+        {
+            // Lost a race against IX_Staff_Email; detach so the circuit-scoped
+            // context stays usable.
+            db.Entry(existing ?? staff).State = EntityState.Detached;
+            return "A staff member with this email already exists.";
+        }
+        return null;
     }
 }
