@@ -12,4 +12,12 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.*" />
   </ItemGroup>
 
+  <!-- Fixlosophy.Tests lives in a subdirectory of this project; exclude it from the
+       Web SDK's implicit **/*.cs glob so its test files aren't compiled in twice. -->
+  <ItemGroup>
+    <Compile Remove="Fixlosophy.Tests/**/*.cs" />
+    <Content Remove="Fixlosophy.Tests/**" />
+    <None Remove="Fixlosophy.Tests/**" />
+  </ItemGroup>
+
 </Project>
