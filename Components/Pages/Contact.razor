@@ -1,15 +1,17 @@
 @page "/contact"
 @rendermode InteractiveServer
 @inject ActionRateLimiter RateLimiter
+@inject EnquiryService Enquiries
 @inject SiteImages Images
 
-<PageTitle>Contact – Fixlosophy Bike Repair</PageTitle>
+<SeoHead Title="Contact Us"
+         Description="@($"Call {SiteContent.PhoneDisplay}, email us, or drop into {SiteContent.AddressShort}, {SiteContent.AddressPostcode}. Open seven days — walk-ins welcome for quick repairs.")" />
 
 <div class="page-hero page-hero--sm">
     <div class="container">
         <p class="section-eyebrow">Get In Touch</p>
-        <h1>Book a Repair</h1>
-        <p>Fill in the form and we'll confirm your booking within a few hours.</p>
+        <h1>Contact Us</h1>
+        <p>Send us a message, call the shop, or just roll in — we're open seven days.</p>
     </div>
 </div>
 
@@ -25,8 +27,8 @@
                 {
                     <div class="success-message">
                         <div class="success-icon"><Icon Name="check" /></div>
-                        <h3>Thanks, @model.Name!</h3>
-                        <p>We've received your booking request and will confirm within a few hours. See you soon!</p>
+                        <h3>Thanks, @submittedName!</h3>
+                        <p>Your message is with us and we'll get back to you as soon as we can. If it's urgent, call the shop on <a href="tel:@SiteContent.PhoneE164">@SiteContent.PhoneDisplay</a>.</p>
                         <button class="btn btn-outline" @onclick="ResetForm">Send Another</button>
                     </div>
                 }
@@ -37,19 +39,24 @@
 
                         <div class="form-group">
                             <label for="name">Your Name *</label>
-                            <InputText id="name" class="form-control" @bind-Value="model.Name" placeholder="e.g. Jane Smith" />
+                            <InputText id="name" class="form-control" autocomplete="name"
+                                       @bind-Value="model.Name" placeholder="e.g. Jane Smith" />
                             <ValidationMessage For="() => model.Name" />
                         </div>
 
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="email">Email Address *</label>
-                                <InputText id="email" class="form-control" @bind-Value="model.Email" placeholder="jane@example.com" />
+                                <InputText id="email" class="form-control" type="email"
+                                           autocomplete="email" inputmode="email"
+                                           @bind-Value="model.Email" placeholder="jane@example.com" />
                                 <ValidationMessage For="() => model.Email" />
                             </div>
                             <div class="form-group">
                                 <label for="phone">Phone (optional)</label>
-                                <InputText id="phone" class="form-control" @bind-Value="model.Phone" placeholder="07700 900000" />
+                                <InputText id="phone" class="form-control" type="tel"
+                                           autocomplete="tel" inputmode="tel"
+                                           @bind-Value="model.Phone" placeholder="07700 900000" />
                             </div>
                         </div>
 
@@ -87,12 +94,19 @@
                             <InputDate id="preferred" class="form-control" @bind-Value="model.PreferredDate" />
                         </div>
 
-                        @if (rateLimitError != null)
+                        @if (formError != null)
                         {
-                            <div class="booking-error">@rateLimitError</div>
+                            <div class="booking-error">@formError</div>
                         }
 
-                        <button type="submit" class="btn btn-primary btn-lg btn-full">Send Booking Request</button>
+                        <p class="form-consent">
+                            We'll use these details only to answer your enquiry — see our
+                            <a href="/privacy">privacy policy</a>.
+                        </p>
+
+                        <button type="submit" class="btn btn-primary btn-lg btn-full" disabled="@sending">
+                            @(sending ? "Sending…" : "Send Message")
+                        </button>
                     </EditForm>
                 }
             </div>
@@ -112,35 +126,45 @@
                         <span class="info-icon"><Icon Name="pin" /></span>
                         <div>
                             <strong>Address</strong>
-                            <p>42 Spoke Street<br />Chainring Quarter<br />City, 10001</p>
+                            <p>
+                                @SiteContent.AddressVenue<br />
+                                @SiteContent.AddressStreet<br />
+                                @SiteContent.AddressCity @SiteContent.AddressPostcode
+                            </p>
+                            <p><a href="@SiteContent.GoogleProfileUrl" target="_blank" rel="noopener">Open in Google Maps</a></p>
                         </div>
                     </div>
                     <div class="info-item">
                         <span class="info-icon"><Icon Name="clock" /></span>
                         <div>
                             <strong>Opening Hours</strong>
-                            <p>Monday – Friday: 9am – 7pm<br />Saturday: 9am – 6pm<br />Sunday: 11am – 5pm</p>
+                            <p>
+                                @foreach (var line in SiteContent.HoursDisplay)
+                                {
+                                    @line<br />
+                                }
+                            </p>
                         </div>
                     </div>
                     <div class="info-item">
                         <span class="info-icon"><Icon Name="phone" /></span>
                         <div>
                             <strong>Phone</strong>
-                            <p><a href="tel:+447840041100">07840 041100</a></p>
+                            <p><a href="tel:@SiteContent.PhoneE164">@SiteContent.PhoneDisplay</a></p>
                         </div>
                     </div>
                     <div class="info-item">
                         <span class="info-icon"><Icon Name="mail" /></span>
                         <div>
                             <strong>Email</strong>
-                            <p><a href="mailto:hello@fixlosophy.com">hello&#64;fixlosophy.com</a></p>
+                            <p><a href="mailto:@SiteContent.Email">@SiteContent.Email</a></p>
                         </div>
                     </div>
                     <div class="info-item">
                         <span class="info-icon"><Icon Name="camera" /></span>
                         <div>
                             <strong>Instagram</strong>
-                            <p><a href="https://instagram.com/fixlosophy" target="_blank" rel="noopener">&#64;fixlosophy</a></p>
+                            <p><a href="@SiteContent.InstagramUrl" target="_blank" rel="noopener">@SiteContent.InstagramHandle</a></p>
                         </div>
                     </div>
                 </div>
@@ -180,13 +204,47 @@
 @code {
     private ContactModel model = new();
     private bool submitted = false;
-    private string? rateLimitError;
+    private bool sending = false;
+    private string? formError;
 
-    private void HandleSubmit()
+    // Kept separately so the thank-you message still has a name after the form is
+    // reset, and so it can't be re-read from a model the user has started editing.
+    private string submittedName = "";
+
+    private async Task HandleSubmit()
     {
+        if (sending) return;
+        formError = null;
+
         if (!RateLimiter.TryAcquire(LimitedAction.ContactMessage))
-        { rateLimitError = "Too many messages in a short time. Please wait a few minutes and try again."; return; }
-        rateLimitError = null;
+        {
+            formError = "Too many messages in a short time. Please wait a few minutes and try again.";
+            return;
+        }
+
+        sending = true;
+        var stored = await Enquiries.SubmitAsync(new Enquiry
+        {
+            Name            = model.Name,
+            Email           = model.Email,
+            Phone           = model.Phone ?? "",
+            Service         = model.Service,
+            BikeDescription = model.BikeDescription ?? "",
+            Message         = model.Message,
+            PreferredDate   = model.PreferredDate
+        });
+        sending = false;
+
+        // Only claim we've received it if we actually have. The previous version said
+        // so unconditionally while storing nothing at all.
+        if (!stored)
+        {
+            formError = $"Sorry — we couldn't send that just now. Please call us on {SiteContent.PhoneDisplay} " +
+                        $"or email {SiteContent.Email}.";
+            return;
+        }
+
+        submittedName = model.Name;
         submitted = true;
     }
 
@@ -194,6 +252,7 @@
     {
         model = new();
         submitted = false;
+        formError = null;
     }
 
     public class ContactModel

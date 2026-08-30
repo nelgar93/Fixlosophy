@@ -44,10 +44,15 @@
       "Bash(rm -rf \"/c/Users/Raven/AppData/Local/Temp/claude/c--dev-Fixlosophy/29a55067-10a5-4adb-889b-1c1e1f119306/scratchpad/check_admin.cs\" \"/c/Users/Raven/AppData/Local/Temp/claude/c--dev-Fixlosophy/29a55067-10a5-4adb-889b-1c1e1f119306/scratchpad/obj\" \"/c/Users/Raven/AppData/Local/Temp/claude/c--dev-Fixlosophy/29a55067-10a5-4adb-889b-1c1e1f119306/scratchpad/bin\" 2>/dev/null; echo done)",
       "Bash(curl -s -o /dev/null -w \"app alive check: HTTP %{http_code}\\\\n\" http://localhost:5126/)",
       "Bash(git add *)",
-      "Bash(ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5199 timeout 90 dotnet run --no-build --project Fixlosophy.csproj)"
+      "Bash(ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5199 timeout 90 dotnet run --no-build --project Fixlosophy.csproj)",
+      "Bash(git checkout *)",
+      "Bash([ -f \"$L\" ])",
+      "Read(//c/Users/Raven/AppData/Local/Temp/claude/c--dev-Fixlosophy/e04fa6aa-1e61-4561-9fa1-570fa86013ef/scratchpad/**)",
+      "Bash(ASPNETCORE_ENVIRONMENT=Development dotnet run --no-launch-profile --urls http://localhost:5127 > \"/c/Users/Raven/AppData/Local/Temp/claude/c--dev-Fixlosophy/e04fa6aa-1e61-4561-9fa1-570fa86013ef/scratchpad/run2.log\" 2>&1)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\Raven\\AppData\\Local\\Temp\\claude\\c--dev-Fixlosophy\\29a55067-10a5-4adb-889b-1c1e1f119306\\scratchpad"
+      "C:\\Users\\Raven\\AppData\\Local\\Temp\\claude\\c--dev-Fixlosophy\\29a55067-10a5-4adb-889b-1c1e1f119306\\scratchpad",
+      "C:\\Users\\Raven\\AppData\\Local\\Temp\\claude\\c--dev-Fixlosophy\\e04fa6aa-1e61-4561-9fa1-570fa86013ef\\scratchpad"
     ]
   }
 }

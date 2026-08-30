@@ -2,6 +2,9 @@
 @layout MainLayout
 
 <PageTitle>Page Not Found – Fixlosophy</PageTitle>
+<HeadContent>
+    <meta name="robots" content="noindex, follow" />
+</HeadContent>
 
 <div class="page-hero page-hero--sm">
     <div class="container">
@@ -12,7 +15,14 @@
 </div>
 
 <section class="section">
-    <div class="container" style="text-align:center">
-        <a href="/" class="btn btn-primary btn-lg">Back to Home</a>
+    <div class="container error-page">
+        <p>
+            If you followed a link here, let us know on
+            <a href="mailto:@SiteContent.Email">@SiteContent.Email</a> and we'll fix it.
+        </p>
+        <div class="error-page__actions">
+            <a href="/" class="btn btn-primary">Back to home</a>
+            <a href="/book" class="btn btn-outline">Book a repair</a>
+        </div>
     </div>
 </section>

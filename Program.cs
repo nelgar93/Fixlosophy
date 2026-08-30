@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net;
 using System.Security.Cryptography;
 using System.Threading.RateLimiting;
 using Fixlosophy.Components;
@@ -5,11 +7,13 @@ using Fixlosophy.Data;
 using Fixlosophy.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 
-// Allow DateTime.Now / DateTime.Today to be stored as Postgres "timestamp without time zone"
+// Lets the DateTime values the app writes (see ShopClock — everything goes through it)
+// be stored as Postgres "timestamp without time zone".
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,6 +31,32 @@ builder.Configuration.AddCommandLine(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// The app runs behind nginx/Caddy in production, so the socket's remote address is
+// always the proxy. Without this every per-IP rate-limit partition below collapses
+// into a single bucket shared by the whole internet — which turns the 5-per-minute
+// auth limit into a self-inflicted lockout rather than brute-force protection — and
+// Request.Scheme reads "http", which corrupts the absolute links in verification and
+// password-reset emails.
+//
+// KnownProxies defaults to loopback, which covers a proxy on the same host. Set
+// ForwardedHeaders:KnownProxies (comma-separated) when the proxy is elsewhere; only
+// addresses listed there are trusted to speak for the client, so an attacker can't
+// spoof X-Forwarded-For to dodge the rate limiter.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    var configured = builder.Configuration["ForwardedHeaders:KnownProxies"];
+    if (!string.IsNullOrWhiteSpace(configured))
+    {
+        options.KnownProxies.Clear();
+        options.KnownIPNetworks.Clear();
+        foreach (var entry in configured.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            if (IPAddress.TryParse(entry, out var address))
+                options.KnownProxies.Add(address);
+    }
+});
+
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<BookingService>();
 builder.Services.AddScoped<AuthService>();
@@ -35,6 +65,12 @@ builder.Services.AddScoped<ActionRateLimiter>();
 builder.Services.AddSingleton<SiteImages>();
 builder.Services.AddScoped<IStorageService, StorageService>();
 builder.Services.AddScoped<BikeService>();
+builder.Services.AddScoped<EnquiryService>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<CustomerService>();
+// Singleton: the in-process fan-out that lets an open dashboard hear about a new
+// notification without polling. See NotificationHub for why a plain event suffices.
+builder.Services.AddSingleton<NotificationHub>();
 
 // HTTP-level rate limit per client IP: covers page loads and SignalR circuit
 // negotiation. In-circuit actions are throttled separately by ActionRateLimiter.
@@ -107,6 +143,20 @@ if (builder.Environment.IsDevelopment() && string.IsNullOrEmpty(builder.Configur
 else
     builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
+// AllowedHosts ships as "*" so local development works from any hostname. Left that
+// way in production it accepts any Host header, which lets an attacker poison the
+// absolute URLs BuildAbsoluteUrl derives from the request — including the ones in
+// verification and password-reset emails. Fail fast instead, the same way an unset
+// SeedAdmin:Password does.
+if (!builder.Environment.IsDevelopment() &&
+    builder.Configuration["AllowedHosts"] is null or "" or "*")
+{
+    throw new InvalidOperationException(
+        "AllowedHosts is \"*\". Set it to the site's real hostname(s), semicolon-separated " +
+        "(e.g. \"booking.fixlosophy.com;www.booking.fixlosophy.com\"), in appsettings.Local.json " +
+        "or the ALLOWEDHOSTS environment variable.");
+}
+
 // Verification-token expiry is backed by Redis (TTL-based) rather than a Postgres
 // column. Falls back to an in-memory store in Development when no Redis connection
 // string is configured; fails fast everywhere else, since silently falling back
@@ -136,10 +186,35 @@ using (var scope = app.Services.CreateScope())
     var inflation = scope.ServiceProvider.GetRequiredService<InflationService>();
     EnsureSchema(db, app.Logger);
     SeedServicePricings(db);
-    SeedDemoData(db);
+    // Development only. These are five invented customers with invented emails and
+    // phone numbers; seeding them outside dev drops fake bookings straight into the
+    // live dashboard on first deploy, indistinguishable from real ones.
+    if (app.Environment.IsDevelopment())
+        SeedDemoData(db);
     SeedDefaultAdmin(db, config, app.Logger, app.Environment.IsDevelopment());
     await ApplyAnnualPriceIncreaseAsync(db, config, inflation);
+
+    // Housekeeping: drop notifications past their retention window so the table can't
+    // grow forever. Best-effort — a failure here must not stop the app starting.
+    var startupLogger = app.Logger;
+    try
+    {
+        var notifications = scope.ServiceProvider.GetRequiredService<NotificationService>();
+        var purged = notifications.PurgeOlderThanRetention();
+        // IsEnabled guard is what CA1873 asks for: don't pay for the argument array
+        // when Information-level logging is switched off.
+        if (purged > 0 && startupLogger.IsEnabled(LogLevel.Information))
+            startupLogger.LogInformation("Purged {Count} notifications past the retention window.", purged);
+    }
+    catch (Exception ex)
+    {
+        startupLogger.LogWarning(ex, "Could not purge old notifications.");
+    }
 }
+
+// Must run before anything that reads the client IP or the request scheme — which
+// means before the rate limiter and before HTTPS redirection.
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -148,6 +223,42 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
+
+// Security response headers. Placed before the endpoints so they apply to every
+// response, including error pages and static assets.
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["Referrer-Policy"]        = "strict-origin-when-cross-origin";
+    // The site has no need for any of these, and denying them by default means a
+    // future dependency can't quietly start asking for them.
+    headers["Permissions-Policy"]     = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()";
+    // frame-ancestors in the CSP below supersedes this for modern browsers; kept for
+    // older ones that don't implement it.
+    headers["X-Frame-Options"]        = "DENY";
+
+    // 'unsafe-inline' in script-src is currently required: the image fallbacks use
+    // inline onerror= attributes and the resend countdown is an inline <script>.
+    // Inline handlers can't be covered by a nonce, so tightening this means moving
+    // that code into a file first — tracked as a follow-up. Even as it stands this
+    // blocks loading script from any other origin, which is the delivery route that
+    // actually matters. Supabase is allowed for images (site photography, signed
+    // customer-upload URLs) and connect-src (storage API).
+    headers["Content-Security-Policy"] = string.Join("; ",
+        "default-src 'self'",
+        "base-uri 'self'",
+        "object-src 'none'",
+        "frame-ancestors 'none'",
+        "form-action 'self'",
+        "img-src 'self' data: https://*.supabase.co",
+        "font-src 'self' data:",
+        "style-src 'self' 'unsafe-inline'",
+        "script-src 'self' 'unsafe-inline'",
+        "connect-src 'self' https://*.supabase.co wss: ws:");
+
+    await next();
+});
 
 app.UseRateLimiter();
 
@@ -159,6 +270,55 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// ── SEO ───────────────────────────────────────────────────────────────────
+// Generated rather than static files in wwwroot, so both track whatever domain the
+// app is actually served from (App:BaseUrl, or the request host) — the domain isn't
+// fixed yet, and a sitemap advertising the wrong one is worse than none.
+
+// Public, indexable routes. Anything touching an account or the dashboard is
+// deliberately absent and disallowed below.
+string[] publicRoutes = ["/", "/services", "/about", "/gallery", "/contact", "/book"];
+
+app.MapGet("/robots.txt", (HttpContext http, IConfiguration config) =>
+{
+    var baseUrl = BuildAbsoluteUrl(http, config, "");
+    var body = string.Join('\n',
+        "User-agent: *",
+        "Allow: /",
+        // Staff and customer areas: nothing to index, and the sign-in pages
+        // shouldn't surface in search results.
+        "Disallow: /admin",
+        "Disallow: /account",
+        "Disallow: /auth/",
+        "Disallow: /reset-password",
+        "Disallow: /not-found",
+        "Disallow: /Error",
+        "",
+        $"Sitemap: {baseUrl}/sitemap.xml",
+        "");
+    return Results.Text(body, "text/plain");
+});
+
+app.MapGet("/sitemap.xml", (HttpContext http, IConfiguration config) =>
+{
+    var baseUrl = BuildAbsoluteUrl(http, config, "");
+    var today = ShopClock.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    var urls = string.Concat(publicRoutes.Select(route =>
+    {
+        var loc = System.Security.SecurityElement.Escape($"{baseUrl}{route}");
+        // The booking page and the homepage are the ones that matter commercially.
+        var priority = route switch { "/" => "1.0", "/book" => "0.9", _ => "0.7" };
+        return $"  <url><loc>{loc}</loc><lastmod>{today}</lastmod><priority>{priority}</priority></url>\n";
+    }));
+
+    var xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+              "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n" +
+              urls +
+              "</urlset>\n";
+    return Results.Text(xml, "application/xml");
+});
 
 // ── Auth endpoints ────────────────────────────────────────────────────────
 // Cookies can only be written on a real HTTP request, never mid-circuit, so the
@@ -294,6 +454,35 @@ app.MapGet("/auth/logout", async (HttpContext http, string? returnUrl) =>
 {
     await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Redirect(SafeReturn(returnUrl, "/"));
+});
+
+// UK GDPR right of access. A plain HTTP GET rather than an in-circuit action because
+// a Blazor Server circuit can't hand the browser a file without JS interop. Reads the
+// customer id from the auth cookie — never from a parameter — so it can only ever
+// return the caller's own data.
+app.MapGet("/account/export", (HttpContext http, AuthService auth) =>
+{
+    // Deliberately not [Authorize]: the cookie scheme's LoginPath is the *staff*
+    // sign-in, so the framework's challenge would drop a customer on /admin/login —
+    // a dead end with no link across, which is the same trap RedirectToLogin.razor
+    // exists to avoid for the Blazor pages.
+    var user = http.User;
+    if (user.FindFirst(AuthClaims.UserType)?.Value != AuthClaims.CustomerType)
+        return Results.Redirect("/account/login?returnUrl=%2Faccount");
+
+    var id = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (id is null) return Results.Redirect("/account/login?returnUrl=%2Faccount");
+
+    var export = auth.ExportCustomerData(id);
+    if (export is null) return Results.NotFound();
+
+    // Content-Disposition so the browser saves it rather than rendering JSON in a
+    // tab — the account page presents this as "Download my data".
+    var json = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(export,
+        new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+    return Results.File(json, "application/json",
+        fileDownloadName: $"fixlosophy-my-data-{ShopClock.Today:yyyy-MM-dd}.json");
 });
 
 app.Run();
@@ -473,6 +662,114 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
             CONSTRAINT ""PK_Bikes"" PRIMARY KEY (""Id"")
         );
 
+        -- Messages from the /contact form. Stored as well as emailed so an SMTP
+        -- outage costs a notification rather than the enquiry itself.
+        CREATE TABLE IF NOT EXISTS ""Enquiries"" (
+            ""Id""              varchar(36) NOT NULL,
+            ""CreatedAt""       timestamp   NOT NULL DEFAULT now(),
+            ""Name""            text        NOT NULL DEFAULT '',
+            ""Email""           text        NOT NULL DEFAULT '',
+            ""Phone""           text        NOT NULL DEFAULT '',
+            ""Service""         text        NOT NULL DEFAULT '',
+            ""BikeDescription"" text        NOT NULL DEFAULT '',
+            ""Message""         text        NOT NULL DEFAULT '',
+            ""PreferredDate""   timestamp   NULL,
+            ""HandledAt""       timestamp   NULL,
+            CONSTRAINT ""PK_Enquiries"" PRIMARY KEY (""Id"")
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_Enquiries_CreatedAt"" ON ""Enquiries"" (""CreatedAt"" DESC);
+
+        -- Staff notifications (new booking, cancellation, enquiry — and later, stock).
+        -- TargetStaffId NULL means every staff member sees it. No FK to Staff: a
+        -- notification is a historical record and should survive the member leaving.
+        CREATE TABLE IF NOT EXISTS ""Notifications"" (
+            ""Id""            varchar(36) NOT NULL,
+            ""Type""          integer     NOT NULL DEFAULT 0,
+            ""CreatedAt""     timestamp   NOT NULL DEFAULT now(),
+            ""Title""         text        NOT NULL DEFAULT '',
+            ""Body""          text        NOT NULL DEFAULT '',
+            ""LinkUrl""       text        NOT NULL DEFAULT '',
+            ""TargetStaffId"" varchar(36) NULL,
+            ""ReadAt""        timestamp   NULL,
+            CONSTRAINT ""PK_Notifications"" PRIMARY KEY (""Id"")
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_Notifications_CreatedAt""  ON ""Notifications"" (""CreatedAt"" DESC);
+        CREATE INDEX IF NOT EXISTS ""IX_Notifications_Target""     ON ""Notifications"" (""TargetStaffId"");
+
+        -- Read state, one row per (notification, staff member). The row existing IS
+        -- the read state, so nothing ever updates it.
+        --
+        -- This replaces a ""ReadAt"" column on Notifications, which was wrong: a
+        -- broadcast is a single row shared by all staff, so one person marking it
+        -- read cleared everybody's badge.
+        CREATE TABLE IF NOT EXISTS ""NotificationReads"" (
+            ""NotificationId"" varchar(36) NOT NULL,
+            ""StaffId""        varchar(36) NOT NULL,
+            ""ReadAt""         timestamp   NOT NULL DEFAULT now(),
+            CONSTRAINT ""PK_NotificationReads"" PRIMARY KEY (""NotificationId"", ""StaffId"")
+        );
+
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_NotificationReads_Notifications') THEN
+                ALTER TABLE ""NotificationReads"" ADD CONSTRAINT ""FK_NotificationReads_Notifications""
+                    FOREIGN KEY (""NotificationId"") REFERENCES ""Notifications""(""Id"") ON DELETE CASCADE;
+            END IF;
+        END $$;
+
+        -- One-time migration off the old shared column. Anything previously marked
+        -- read becomes read for every staff member who could see it, then the column
+        -- goes — which is what stops this block running again on the next startup.
+        DO $$ BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'Notifications' AND column_name = 'ReadAt'
+            ) THEN
+                INSERT INTO ""NotificationReads"" (""NotificationId"", ""StaffId"", ""ReadAt"")
+                SELECT n.""Id"", s.""Id"", n.""ReadAt""
+                FROM ""Notifications"" n
+                CROSS JOIN ""Staff"" s
+                WHERE n.""ReadAt"" IS NOT NULL
+                  AND (n.""TargetStaffId"" IS NULL OR n.""TargetStaffId"" = s.""Id"")
+                ON CONFLICT DO NOTHING;
+
+                ALTER TABLE ""Notifications"" DROP COLUMN ""ReadAt"";
+            END IF;
+        END $$;
+
+        -- Notes staff write about a customer, usually on completing a job. Both FKs
+        -- are SET NULL: the note is the shop's record and must outlive the booking or
+        -- the account it was written against.
+        CREATE TABLE IF NOT EXISTS ""CustomerNotes"" (
+            ""Id""                varchar(36) NOT NULL,
+            ""CustomerId""        varchar(36) NULL,
+            ""BookingId""         varchar(36) NULL,
+            ""AuthorStaffId""     varchar(36) NULL,
+            ""CreatedAt""         timestamp   NOT NULL DEFAULT now(),
+            ""Body""              text        NOT NULL DEFAULT '',
+            ""VisibleToCustomer"" boolean     NOT NULL DEFAULT false,
+            CONSTRAINT ""PK_CustomerNotes"" PRIMARY KEY (""Id"")
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_CustomerNotes_Customer"" ON ""CustomerNotes"" (""CustomerId"", ""CreatedAt"" DESC);
+        CREATE INDEX IF NOT EXISTS ""IX_CustomerNotes_Booking""  ON ""CustomerNotes"" (""BookingId"");
+
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_CustomerNotes_Customers') THEN
+                ALTER TABLE ""CustomerNotes"" ADD CONSTRAINT ""FK_CustomerNotes_Customers""
+                    FOREIGN KEY (""CustomerId"") REFERENCES ""Customers""(""Id"") ON DELETE SET NULL;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_CustomerNotes_Bookings') THEN
+                ALTER TABLE ""CustomerNotes"" ADD CONSTRAINT ""FK_CustomerNotes_Bookings""
+                    FOREIGN KEY (""BookingId"") REFERENCES ""Bookings""(""Id"") ON DELETE SET NULL;
+            END IF;
+        END $$;
+
+        -- Indexes behind the admin dashboard's filters and the availability queries.
+        -- Without these every filter tab and every calendar month is a sequential scan.
+        CREATE INDEX IF NOT EXISTS ""IX_Bookings_SlotDate""        ON ""Bookings"" (""SlotDate"");
+        CREATE INDEX IF NOT EXISTS ""IX_Bookings_Status""          ON ""Bookings"" (""Status"");
+        CREATE INDEX IF NOT EXISTS ""IX_Bookings_AssignedStaffId"" ON ""Bookings"" (""AssignedStaffId"");
+        CREATE INDEX IF NOT EXISTS ""IX_Bookings_CustomerId""      ON ""Bookings"" (""CustomerId"");
+
         DO $$ BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_Bikes_Customers') THEN
                 ALTER TABLE ""Bikes"" ADD CONSTRAINT ""FK_Bikes_Customers""
@@ -490,6 +787,10 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
         ALTER TABLE ""PriceAdjustments"" ENABLE ROW LEVEL SECURITY;
         ALTER TABLE ""BookingPhotos""    ENABLE ROW LEVEL SECURITY;
         ALTER TABLE ""Bikes""            ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE ""Enquiries""        ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE ""Notifications""     ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE ""NotificationReads"" ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE ""CustomerNotes""     ENABLE ROW LEVEL SECURITY;
 
         -- ServicePricings is a public price catalogue; allow anonymous reads.
         -- All other tables have no policies, so PostgREST access is fully blocked.
@@ -604,7 +905,7 @@ static void SeedServicePricings(AppDbContext db)
 static async Task ApplyAnnualPriceIncreaseAsync(
     AppDbContext db, IConfiguration config, InflationService inflation)
 {
-    var today  = DateTime.Today;
+    var today  = ShopClock.Today;
     var april1 = new DateTime(today.Year, 4, 1);
 
     if (today < april1) return;
@@ -629,7 +930,7 @@ static void SeedDemoData(AppDbContext db)
 {
     if (db.Bookings.Any()) return;
 
-    var today    = DateTime.Today;
+    var today    = ShopClock.Today;
     var names    = new[] { "Lena Fischer", "Marco Rossi", "Sarah O'Brien", "Tom Walsh", "Priya Nair" };
     var services = new[] { ("Servicing Packages", "Basic Service", 35m), ("Components", "Wheel Trueing", 15m), ("Servicing Packages", "Full Service", 70m), ("Specialist", "Brompton Full Service", 70m), ("Components", "Gear Service", 10m) };
     var emails   = new[] { "lena@example.com", "marco@example.com", "sarah@example.com", "tom@example.com", "priya@example.com" };
@@ -648,7 +949,7 @@ static void SeedDemoData(AppDbContext db)
             // real bookings, to match CreateBooking's semantics rather than dating
             // the reference by the appointment's slot date.
             Reference       = $"FIX-{today:yyMMdd}-{BookingService.NextReferenceSequence(db):D3}",
-            CreatedAt       = DateTime.Now.AddHours(-i * 3),
+            CreatedAt       = ShopClock.Now.AddHours(-i * 3),
             CustomerName    = names[i],
             CustomerEmail   = emails[i],
             CustomerPhone   = $"+1 555 00{i}00{i}",

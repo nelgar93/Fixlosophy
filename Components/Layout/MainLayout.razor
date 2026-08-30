@@ -23,19 +23,27 @@
                     <li><a href="/about">About</a></li>
                     <li><a href="/gallery">Gallery</a></li>
                     <li><a href="/contact">Contact</a></li>
+                    <li><a href="/privacy">Privacy</a></li>
+                    <li><a href="/terms">Terms</a></li>
                 </ul>
             </div>
             <div class="footer-contact">
                 <h6>Find Us</h6>
-                <p><Icon Name="pin" /> 42 Spoke Street, Chainring Quarter</p>
-                <p><Icon Name="phone" /> <a href="tel:+447840041100">07840 041100</a></p>
-                <p><Icon Name="mail" /> hello&#64;fixlosophy.com</p>
-                <p><Icon Name="camera" /> <a href="https://instagram.com/fixlosophy" target="_blank" rel="noopener">&#64;fixlosophy</a></p>
-                <p><Icon Name="clock" /> Mon–Fri: 9am – 7pm<br />Sat: 9am – 6pm &middot; Sun: 11am – 5pm</p>
+                <p><Icon Name="pin" /> @SiteContent.AddressShort, @SiteContent.AddressPostcode</p>
+                <p><Icon Name="phone" /> <a href="tel:@SiteContent.PhoneE164">@SiteContent.PhoneDisplay</a></p>
+                <p><Icon Name="mail" /> <a href="mailto:@SiteContent.Email">@SiteContent.Email</a></p>
+                <p><Icon Name="camera" /> <a href="@SiteContent.InstagramUrl" target="_blank" rel="noopener">@SiteContent.InstagramHandle</a></p>
+                <p>
+                    <Icon Name="clock" />
+                    @foreach (var line in SiteContent.HoursDisplay)
+                    {
+                        @line<br />
+                    }
+                </p>
             </div>
         </div>
         <div class="footer-bottom">
-            <p>&copy; @DateTime.Now.Year Fixlosophy. All rights reserved.</p>
+            <p>&copy; @ShopClock.Today.Year @SiteContent.LegalName. All rights reserved.</p>
         </div>
     </div>
 </footer>

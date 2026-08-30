@@ -1,4 +1,19 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(sed -i 's|@inject IEmailSender EmailSender\\\\n@inject NavigationManager Nav|&|' Components/Pages/Book.razor)",
+      "Bash(sed -i 's|^@inject IEmailSender EmailSender$|@inject IEmailSender EmailSender\\\\n@inject NotificationService Notifications|' Components/Pages/Book.razor)",
+      "Bash(sed -i 's|^@inject IEmailSender EmailSender$|@inject IEmailSender EmailSender\\\\n@inject NotificationService Notifications|' Components/Pages/Account.razor)",
+      "Bash(sed -i 's/^    var today  = DateTime\\\\.Today;/    var today  = ShopClock.Today;/' Program.cs)",
+      "Bash(sed -i 's/^    var today    = DateTime\\\\.Today;/    var today    = ShopClock.Today;/' Program.cs)",
+      "Bash(sed -i 's|// Allow DateTime.Now / DateTime.Today to be stored as Postgres \"timestamp without time zone\"|// Lets the DateTime values the app writes \\(see ShopClock — everything goes through it\\)\\\\n// be stored as Postgres \"timestamp without time zone\".|' Program.cs)",
+      "Bash(sed -i 's|<input type=\"checkbox\" name=\"remember\" value=\"true\" checked />|<input type=\"checkbox\" name=\"remember\" value=\"true\" />|' Components/Pages/AccountLogin.razor Components/Pages/AdminLogin.razor)",
+      "Bash(sed -i 's|<input id=\"resetpassword-new-password\" class=\"form-control\" type=\"password\" name=\"password\" required|<input id=\"resetpassword-new-password\" class=\"form-control\" type=\"password\" name=\"password\" required\\\\n                           minlength=\"@AuthService.MinPasswordLength\"|' Components/Pages/ResetPassword.razor)",
+      "Bash(perl -0pi -e 's{<PageTitle>Fixlosophy – Bike Repair Shop in \\\\@SiteContent\\\\.AddressCity</PageTitle>\\\\n<HeadContent>\\\\n.*?</HeadContent>}{<SeoHead Title=\"Bike Repair Shop in \\\\@SiteContent.AddressCity\"\\\\n         Description=\"Independent bike repairs and servicing at \\\\@SiteContent.AddressShort, \\\\@SiteContent.AddressPostcode. Open seven days. Rated \\\\@SiteContent.GoogleRating.ToString\\(\"0.0\"\\)★ by \\\\@SiteContent.GoogleReviewCount riders on Google.\"\\\\n         ImageUrl=\"\\\\@Images.Url\\(\"shop/shopfront.jpg\"\\)\" />}s' Components/Pages/Home.razor)",
+      "Bash(dotnet run *)",
+      "Bash(curl -s -o /dev/null -w \"  %{http_code}\\\\n\" http://localhost:5127/admin/login)"
+    ]
+  },
   "mcpServers": {
     "supabase": {
       "type": "http",

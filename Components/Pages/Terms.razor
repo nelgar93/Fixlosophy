@@ -1,0 +1,102 @@
+@page "/terms"
+
+@*
+    Booking terms only — this site takes no payment, so there are no payment or refund
+    terms to write. If you add online payment later this needs a consumer cancellation
+    rights section (Consumer Contracts Regulations 2013).
+
+    TODO before publishing: solicitor review, plus the company details and the
+    two figures marked below (no-show policy, uncollected-bike period).
+*@
+
+<PageTitle>Terms &amp; Conditions – Fixlosophy</PageTitle>
+<HeadContent>
+    <meta name="description" content="The terms that apply when you book a repair with Fixlosophy." />
+    <meta name="robots" content="noindex, follow" />
+</HeadContent>
+
+<div class="page-hero page-hero--sm">
+    <div class="container">
+        <p class="section-eyebrow">Legal</p>
+        <h1>Terms &amp; Conditions</h1>
+        <p>The short version: we quote before we start, and you approve before we work.</p>
+    </div>
+</div>
+
+<section class="section">
+    <div class="container legal-doc">
+
+        <p class="legal-doc__updated">Last updated: @LastUpdated</p>
+
+        <h2>Who we are</h2>
+        <p>
+            @SiteContent.LegalName, @SiteContent.AddressOneLine.
+            Contact us on <a href="tel:@SiteContent.PhoneE164">@SiteContent.PhoneDisplay</a>
+            or <a href="mailto:@SiteContent.Email">@SiteContent.Email</a>.
+        </p>
+        <p class="legal-doc__todo">
+            <strong>To complete before launch:</strong> registered company name, company
+            number and registered office.
+        </p>
+
+        <h2>Booking an appointment</h2>
+        <ul class="legal-doc__list">
+            <li>Booking online reserves a slot; it isn't a contract for the work itself. That starts when you bring the bike in and approve the quote.</li>
+            <li>We'll confirm your booking by email. If you don't get one, check your spam folder, then call us — assume it hasn't reached us.</li>
+            <li>Please arrive about five minutes before your slot. We hold slots for @HoldMinutes minutes; after that we may give it to someone else.</li>
+            <li>To cancel or change, use your account if you have one, or call the shop. Please give us as much notice as you can.</li>
+        </ul>
+
+        <h2>Prices and quotes</h2>
+        <ul class="legal-doc__list">
+            <li><strong>Prices shown are for labour only.</strong> Parts are quoted separately.</li>
+            <li>Prices shown when booking are estimates based on the service you picked. The final price is confirmed after we've assessed the bike.</li>
+            <li><strong>We will not carry out work you haven't approved.</strong> If the bike needs more than you booked, we'll contact you and wait for your go-ahead.</li>
+            <li>If we can't reach you, we'll do only the work you originally approved.</li>
+        </ul>
+
+        <h2>Your bike</h2>
+        <ul class="legal-doc__list">
+            <li>Please remove valuables, lights, computers and luggage before dropping off. We can't accept responsibility for accessories left on the bike.</li>
+            <li>Tell us about anything we should know — previous repairs, known faults, non-standard or modified parts.</li>
+            <li>We may decline work where a bike is unsafe to ride, beyond economic repair, or needs parts we can't source. We'll always explain why.</li>
+            <li>Please collect within @CollectionDays days of us telling you it's ready. After that we may charge storage, and after 3 months we may treat an uncollected bike as abandoned under the Torts (Interference with Goods) Act 1977 — we'll write to you first.</li>
+        </ul>
+        <p class="legal-doc__todo">
+            <strong>To confirm:</strong> the slot-hold window and the collection period above
+            are placeholders — tell me what you actually do and I'll set them.
+        </p>
+
+        <h2>Our work</h2>
+        <ul class="legal-doc__list">
+            <li>We carry out repairs with reasonable care and skill, as the Consumer Rights Act 2015 requires.</li>
+            <li>If something we did isn't right, bring the bike back and tell us — we'll put it right.</li>
+            <li>Parts we supply carry their manufacturer's warranty. Wear items (tyres, brake pads, cables, chains) aren't covered by a workmanship warranty, because they wear.</li>
+            <li>Nothing in these terms limits your statutory rights, or our liability for death or personal injury caused by our negligence.</li>
+        </ul>
+
+        <h2>Accounts</h2>
+        <ul class="legal-doc__list">
+            <li>Keep your password to yourself; you're responsible for what's done through your account.</li>
+            <li>Give us accurate contact details — we use them to tell you your bike is ready.</li>
+            <li>We may suspend an account being used abusively, or to make bookings that aren't genuine.</li>
+        </ul>
+
+        <h2>This website</h2>
+        <ul class="legal-doc__list">
+            <li>We try to keep prices and availability accurate, but we can't guarantee the site is error-free or always available.</li>
+            <li>If a price is listed wrongly, we'll tell you before doing the work — you're free to walk away at that point.</li>
+            <li>How we handle your data is set out in our <a href="/privacy">privacy policy</a>.</li>
+        </ul>
+
+        <h2>Governing law</h2>
+        <p>These terms are governed by the law of England and Wales.</p>
+
+    </div>
+</section>
+
+@code {
+    private const string LastUpdated = "30 August 2026";
+    private const int HoldMinutes = 15;
+    private const int CollectionDays = 14;
+}

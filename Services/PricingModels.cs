@@ -17,5 +17,5 @@ public class PriceAdjustment
     public int Id { get; set; }
     public int Year { get; set; }
     public decimal Rate { get; set; }
-    public DateTime AppliedAt { get; set; } = DateTime.Now;
+    public DateTime AppliedAt { get; set; } = ShopClock.Now;
 }

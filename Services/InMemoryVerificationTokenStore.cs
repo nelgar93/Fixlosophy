@@ -11,16 +11,16 @@ public class InMemoryVerificationTokenStore : IVerificationTokenStore
     private readonly ConcurrentDictionary<string, (string Hash, DateTime ExpiresAt)> _entries = new();
 
     public void SetToken(string key, string tokenHash, TimeSpan ttl) =>
-        _entries[key] = (tokenHash, DateTime.Now.Add(ttl));
+        _entries[key] = (tokenHash, ShopClock.Now.Add(ttl));
 
     public bool TrySetTokenIfAbsent(string key, string tokenHash, TimeSpan ttl)
     {
-        var expiresAt = DateTime.Now.Add(ttl);
+        var expiresAt = ShopClock.Now.Add(ttl);
         while (true)
         {
             if (_entries.TryGetValue(key, out var existing))
             {
-                if (existing.ExpiresAt > DateTime.Now) return false; // still live — debounce
+                if (existing.ExpiresAt > ShopClock.Now) return false; // still live — debounce
                 if (_entries.TryUpdate(key, (tokenHash, expiresAt), existing)) return true;
             }
             else
@@ -32,7 +32,7 @@ public class InMemoryVerificationTokenStore : IVerificationTokenStore
     }
 
     public string? GetTokenHash(string key) =>
-        _entries.TryGetValue(key, out var entry) && entry.ExpiresAt > DateTime.Now ? entry.Hash : null;
+        _entries.TryGetValue(key, out var entry) && entry.ExpiresAt > ShopClock.Now ? entry.Hash : null;
 
     public void RemoveToken(string key) => _entries.TryRemove(key, out _);
 }

@@ -2,7 +2,9 @@
 @inject BookingService BookingService
 @inject SiteImages Images
 
-<PageTitle>Fixlosophy – Bike Repair Shop</PageTitle>
+<SeoHead Title="@($"Bike Repair Shop in {SiteContent.AddressCity}")"
+         Description="@($"Independent bike repairs and servicing at {SiteContent.AddressShort}, {SiteContent.AddressPostcode}. Open seven days, walk-ins welcome. Rated {SiteContent.GoogleRating:0.0} out of 5 by {SiteContent.GoogleReviewCount} riders on Google.")"
+         ImageUrl="@Images.Url("shop/shopfront.jpg")" />
 
 <!-- HERO -->
 <section class="hero">
@@ -47,11 +49,13 @@
                 <p>Road, MTB, gravel, electric, city, BMX — we fix them all.</p>
             </div>
         </div>
+        @* Was "5-Star Rated / Trusted by thousands of riders across the city" — an
+           unsubstantiated claim under the CAP Code. Replaced with the real figures. *@
         <div class="trust-item">
             <span class="trust-icon"><Icon Name="star" Filled="true" /></span>
             <div>
-                <strong>5-Star Rated</strong>
-                <p>Trusted by thousands of riders across the city.</p>
+                <strong>@SiteContent.GoogleRating.ToString("0.0")★ on Google</strong>
+                <p>From @SiteContent.GoogleReviewCount reviews by local riders.</p>
             </div>
         </div>
     </div>
@@ -176,47 +180,32 @@
     </div>
 </section>
 
-<!-- TESTIMONIALS -->
-<section class="section testimonials">
+<!-- REVIEWS -->
+@*
+    The three testimonial cards that used to sit here were invented — invented names,
+    invented quotes, invented five-star ratings. Publishing fabricated consumer reviews
+    is a banned practice under the DMCC Act 2024, quite apart from being untrue. What's
+    left is the shop's real aggregate rating, linked to the profile it comes from so
+    anyone can check it. Update the two figures in SiteContent when they move.
+*@
+<section class="section reviews">
     <div class="container">
         <div class="section-header">
             <p class="section-eyebrow">Reviews</p>
             <h2>What Riders Say</h2>
         </div>
-        <div class="testimonials-grid">
-            <div class="testimonial-card">
-                <div class="stars"><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /></div>
-                <p>"Brought my road bike in for a full service — got it back in perfect condition the same afternoon. Incredible value and super friendly staff."</p>
-                <div class="testimonial-author">
-                    <div class="avatar">JM</div>
-                    <div>
-                        <strong>James M.</strong>
-                        <span>Road Cyclist</span>
-                    </div>
-                </div>
+        <div class="rating-summary">
+            <div class="rating-summary__score">@SiteContent.GoogleRating.ToString("0.0")</div>
+            <div class="stars" aria-hidden="true">
+                <Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" />
             </div>
-            <div class="testimonial-card">
-                <div class="stars"><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /></div>
-                <p>"They diagnosed an intermittent creaking noise that two other shops couldn't find. Fixed in 20 minutes. These guys really know their stuff."</p>
-                <div class="testimonial-author">
-                    <div class="avatar">SR</div>
-                    <div>
-                        <strong>Sofia R.</strong>
-                        <span>MTB Rider</span>
-                    </div>
-                </div>
-            </div>
-            <div class="testimonial-card">
-                <div class="stars"><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /><Icon Name="star" Filled="true" /></div>
-                <p>"My e-bike needed a battery check and the chain replaced. Transparent pricing, fast turnaround, and they even cleaned the whole bike. Love this place!"</p>
-                <div class="testimonial-author">
-                    <div class="avatar">TK</div>
-                    <div>
-                        <strong>Tom K.</strong>
-                        <span>E-Bike Commuter</span>
-                    </div>
-                </div>
-            </div>
+            <p class="rating-summary__count">
+                Rated @SiteContent.GoogleRating.ToString("0.0") out of 5 by
+                @SiteContent.GoogleReviewCount riders on Google.
+            </p>
+            <a href="@SiteContent.GoogleProfileUrl" class="btn btn-outline" target="_blank" rel="noopener">
+                Read the reviews
+            </a>
         </div>
     </div>
 </section>
@@ -228,7 +217,7 @@
         <p>Book a repair online or swing by the shop — no appointment needed for quick fixes.</p>
         <div class="cta-actions">
             <a href="/book" class="btn btn-primary btn-lg">Book a Repair</a>
-            <a href="tel:+447840041100" class="btn btn-ghost btn-lg"><Icon Name="phone" /> Call Us Now</a>
+            <a href="tel:@SiteContent.PhoneE164" class="btn btn-ghost btn-lg"><Icon Name="phone" /> Call Us Now</a>
         </div>
     </div>
 </section>

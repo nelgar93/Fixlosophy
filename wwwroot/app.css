@@ -32,11 +32,30 @@
     --space-6: 1.5rem;
     --space-8: 2rem;
 
-    /* Font-size scale — same rationale as --space-*: new/touched rules use these. */
-    --fs-eyebrow: 0.8rem;    /* uppercase "eyebrow" label above a heading */
-    --fs-h3-compact: 1.05rem; /* card/table sub-heading, smaller than default h3 */
-    --fs-sm: 0.875rem;       /* small body text: labels, footer copy, error text */
+    /* Font-size scale. Every size below 1rem in both stylesheets now comes from
+       here — there used to be nine different literals (0.7 / 0.75 / 0.8 / 0.82 /
+       0.85 / 0.875 / 0.9 / 0.95rem, plus .9rem and .875rem written without the
+       leading zero) doing what is really about five jobs, which is where the
+       "everything is slightly different" feeling came from.
+
+       Values are unchanged from what was already on the page — this was a
+       consolidation, not a re-scale — except 0.82rem, a one-off that is now --fs-xs
+       like every other caption. */
+    --fs-2xs: 0.7rem;        /* micro caps: table headers, badges, step labels */
+    --fs-tiny: 0.75rem;      /* status/reference badges, stat labels */
+    --fs-caption: 0.8rem;    /* captions and meta text under a heading */
     --fs-xs: 0.85rem;        /* muted caption/meta text */
+    --fs-sm: 0.875rem;       /* small body text: labels, footer copy, error text */
+    --fs-body-sm: 0.9rem;    /* small body copy */
+    --fs-body: 0.95rem;      /* form controls, buttons, card titles */
+    --fs-h3-compact: 1.05rem; /* card/table sub-heading, smaller than default h3 */
+
+    /* Semantic alias — the uppercase "eyebrow" label above a heading. */
+    --fs-eyebrow: var(--fs-caption);
+
+    /* Minimum comfortable touch target. Anything a finger has to hit on a phone
+       should reach this in both dimensions, padding included. */
+    --touch-min: 44px;
 }
 
 /* ---------- Reset / Base ---------- */
@@ -49,7 +68,33 @@
    to `normal`, which is what threw the calendar's arrow glyphs off-centre. */
 button, input, select, textarea { font: inherit; }
 
+/* Every :hover rule in this file and in booking.css is wrapped in
+   `@media (hover: hover) and (pointer: fine)`. A touchscreen has no hover state, so
+   the browser fakes one on tap and leaves it applied until you tap something else —
+   which left service cards, gallery tiles, booking rows and filter chips visibly
+   stuck in their hover styling after every touch. The wrap means those styles only
+   ever apply to a real pointer. Press feedback on touch comes from :active and from
+   the .selected / .active classes, which are unaffected. */
+
+/* Suppresses the grey/blue box the browser flashes over a tapped element. The site
+   has a lot of <div @onclick> controls, so this was firing constantly. */
+* { -webkit-tap-highlight-color: transparent; }
+
 html { scroll-behavior: smooth; }
+
+/* Honour the OS "reduce motion" setting: no smooth scrolling, no bouncing scroll
+   hint, and transitions collapse to something imperceptible rather than being
+   removed outright (0s can make state changes read as glitches). */
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
 
 body {
     font-family: var(--font);
@@ -62,14 +107,21 @@ body {
 
 img { max-width: 100%; display: block; }
 a { color: var(--green); text-decoration: none; }
-a:hover { color: var(--green-dark); }
+@media (hover: hover) and (pointer: fine) {
+    a:hover { color: var(--green-dark); }
+}
 ul { list-style: none; }
 
+/* The gutter grows to clear the notch in landscape, where the safe-area insets are
+   horizontal. max() rather than addition so the normal gutter is unchanged on every
+   device without insets. */
 .container {
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 1.25rem;
+    padding-inline:
+        max(1.25rem, env(safe-area-inset-left))
+        max(1.25rem, env(safe-area-inset-right));
 }
 
 /* ---------- Typography ---------- */
@@ -83,6 +135,21 @@ h1 { font-size: clamp(2rem, 6vw, 3.5rem); }
 h2 { font-size: clamp(1.5rem, 4vw, 2.4rem); }
 h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
+/* Routes.razor has <FocusOnNavigate Selector="h1">, which moves focus to the page
+   heading after every navigation so a screen reader announces the new page. That
+   gives the h1 tabindex="-1", and Chromium counts the programmatic focus as
+   :focus-visible — so the browser was painting its default focus ring around the
+   main heading on every single page load, on every page.
+
+   The focus move is worth keeping; the ring is not. Nobody pressed Tab to get here,
+   and the heading isn't a control (tabindex="-1" keeps it out of the tab order), so
+   suppressing the ring costs no keyboard affordance. Interactive elements keep
+   theirs — see .btn:focus-visible and the lightbox controls. */
+h1[tabindex="-1"]:focus,
+h1[tabindex="-1"]:focus-visible {
+    outline: none;
+}
+
 /* ---------- Buttons ---------- */
 .btn {
     display: inline-flex;
@@ -91,7 +158,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     gap: 0.4rem;
     padding: 0.7rem 1.5rem;
     border-radius: 50px;
-    font-size: 0.95rem;
+    font-size: var(--fs-body);
     font-weight: 600;
     cursor: pointer;
     border: 2px solid transparent;
@@ -126,12 +193,14 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     color: var(--white);
     border-color: var(--green);
 }
-.btn-primary:hover {
-    background: var(--green-dark);
-    border-color: var(--green-dark);
-    color: var(--white);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(61,187,72,0.35);
+@media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover {
+        background: var(--green-dark);
+        border-color: var(--green-dark);
+        color: var(--white);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 16px rgba(61,187,72,0.35);
+    }
 }
 
 .btn-outline {
@@ -139,9 +208,11 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     color: var(--green);
     border-color: var(--green);
 }
-.btn-outline:hover {
-    background: var(--green);
-    color: var(--white);
+@media (hover: hover) and (pointer: fine) {
+    .btn-outline:hover {
+        background: var(--green);
+        color: var(--white);
+    }
 }
 
 .btn-ghost {
@@ -149,10 +220,41 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     color: var(--white);
     border-color: rgba(255,255,255,0.5);
 }
-.btn-ghost:hover {
-    background: rgba(255,255,255,0.12);
-    border-color: var(--white);
-    color: var(--white);
+@media (hover: hover) and (pointer: fine) {
+    .btn-ghost:hover {
+        background: rgba(255,255,255,0.12);
+        border-color: var(--white);
+        color: var(--white);
+    }
+}
+
+/* Destructive actions (delete account, delete booking). Muted until hover so it
+   doesn't shout from the page, matching .action-btn--delete's treatment. */
+.btn-danger {
+    background: transparent;
+    color: #f87171;
+    border-color: rgba(220,38,38,0.45);
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-danger:hover {
+        background: #dc2626;
+        border-color: #dc2626;
+        color: var(--white);
+    }
+}
+
+/* Visually hidden but available to screen readers — for labels whose text would be
+   redundant on screen next to a placeholder. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
 }
 
 /* ---------- Navbar ---------- */
@@ -163,10 +265,6 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     background: var(--dark);
     border-bottom: 1px solid var(--dark-3);
     transition: box-shadow 0.3s;
-}
-
-.navbar-wrapper.navbar-scrolled {
-    box-shadow: 0 2px 16px rgba(0,0,0,0.3);
 }
 
 .navbar {
@@ -184,7 +282,9 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     display: flex;
     align-items: center;
 }
-.navbar-brand:hover { color: var(--green) !important; }
+@media (hover: hover) and (pointer: fine) {
+    .navbar-brand:hover { color: var(--green) !important; }
+}
 /* logo.avif has a solid black background; screen blend hides it on dark surfaces */
 .navbar-logo { height: 40px; width: auto; display: block; mix-blend-mode: screen; }
 
@@ -211,21 +311,31 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 .nav-links a {
     color: rgba(255,255,255,0.75);
     font-weight: 500;
-    font-size: 0.95rem;
+    font-size: var(--fs-body);
     padding: 0.5rem 0.9rem;
     border-radius: 6px;
     transition: color 0.2s, background 0.2s;
 }
 
-.nav-links a:hover,
+/* The current page's link stays highlighted on every device — it's state, not
+   feedback — so it sits outside the pointer guard. Only the hover styling is
+   gated. These shared one selector list, which would have hidden the active
+   highlight on every phone. */
 .nav-links a.active {
     color: var(--white);
     background: rgba(255,255,255,0.08);
 }
 
+@media (hover: hover) and (pointer: fine) {
+    .nav-links a:hover {
+        color: var(--white);
+        background: rgba(255,255,255,0.08);
+    }
+}
+
 .nav-user {
     color: rgba(255,255,255,0.5);
-    font-size: 0.9rem;
+    font-size: var(--fs-body-sm);
     padding: 0.5rem 0.4rem 0.5rem 0.9rem;
     white-space: nowrap;
 }
@@ -238,20 +348,29 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     font-weight: 600 !important;
     margin-left: 0.5rem;
 }
-.btn-book:hover {
-    background: var(--green-dark) !important;
-    color: var(--white) !important;
+@media (hover: hover) and (pointer: fine) {
+    .btn-book:hover {
+        background: var(--green-dark) !important;
+        color: var(--white) !important;
+    }
 }
 
 /* Hamburger */
+/* The bars stay 24×2px; the padding grows the hit area to --touch-min in both
+   directions. It was 40×32, which is a small target for the control that opens the
+   whole menu on a phone. */
 .hamburger {
     display: none;
     flex-direction: column;
+    justify-content: center;
+    align-items: center;
     gap: 5px;
     background: none;
     border: none;
     cursor: pointer;
     padding: 8px;
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
     border-radius: 6px;
 }
 .hamburger span {
@@ -396,13 +515,13 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 .trust-item strong {
     display: block;
-    font-size: 0.95rem;
+    font-size: var(--fs-body);
     color: var(--white);
     margin-bottom: 0.1rem;
 }
 
 .trust-item p {
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     color: rgba(255,255,255,0.5);
     margin: 0;
 }
@@ -428,7 +547,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 .section-subtitle {
     color: rgba(255,255,255,0.55);
-    font-size: 1.05rem;
+    font-size: var(--fs-h3-compact);
     max-width: 540px;
     margin: 0.75rem auto 0;
 }
@@ -454,10 +573,12 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     position: relative;
 }
 
-.service-card:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--shadow);
-    border-color: var(--green);
+@media (hover: hover) and (pointer: fine) {
+    .service-card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow);
+        border-color: var(--green);
+    }
 }
 
 .service-card--featured {
@@ -475,7 +596,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     right: 1.5rem;
     background: var(--green);
     color: var(--white);
-    font-size: 0.7rem;
+    font-size: var(--fs-2xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -494,7 +615,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 .service-card p {
     color: rgba(255,255,255,0.55);
-    font-size: 0.9rem;
+    font-size: var(--fs-body-sm);
     margin-bottom: 1rem;
 }
 
@@ -502,7 +623,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     display: inline-block;
     color: var(--green);
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: var(--fs-body);
 }
 
 /* ---------- How It Works ---------- */
@@ -536,7 +657,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 }
 
 .step h3 { margin-bottom: 0.5rem; }
-.step p { color: rgba(255,255,255,0.55); font-size: 0.9rem; }
+.step p { color: rgba(255,255,255,0.55); font-size: var(--fs-body-sm); }
 
 .step-arrow {
     display: none;
@@ -591,12 +712,44 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     flex-shrink: 0;
 }
 
-.testimonial-author strong { display: block; font-size: 0.9rem; }
-.testimonial-author span { color: var(--mid); font-size: 0.8rem; }
+.testimonial-author strong { display: block; font-size: var(--fs-body-sm); }
+.testimonial-author span { color: var(--mid); font-size: var(--fs-caption); }
+
+/* ---------- Rating summary ---------- */
+/* Replaces the invented testimonial cards on the home page: the shop's real
+   aggregate rating, linked to the profile it comes from. */
+.rating-summary {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+}
+
+.rating-summary__score {
+    font-size: 3rem;
+    font-weight: 900;
+    line-height: 1;
+    color: var(--green);
+}
+
+.rating-summary .stars {
+    justify-content: center;
+    font-size: 1.15rem;
+    margin: 0.5rem 0 0.75rem;
+}
+
+.rating-summary__count {
+    color: rgba(255,255,255,0.55);
+    font-size: var(--fs-sm);
+    margin-bottom: 1.25rem;
+}
 
 /* ---------- CTA Banner ---------- */
 .cta-banner {
@@ -629,7 +782,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 .cta-banner p {
     color: rgba(255,255,255,0.6);
-    font-size: 1.05rem;
+    font-size: var(--fs-h3-compact);
     margin-bottom: 2rem;
     max-width: 480px;
     margin-left: auto;
@@ -653,7 +806,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 .page-hero--sm { padding: 4rem 1.25rem 3rem; }
 
 .page-hero h1 { color: var(--white); margin-bottom: 0.75rem; }
-.page-hero p { color: rgba(255,255,255,0.65); font-size: 1.05rem; max-width: 500px; margin: 0 auto; }
+.page-hero p { color: rgba(255,255,255,0.65); font-size: var(--fs-h3-compact); max-width: 500px; margin: 0 auto; }
 .page-hero .section-eyebrow { margin-bottom: 0.5rem; }
 
 /* ---------- Services Page ---------- */
@@ -686,12 +839,12 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 .pricing-row:last-child { border-bottom: none; }
 
 .pricing-info h4 { font-size: 1rem; margin-bottom: 0.2rem; }
-.pricing-info p { color: rgba(255,255,255,0.5); font-size: 0.875rem; margin: 0; }
+.pricing-info p { color: rgba(255,255,255,0.5); font-size: var(--fs-sm); margin: 0; }
 
 .pricing-cost {
     color: var(--green);
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: var(--fs-body);
     white-space: nowrap;
     flex-shrink: 0;
 }
@@ -716,7 +869,9 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     min-width: 0;
 }
 
-.package-card:hover { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+@media (hover: hover) and (pointer: fine) {
+    .package-card:hover { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+}
 
 .package-card--popular {
     border-color: var(--green);
@@ -730,7 +885,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     transform: translateX(-50%);
     background: var(--green);
     color: var(--white);
-    font-size: 0.7rem;
+    font-size: var(--fs-2xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -758,7 +913,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 .package-card li {
     color: rgba(255,255,255,0.7);
-    font-size: 0.9rem;
+    font-size: var(--fs-body-sm);
     padding: 0.3rem 0;
 }
 
@@ -774,7 +929,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 .services-note p {
     color: rgba(255,255,255,0.5);
     margin-bottom: 1.25rem;
-    font-size: 0.9rem;
+    font-size: var(--fs-body-sm);
 }
 
 /* ---------- About Page ---------- */
@@ -813,12 +968,29 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 
 .stat-label { color: rgba(255,255,255,0.6); font-size: var(--fs-xs); }
 
+/* The star beside the rating figure. Without this rule .icon's `width: 1em` took
+   its size from .stat-number's 2.2rem and rendered a 35px star next to "4.9". */
+.stat-star {
+    font-size: 0.45em;
+    margin-left: 0.15em;
+    vertical-align: 0.35em;
+}
+
 .team-section { background: var(--dark-2); border-top: 1px solid var(--dark-3); border-bottom: 1px solid var(--dark-3); }
 
 .team-grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: 1.25rem;
+}
+
+/* Two-item variants. The generic .team-grid / .about-stats rules step up to three and
+   four columns at wider breakpoints, which strands a two-item set across a very wide
+   row; these cap the track count and keep the pair centred. */
+.team-grid--pair,
+.about-stats--pair {
+    max-width: 620px;
+    margin-inline: auto;
 }
 
 .team-card {
@@ -830,7 +1002,9 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     transition: all 0.25s;
 }
 
-.team-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+@media (hover: hover) and (pointer: fine) {
+    .team-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+}
 
 .team-avatar {
     width: 72px;
@@ -853,7 +1027,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     margin-bottom: 0.75rem !important;
 }
 
-.team-card p { color: rgba(255,255,255,0.55); font-size: 0.875rem; margin: 0; }
+.team-card p { color: rgba(255,255,255,0.55); font-size: var(--fs-sm); margin: 0; }
 
 .values-grid {
     display: grid;
@@ -869,10 +1043,12 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     transition: all 0.25s;
 }
 
-.value-card:hover { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+@media (hover: hover) and (pointer: fine) {
+    .value-card:hover { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+}
 .value-icon { font-size: 2rem; margin-bottom: 0.75rem; }
 .value-card h3 { margin-bottom: 0.5rem; }
-.value-card p { color: rgba(255,255,255,0.55); font-size: 0.9rem; }
+.value-card p { color: rgba(255,255,255,0.55); font-size: var(--fs-body-sm); }
 
 /* ---------- Contact Page ---------- */
 .contact-grid {
@@ -900,7 +1076,7 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
     padding: 0.7rem 1rem;
     border: 1.5px solid var(--border-dark);
     border-radius: var(--radius-sm);
-    font-size: 0.95rem;
+    font-size: var(--fs-body);
     font-family: var(--font);
     color: rgba(255,255,255,0.85);
     background: var(--dark-3);
@@ -922,6 +1098,30 @@ h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
 }
 
 textarea.form-control { resize: vertical; min-height: 130px; }
+
+/* Consent / privacy note under a form's submit button. */
+.form-consent {
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.45);
+    line-height: 1.5;
+    margin: 0 0 1rem;
+}
+.form-consent a { color: var(--green); text-decoration: underline; }
+
+/* Small explanatory text under a single field. */
+.form-hint {
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.45);
+    margin-top: 0.3rem;
+}
+.form-hint a { color: var(--green); }
+
+/* A field whose value is fixed by the account rather than typed. */
+.form-control[readonly] {
+    background: var(--dark-2);
+    color: rgba(255,255,255,0.6);
+    cursor: default;
+}
 
 .validation-message {
     /* Per-field validation text (Blazor's <ValidationMessage>) is a different UI
@@ -976,9 +1176,11 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .info-item:last-child { margin-bottom: 0; }
 
 .info-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 0.1rem; }
-.info-item strong { display: block; font-size: 0.85rem; margin-bottom: 0.2rem; }
-.info-item p, .info-item a { font-size: 0.875rem; color: rgba(255,255,255,0.55); margin: 0; }
-.info-item a:hover { color: var(--green); }
+.info-item strong { display: block; font-size: var(--fs-xs); margin-bottom: 0.2rem; }
+.info-item p, .info-item a { font-size: var(--fs-sm); color: rgba(255,255,255,0.55); margin: 0; }
+@media (hover: hover) and (pointer: fine) {
+    .info-item a:hover { color: var(--green); }
+}
 
 .turnaround-list { display: flex; flex-direction: column; gap: 0.5rem; }
 
@@ -986,7 +1188,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.875rem;
+    font-size: var(--fs-sm);
     color: rgba(255,255,255,0.65);
     padding: 0.4rem 0;
     border-bottom: 1px solid var(--border-dark);
@@ -997,14 +1199,124 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .turnaround-time {
     font-weight: 600;
     color: var(--green);
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
+}
+
+/* ---------- Error / not-found pages ---------- */
+.error-page {
+    max-width: 560px;
+    text-align: center;
+}
+
+.error-page p {
+    color: rgba(255,255,255,0.65);
+    line-height: 1.7;
+    margin-bottom: 1.75rem;
+}
+
+.error-page__actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.error-page__ref {
+    margin-top: 2rem;
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.35);
+}
+
+.error-page__ref code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    word-break: break-all;
+}
+
+@media (max-width: 479px) {
+    .error-page__actions { flex-direction: column; }
+    .error-page__actions .btn { width: 100%; justify-content: center; }
+}
+
+/* ---------- Legal documents (privacy, terms) ---------- */
+/* Long-form prose, so it gets a reading measure rather than the full container
+   width — 12-word lines are hard to track back from at the end of each one. */
+.legal-doc {
+    max-width: 720px;
+}
+
+.legal-doc h2 {
+    font-size: clamp(1.2rem, 3vw, 1.5rem);
+    margin: 2.5rem 0 0.75rem;
+}
+
+.legal-doc h2:first-of-type { margin-top: 0; }
+
+.legal-doc h3 {
+    font-size: var(--fs-h3-compact);
+    margin: 1.5rem 0 0.5rem;
+    color: rgba(255,255,255,0.9);
+}
+
+.legal-doc p {
+    color: rgba(255,255,255,0.65);
+    margin-bottom: 1rem;
+    line-height: 1.75;
+}
+
+.legal-doc__list {
+    margin: 0 0 1rem;
+    padding-left: 1.1rem;
+    list-style: disc;
+}
+
+.legal-doc__list li {
+    color: rgba(255,255,255,0.65);
+    margin-bottom: 0.6rem;
+    line-height: 1.7;
+    padding-left: 0.25rem;
+}
+
+.legal-doc__list strong { color: rgba(255,255,255,0.9); }
+
+.legal-doc a { text-decoration: underline; }
+
+.legal-doc code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9em;
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+}
+
+.legal-doc__updated {
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 2rem;
+}
+
+/* Marks a passage that still needs the shop's own details filled in. Deliberately
+   loud — it must be impossible to publish these without noticing. */
+.legal-doc__todo {
+    background: rgba(234,179,8,0.10);
+    border: 1px solid rgba(234,179,8,0.35);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+    color: #eab308 !important;
+    font-size: var(--fs-sm);
 }
 
 /* ---------- Footer ---------- */
+/* The footer is the last thing on the page, so in landscape its bottom edge sits
+   under the home indicator. */
 .site-footer {
     background: var(--dark);
     color: rgba(255,255,255,0.65);
-    padding: 3rem 0 1.5rem;
+    padding: 3rem 0 calc(1.5rem + env(safe-area-inset-bottom));
 }
 
 .footer-grid {
@@ -1020,23 +1332,25 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
 .footer-links h6, .footer-contact h6 {
     color: var(--white);
-    font-size: 0.85rem;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 1.5px;
     margin-bottom: 0.75rem;
 }
 
 .footer-links ul li { margin-bottom: 0.4rem; }
-.footer-links a { color: rgba(255,255,255,0.6); font-size: 0.875rem; transition: color 0.2s; }
-.footer-links a:hover { color: var(--green); }
+.footer-links a { color: rgba(255,255,255,0.6); font-size: var(--fs-sm); transition: color 0.2s; }
+@media (hover: hover) and (pointer: fine) {
+    .footer-links a:hover { color: var(--green); }
+}
 
-.footer-contact p { font-size: 0.875rem; margin-bottom: 0.4rem; }
+.footer-contact p { font-size: var(--fs-sm); margin-bottom: 0.4rem; }
 
 .footer-bottom {
     border-top: 1px solid var(--dark-3);
     padding-top: 1.25rem;
     text-align: center;
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     color: rgba(255,255,255,0.35);
 }
 
@@ -1046,21 +1360,26 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 }
 
 /* ---------- Error UI ---------- */
+/* Blazor reveals this with an inline `display: block`, so any flex properties here
+   would never apply — hence no gap/align-items. It also used to be `white-space:
+   nowrap` centred at left:50%, which ran off both edges of a phone; it's now a
+   width-constrained bar that wraps, clear of the home indicator. */
 #blazor-error-ui {
     display: none;
     position: fixed;
-    bottom: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: calc(1rem + env(safe-area-inset-bottom));
+    left: 1rem;
+    right: 1rem;
+    max-width: 32rem;
+    margin: 0 auto;
     background: #b91c1c;
     color: var(--white);
-    padding: 0.75rem 1.5rem;
-    border-radius: 50px;
-    font-size: 0.875rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+    text-align: center;
     z-index: 9999;
-    gap: 1rem;
-    align-items: center;
-    white-space: nowrap;
     box-shadow: var(--shadow-lg);
 }
 
@@ -1102,6 +1421,26 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     pointer-events: none;
 }
 
+/* The horizontal gradient above assumes the text sits in the left half of the hero,
+   which is true on desktop — .hero-eyebrow / .hero-title / .hero-actions cap at
+   680px inside a 1200px container. On a phone the text is full-width, so it runs
+   out into the thin end of that gradient and the subtitle lands over the brightest
+   part of the photo (the bikes), where white-on-photo stops being readable.
+
+   Below the point where that assumption holds, the scrim becomes vertical instead,
+   which tracks where the text actually is. Kept well short of opaque: the earlier
+   note on this element records that pushing these past ~0.9 composites to near-black
+   and erases the photograph. */
+@media (max-width: 767px) {
+    .hero-scrim {
+        background:
+            linear-gradient(to bottom,
+                rgba(10,10,10,0.55) 0%,
+                rgba(10,10,10,0.72) 40%,
+                rgba(10,10,10,0.80) 100%);
+    }
+}
+
 /* The green wash sits under the scrim rather than over it — stacked on top it
    tinted the photo and the buttons along with everything else. */
 .hero::before { z-index: 1; }
@@ -1127,10 +1466,12 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
 }
 
-.gallery-item:hover {
-    transform: translateY(-3px);
-    border-color: var(--green);
-    box-shadow: var(--shadow);
+@media (hover: hover) and (pointer: fine) {
+    .gallery-item:hover {
+        transform: translateY(-3px);
+        border-color: var(--green);
+        box-shadow: var(--shadow);
+    }
 }
 
 .gallery-item img {
@@ -1155,10 +1496,13 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 }
 
 /* ---------- Gallery lightbox ---------- */
+/* Above .navbar-wrapper (1000). At z-index 100 the sticky header rendered on top of
+   the fullscreen photo, which was most obvious on a phone where the header takes a
+   larger share of the screen. */
 .lightbox {
     position: fixed;
     inset: 0;
-    z-index: 100;
+    z-index: 1100;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1167,6 +1511,9 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     background: rgba(10,10,10,0.94);
     backdrop-filter: blur(4px);
     cursor: zoom-out;
+    /* Stops a swipe on the overlay chaining through to the page behind it, which on
+       a phone scrolled the gallery away underneath the open photo. */
+    overscroll-behavior: contain;
 }
 
 .lightbox:focus { outline: none; }
@@ -1204,10 +1551,12 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     transition: background-color 0.2s, border-color 0.2s;
 }
 
-.lightbox__nav:hover,
-.lightbox__close:hover {
-    background: var(--green);
-    border-color: var(--green);
+@media (hover: hover) and (pointer: fine) {
+    .lightbox__nav:hover,
+    .lightbox__close:hover {
+        background: var(--green);
+        border-color: var(--green);
+    }
 }
 
 .lightbox__nav:focus-visible,
@@ -1216,10 +1565,12 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     outline-offset: 2px;
 }
 
+/* The lightbox is inset:0 over the whole screen, so its controls are the one place
+   that can land under the notch or the home indicator. */
 .lightbox__close {
     position: absolute;
-    top: 1rem;
-    right: 1rem;
+    top: calc(1rem + env(safe-area-inset-top));
+    right: calc(1rem + env(safe-area-inset-right));
 }
 
 .lightbox__count {
@@ -1236,10 +1587,10 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 @media (max-width: 639px) {
     .lightbox__nav {
         position: absolute;
-        bottom: 1rem;
+        bottom: calc(1rem + env(safe-area-inset-bottom));
     }
-    .lightbox__nav--prev { left: 1rem; }
-    .lightbox__nav--next { right: 1rem; }
+    .lightbox__nav--prev { left: calc(1rem + env(safe-area-inset-left)); }
+    .lightbox__nav--next { right: calc(1rem + env(safe-area-inset-right)); }
     .lightbox__figure,
     .lightbox__figure img { max-width: 96vw; max-height: 74vh; }
 }
@@ -1274,7 +1625,35 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .contact-photo figcaption {
     padding: 0.8rem 1rem;
     color: rgba(255,255,255,0.55);
-    font-size: 0.82rem;
+    font-size: var(--fs-xs);
+}
+
+/* ============================================================
+   iOS INPUT ZOOM
+   ------------------------------------------------------------
+   Safari on iOS zooms the viewport whenever a focused input's font-size is under
+   16px, and never zooms back out — so every tap on a field left the page enlarged
+   and the layout shifted. Every control on the site was between 13.6px and 15.2px,
+   missing the threshold by as little as 0.8px, which is why it read as a mysterious
+   jitter rather than an obvious mistake.
+
+   The floor is applied at mobile widths only; desktop keeps the smaller, denser
+   sizes, where the behaviour doesn't exist. Note the fix is NOT `maximum-scale=1`
+   on the viewport meta: that also stops the zoom, but by disabling pinch-zoom for
+   everybody, which fails WCAG 1.4.4.
+
+   Note: booking.css loads AFTER this file and defines its own smaller sizes for the
+   admin controls (.form-control--compact, .admin-search .form-control, and so on).
+   Media queries add no specificity, so those would win on source order alone — the
+   matching override for them lives at the end of booking.css. Keep the two in step.
+   ============================================================ */
+@media (max-width: 767px) {
+    input,
+    select,
+    textarea,
+    .form-control {
+        font-size: 16px;
+    }
 }
 
 /* ============================================================
@@ -1317,6 +1696,9 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     .about-stats {
         grid-template-columns: repeat(4, 1fr);
     }
+    .about-stats--pair {
+        grid-template-columns: repeat(2, 1fr);
+    }
     .about-intro {
         grid-template-columns: 1fr;
     }
@@ -1341,6 +1723,9 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     }
     .team-grid {
         grid-template-columns: repeat(3, 1fr);
+    }
+    .team-grid--pair {
+        grid-template-columns: repeat(2, 1fr);
     }
     .about-intro {
         grid-template-columns: 3fr 2fr;
@@ -1376,6 +1761,12 @@ textarea.form-control { resize: vertical; min-height: 130px; }
         border-top: 1px solid var(--dark-3);
         border-bottom: 1px solid var(--dark-3);
         box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        /* Signed in, the menu holds 8 items at ~48px — taller than a phone in
+           landscape, and previously with no way to reach the last entries.
+           overscroll-behavior stops the scroll chaining to the page behind. */
+        max-height: calc(100svh - var(--nav-h));
+        overflow-y: auto;
+        overscroll-behavior: contain;
     }
 
     .nav-links--open { display: flex; }
@@ -1385,6 +1776,10 @@ textarea.form-control { resize: vertical; min-height: 130px; }
         padding: 0.75rem 1rem;
         border-radius: 8px;
         font-size: 1rem;
+        /* Full-width already, but this guarantees the vertical half of the target. */
+        min-height: var(--touch-min);
+        display: flex;
+        align-items: center;
     }
 
     .btn-book {
@@ -1449,3 +1844,149 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
 /* Booking-page, customer-auth, and admin-only styles live in booking.css,
    not here — app.css is the public-site stylesheet. */
+
+/* ---------- Password field with reveal toggle ---------- */
+/* Typing a password blind on a phone keyboard is the main reason people lock
+   themselves out. The toggle is a real button (focusable, labelled) driven by
+   wwwroot/site.js, not an inline handler. */
+.password-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-field .form-control {
+    /* Room for the toggle, so a long password doesn't run underneath it. */
+    padding-right: 3rem;
+}
+
+.password-field__toggle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    min-height: var(--touch-min);
+    padding: 0;
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.45);
+    font-size: 1.1rem;
+    cursor: pointer;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.password-field__toggle:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: -2px;
+}
+
+/* Pressed = password currently visible. */
+.password-field__toggle[aria-pressed="true"] { color: var(--green); }
+
+@media (hover: hover) and (pointer: fine) {
+    .password-field__toggle:hover { color: var(--white); }
+}
+
+/* ---------- /devinfo (development only) ---------- */
+/* Deliberately plain: this page exists to be read on a phone in a hurry, and its
+   own styling must not be what's under test. */
+.devinfo { max-width: 640px; }
+
+.devinfo__hero {
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+    padding: 1.5rem 1.25rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.devinfo__hero-label {
+    font-size: var(--fs-2xs);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.4);
+}
+
+.devinfo__hero-value {
+    font-size: 3rem;
+    font-weight: 900;
+    line-height: 1.1;
+    color: var(--green);
+    font-variant-numeric: tabular-nums;
+}
+
+.devinfo__hero-note {
+    font-size: var(--fs-sm);
+    color: rgba(255,255,255,0.6);
+    margin: 0.5rem 0 1rem;
+    line-height: 1.5;
+}
+
+.devinfo__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-bottom: 1.5rem;
+}
+
+.devinfo__row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--border-dark);
+}
+
+.devinfo__row:last-child { border-bottom: none; }
+
+.devinfo__row dt {
+    font-size: var(--fs-2xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: rgba(255,255,255,0.4);
+}
+
+.devinfo__row dd {
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: rgba(255,255,255,0.85);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-word;
+}
+
+.devinfo__ua { font-size: var(--fs-2xs); color: rgba(255,255,255,0.55); }
+
+/* Rendered so they can be measured, but they aren't controls — the sample row is
+   aria-hidden and these must not look clickable. */
+.devinfo__samples {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.devinfo__samples .cal-day {
+    width: 44px;
+    flex: 0 0 auto;
+}
+
+.devinfo__actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.devinfo__actions .btn { flex: 1 1 auto; justify-content: center; }
+
+.devinfo__copied {
+    margin-top: 0.75rem;
+    font-size: var(--fs-sm);
+    color: var(--green);
+}

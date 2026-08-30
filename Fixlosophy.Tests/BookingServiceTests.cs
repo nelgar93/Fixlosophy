@@ -84,12 +84,40 @@ public class BookingServiceTests
     public void GetAvailableSlots_ReturnsShorterSundayList_OnSunday()
     {
         using var db = NewDb();
-        var slots = NewService(db).GetAvailableSlots(NextSunday());
+        var sunday = NextSunday();
+        var slots = NewService(db).GetAvailableSlots(sunday);
 
-        Assert.Equal(BookingService.SundayTimeSlots, slots);
+        Assert.Equal(BookingService.SlotsFor(sunday), slots);
         // The 9am and 6pm weekday slots fall outside Sunday's 11–17 trading hours.
         Assert.DoesNotContain("09:00", slots);
         Assert.DoesNotContain("18:00", slots);
+    }
+
+    // Saturday closes at 18:00, an hour earlier than the 19:00 weekday close, so its
+    // last bookable slot is 17:00. This used to share the weekday list and offered an
+    // 18:00 appointment for the moment the shop locks up.
+    [Fact]
+    public void SlotsFor_StopsAnHourBeforeClosing_OnSaturday()
+    {
+        var saturday = DateTime.Today.AddDays(1);
+        while (saturday.DayOfWeek != DayOfWeek.Saturday) saturday = saturday.AddDays(1);
+
+        var slots = BookingService.SlotsFor(saturday);
+
+        Assert.Equal("17:00", slots[^1]);
+        Assert.DoesNotContain("18:00", slots);
+        Assert.Contains("09:00", slots);
+    }
+
+    // 13:00 is lunch on every trading day.
+    [Fact]
+    public void SlotsFor_SkipsTheLunchHour_OnEveryOpenDay()
+    {
+        foreach (var day in Enum.GetValues<DayOfWeek>())
+        {
+            var slots = BookingService.SlotsFor(DateTime.Today.AddDays(((int)day - (int)DateTime.Today.DayOfWeek + 7) % 7));
+            Assert.DoesNotContain("13:00", slots);
+        }
     }
 
     [Fact]
@@ -103,8 +131,9 @@ public class BookingServiceTests
     public void GetAvailableSlots_ReturnsEverySlot_WhenNothingIsBooked()
     {
         using var db = NewDb();
-        var slots = NewService(db).GetAvailableSlots(FutureWorkday());
-        Assert.Equal(BookingService.TimeSlots, slots);
+        var date = FutureWorkday();
+        var slots = NewService(db).GetAvailableSlots(date);
+        Assert.Equal(BookingService.SlotsFor(date), slots);
     }
 
     [Fact]
@@ -250,7 +279,7 @@ public class BookingServiceTests
         var target = NextSunday().AddDays(7);
 
         var filler = 0;
-        foreach (var slot in BookingService.SundayTimeSlots)
+        foreach (var slot in BookingService.SlotsFor(target))
             for (var i = 0; i < BookingService.MaxPerSlot; i++)
                 Seed(db, target, slot, email: $"filler{filler++}@example.com");
 
@@ -269,7 +298,7 @@ public class BookingServiceTests
         while (target.DayOfWeek == DayOfWeek.Sunday) target = target.AddDays(1);
 
         var filler = 0;
-        foreach (var slot in BookingService.TimeSlots)
+        foreach (var slot in BookingService.SlotsFor(target))
             for (var i = 0; i < BookingService.MaxPerSlot; i++)
                 Seed(db, target, slot, email: $"filler{filler++}@example.com");
 
@@ -397,7 +426,7 @@ public class BookingServiceTests
     // ── Ported from the dev-branch suite ─────────────────────────────────────
     // dev's GetAvailableSlots_ReturnsEmpty_OnSunday is deliberately NOT carried
     // over: it asserted the shop is shut on Sundays, which this branch superseded
-    // with the shorter 11–17 Sunday slot list (see SundayTimeSlots).
+    // with the shorter 11–17 Sunday slot list (see SiteContent.HoursFor).
 
     [Fact]
     public void AssignStaff_ReturnsFalse_WhenBookingDoesNotExist()

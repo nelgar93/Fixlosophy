@@ -1,0 +1,167 @@
+@page "/privacy"
+
+@*
+    Written to describe what this application actually does with personal data — the
+    fields it collects, where they're stored, how long they're kept, and how to get
+    them deleted. Every claim here is traceable to code: see AuthService (accounts),
+    BookingService (bookings), StorageService (photos), Program.cs (cookie + rate
+    limiting) and IVerificationTokenStore (Redis tokens).
+
+    TODO before publishing: have this reviewed by your solicitor, and fill in the
+    two placeholders marked below — the registered company details and the ICO
+    registration number (register at ico.org.uk if you haven't; a bike shop holding
+    customer contact details normally needs to).
+*@
+
+<PageTitle>Privacy Policy – Fixlosophy</PageTitle>
+<HeadContent>
+    <meta name="description" content="How Fixlosophy collects, uses, and protects your personal data." />
+    <meta name="robots" content="noindex, follow" />
+</HeadContent>
+
+<div class="page-hero page-hero--sm">
+    <div class="container">
+        <p class="section-eyebrow">Legal</p>
+        <h1>Privacy Policy</h1>
+        <p>What we collect, why we collect it, and how to get it removed.</p>
+    </div>
+</div>
+
+<section class="section">
+    <div class="container legal-doc">
+
+        <p class="legal-doc__updated">Last updated: @LastUpdated</p>
+
+        <h2>Who we are</h2>
+        <p>
+            @SiteContent.LegalName ("we", "us") operates this website and the bike shop at
+            @SiteContent.AddressOneLine. We are the data controller for the personal data
+            described below.
+        </p>
+        <p>
+            Questions, or want your data removed? Email
+            <a href="mailto:@SiteContent.Email">@SiteContent.Email</a> or call
+            <a href="tel:@SiteContent.PhoneE164">@SiteContent.PhoneDisplay</a>.
+        </p>
+        <p class="legal-doc__todo">
+            <strong>To complete before launch:</strong> registered company name, company
+            number and registered office; ICO registration number.
+        </p>
+
+        <h2>What we collect</h2>
+
+        <h3>When you book a repair</h3>
+        <ul class="legal-doc__list">
+            <li><strong>Your name, email address and phone number</strong> — so we can identify the bike and contact you when it's ready.</li>
+            <li><strong>Your bike's make and model, and any notes you write</strong> — so the mechanic knows what's coming.</li>
+            <li><strong>Photos you choose to upload</strong> — optional, up to five per booking. Only upload photos you're happy for us to see; don't include people or number plates.</li>
+            <li><strong>The appointment itself</strong> — service, date, time, price estimate and status.</li>
+        </ul>
+
+        <h3>When you create an account</h3>
+        <ul class="legal-doc__list">
+            <li><strong>Your name, email address and phone number.</strong></li>
+            <li><strong>Your password</strong>, stored only as a salted PBKDF2 hash. We never store or see the password itself, and cannot recover it — only reset it.</li>
+            <li><strong>Bikes you save</strong>, so they're one tap away next time you book.</li>
+        </ul>
+
+        <h3>When you send us a message</h3>
+        <ul class="legal-doc__list">
+            <li>The name, email, optional phone number, and message you type into the contact form.</li>
+        </ul>
+
+        <h3>Automatically</h3>
+        <ul class="legal-doc__list">
+            <li><strong>Your IP address</strong>, held briefly in memory to rate-limit sign-in attempts and stop automated abuse. It is not written to our database.</li>
+            <li><strong>One cookie</strong>, described below.</li>
+        </ul>
+        <p>We do not use analytics, advertising, tracking pixels, or social media trackers on this site.</p>
+
+        <h2>Cookies</h2>
+        <p>
+            We set a single cookie, <code>Fixlosophy.Auth</code>. It keeps you signed in and
+            nothing else. It is strictly necessary for the sign-in feature to work, so it
+            doesn't require your consent — and because we set no other cookies, there is no
+            cookie banner to click through.
+        </p>
+        <ul class="legal-doc__list">
+            <li>It contains your account ID, display name and role — no password, and no payment details.</li>
+            <li>It is HTTP-only and, in production, sent only over HTTPS, so scripts in your browser cannot read it.</li>
+            <li>It lasts until you close your browser, unless you tick "Remember me on this device", which extends it to 30 days.</li>
+            <li>Signing out deletes it immediately.</li>
+        </ul>
+
+        <h2>Why we're allowed to use it</h2>
+        <ul class="legal-doc__list">
+            <li><strong>To perform our contract with you</strong> — taking and fulfilling a booking, and running your account.</li>
+            <li><strong>Our legitimate interests</strong> — keeping the site secure and available (rate limiting, abuse prevention), and keeping records of work carried out.</li>
+            <li><strong>Legal obligation</strong> — retaining transaction records where tax or consumer law requires it.</li>
+        </ul>
+        <p>We do not send marketing email, so we don't rely on consent for it.</p>
+
+        <h2>Who else sees it</h2>
+        <p>We do not sell your data or share it for advertising. It reaches only:</p>
+        <ul class="legal-doc__list">
+            <li><strong>Our shop staff</strong>, who see what they need to do the job. Staff permissions are set individually, and some staff cannot see customer contact details at all.</li>
+            <li><strong>Supabase</strong>, which hosts our database and photo storage.</li>
+            <li><strong>Our email provider</strong>, which delivers booking confirmations and password-reset messages.</li>
+            <li><strong>Our hosting provider</strong>, which runs the server.</li>
+        </ul>
+        <p class="legal-doc__todo">
+            <strong>To complete before launch:</strong> name the hosting provider and email
+            provider, and confirm the region your Supabase project is hosted in — if it's
+            outside the UK/EEA, this section needs a note about the safeguards used for
+            international transfers.
+        </p>
+
+        <h2>How long we keep it</h2>
+        <ul class="legal-doc__list">
+            <li><strong>Bookings and repair records</strong> — 6 years, to cover the period in which a claim about work carried out could be brought.</li>
+            <li><strong>Photos you upload</strong> — 12 months after the booking is completed, then deleted.</li>
+            <li><strong>Account details</strong> — until you ask us to delete the account.</li>
+            <li><strong>Contact form messages</strong> — 12 months.</li>
+            <li><strong>Password reset and email verification links</strong> — 1 hour and 24 hours respectively, then they expire automatically.</li>
+        </ul>
+
+        <h2>Your rights</h2>
+        <p>Under UK GDPR you can ask us to:</p>
+        <ul class="legal-doc__list">
+            <li><strong>Show you</strong> the data we hold about you.</li>
+            <li><strong>Correct</strong> anything that's wrong.</li>
+            <li><strong>Delete</strong> your data, where we don't have to keep it.</li>
+            <li><strong>Give you a copy</strong> in a portable format.</li>
+            <li><strong>Restrict or object to</strong> how we use it.</li>
+        </ul>
+        <p>
+            If you have an account, you can do the first and fourth of these yourself from
+            <a href="/account">your account page</a>, which also has a delete button. Otherwise
+            email <a href="mailto:@SiteContent.Email">@SiteContent.Email</a> — we'll respond
+            within one month.
+        </p>
+        <p>
+            Deleting your account removes your profile, saved bikes and login. Bookings are
+            kept but anonymised — disconnected from you and stripped of your contact details —
+            because we need the record of work carried out.
+        </p>
+
+        <h2>Complaints</h2>
+        <p>
+            If you're unhappy with how we've handled your data, please tell us first so we can
+            put it right. You also have the right to complain to the Information Commissioner's
+            Office at <a href="https://ico.org.uk/make-a-complaint/" target="_blank" rel="noopener">ico.org.uk</a>
+            or on 0303 123 1113.
+        </p>
+
+        <h2>Changes</h2>
+        <p>
+            If we change this policy we'll update the date at the top. Material changes affecting
+            how we use data you've already given us will be emailed to account holders.
+        </p>
+
+    </div>
+</section>
+
+@code {
+    // Bump when the text changes materially.
+    private const string LastUpdated = "30 August 2026";
+}

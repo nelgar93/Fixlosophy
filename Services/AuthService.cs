@@ -18,7 +18,9 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
     // link stays valid (VerificationTokenHours / ResetTokenMinutes above), so a
     // genuinely lost email can be retried quickly instead of being blocked for
     // the link's whole validity window.
-    private const int ResendCooldownSeconds = 60;
+    // Public so the confirmation page can drive its countdown button from the same
+    // number the server enforces, rather than a hardcoded copy that can drift.
+    public const int ResendCooldownSeconds = 60;
 
     private static readonly PasswordHasher<string> _hasher = new();
 
@@ -85,7 +87,14 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
             VerifyPassword(_dummyHash, password); // equalize timing (anti-enumeration)
             return null;
         }
-        return VerifyPassword(customer.PasswordHash, password) ? customer : null;
+        if (!VerifyPassword(customer.PasswordHash, password)) return null;
+
+        // Knowing the password proves ownership, so it's safe to adopt any guest
+        // bookings under this address here. Covers accounts grandfathered as
+        // EmailConfirmed by the column default, which never pass through ConfirmEmail.
+        // Idempotent, so running on every sign-in costs one indexed query.
+        LinkGuestBookings(customer);
+        return customer;
     }
 
     // Restore a persisted customer session from the auth cookie's subject id.
@@ -177,6 +186,124 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
         return (true, null);
     }
 
+    // ── Guest booking adoption ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Attaches any unclaimed bookings made under this customer's email address to
+    /// their account, so a booking placed as a guest shows up once they register.
+    /// Returns how many were adopted.
+    ///
+    /// SECURITY: an email address on its own must never be enough to claim someone's
+    /// booking history — it isn't a secret. This is therefore only ever called from
+    /// two places, both of which have already proved control of the mailbox or the
+    /// password: <see cref="ConfirmEmail"/> (they clicked the emailed link) and the
+    /// success path of <see cref="AuthenticateCustomer"/> (they knew the password).
+    /// Do not call it from registration.
+    ///
+    /// Only rows with a null CustomerId are touched, so a booking already belonging
+    /// to someone else can never be reassigned.
+    /// </summary>
+    public int LinkGuestBookings(Customer customer)
+    {
+        var normEmail = NormalizeEmail(customer.Email);
+#pragma warning disable CA1304, CA1311, CA1862 // SQL-translated by EF Core; see AuthenticateStaff.
+        var orphans = db.Bookings
+            .Where(b => b.CustomerId == null && b.CustomerEmail.ToLower() == normEmail)
+            .ToList();
+#pragma warning restore CA1304, CA1311, CA1862
+
+        if (orphans.Count == 0) return 0;
+
+        foreach (var booking in orphans)
+            booking.CustomerId = customer.Id;
+
+        // Notes written against those bookings follow the customer in. A note added
+        // while they were still a guest would otherwise stay orphaned and never
+        // appear on their record.
+        var bookingIds = orphans.Select(b => b.Id).ToList();
+        foreach (var note in db.CustomerNotes.Where(n => n.CustomerId == null && bookingIds.Contains(n.BookingId!)))
+            note.CustomerId = customer.Id;
+
+        db.SaveChanges();
+        return orphans.Count;
+    }
+
+    // ── Account deletion (UK GDPR right to erasure) ──────────────────────────
+
+    /// <summary>
+    /// Deletes a customer's account and anonymises their bookings.
+    ///
+    /// The bookings themselves are kept — they're the record of work carried out on a
+    /// bike, which we have a legitimate interest in retaining — but every field that
+    /// identifies a person is overwritten first. The FK is ON DELETE SET NULL, so
+    /// deleting the customer row alone would detach the bookings while leaving the
+    /// name, email and phone sitting on them in plain text; that isn't erasure.
+    ///
+    /// Saved bikes cascade automatically (ON DELETE CASCADE), as do booking photos
+    /// when their booking is removed.
+    /// </summary>
+    public bool DeleteCustomerAccount(string customerId)
+    {
+        var customer = db.Customers.Find(customerId);
+        if (customer is null) return false;
+
+        foreach (var booking in db.Bookings.Where(b => b.CustomerId == customerId).ToList())
+        {
+            booking.CustomerName  = "Deleted customer";
+            booking.CustomerEmail = "";
+            booking.CustomerPhone = "";
+            booking.Notes         = "";
+            booking.CustomerId    = null;
+        }
+
+        db.Customers.Remove(customer);
+        db.SaveChanges();
+        return true;
+    }
+
+    /// <summary>
+    /// Everything held about one customer, for the UK GDPR right of access. Deliberately
+    /// excludes the password hash and reset-token columns: they're about them but
+    /// handing them back is a security risk with no benefit to the person asking.
+    /// </summary>
+    public CustomerDataExport? ExportCustomerData(string customerId)
+    {
+        var customer = db.Customers
+            .Include(c => c.Bikes)
+            .AsNoTracking()
+            .FirstOrDefault(c => c.Id == customerId);
+        if (customer is null) return null;
+
+        var bookings = db.Bookings
+            .Where(b => b.CustomerId == customerId)
+            .Include(b => b.Photos)
+            .AsNoTracking()
+            .OrderByDescending(b => b.SlotDate)
+            .ToList();
+
+        // Only notes staff explicitly marked as shareable. Internal ones stay internal
+        // — that flag exists so staff can write frankly, and an access request must
+        // not quietly undo it.
+        var sharedNotes = db.CustomerNotes
+            .Where(n => n.CustomerId == customerId && n.VisibleToCustomer && n.BookingId != null)
+            .AsNoTracking()
+            .OrderBy(n => n.CreatedAt)
+            .ToList()
+            .GroupBy(n => n.BookingId!)
+            .ToDictionary(g => g.Key, g => g.Select(n => n.Body).ToArray());
+
+        return new CustomerDataExport(
+            ExportedAt: ShopClock.Now,
+            Account: new(customer.FullName, customer.Email, customer.Phone,
+                         customer.CreatedAt, customer.EmailConfirmed),
+            Bikes: [.. customer.Bikes.Select(b => new ExportedBike(b.MakeModel, b.CreatedAt))],
+            Bookings: [.. bookings.Select(b => new ExportedBooking(
+                b.Reference, b.CreatedAt, b.ServiceName, b.ServiceCategory, b.ServicePrice,
+                b.SlotDate, b.SlotTime, b.BikeDescription, b.Notes, b.Status.ToString(),
+                b.Photos.Count,
+                sharedNotes.GetValueOrDefault(b.Id, [])))]);
+    }
+
     // ── Email verification ───────────────────────────────────────────────────
     // Token expiry is backed by Redis (via tokenStore), keyed by email, using TTL
     // instead of a manually-compared timestamp column — see IVerificationTokenStore.
@@ -244,6 +371,12 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
         // replayed link just redundantly re-confirms an already-confirmed row and
         // retries the removal — never burns the only working link with no DB change.
         db.SaveChanges();
+
+        // Clicking the emailed link proves they control the mailbox, so any guest
+        // bookings under this address are theirs. Done here rather than at
+        // registration so the account is already populated at first sign-in.
+        LinkGuestBookings(customer);
+
         tokenStore.RemoveToken(key);
         return true;
     }
@@ -262,12 +395,12 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
     {
         var customer = GetCustomerByEmail(email);
         if (customer is null) return null;
-        if (customer.ResetCooldownUntil is { } cooldown && cooldown > DateTime.Now) return null;
+        if (customer.ResetCooldownUntil is { } cooldown && cooldown > ShopClock.Now) return null;
 
         var token = GenerateToken();
         customer.ResetTokenHash = HashToken(token);
-        customer.ResetTokenExpiresAt = DateTime.Now.AddMinutes(ResetTokenMinutes);
-        customer.ResetCooldownUntil = DateTime.Now.AddSeconds(ResendCooldownSeconds);
+        customer.ResetTokenExpiresAt = ShopClock.Now.AddMinutes(ResetTokenMinutes);
+        customer.ResetCooldownUntil = ShopClock.Now.AddSeconds(ResendCooldownSeconds);
         db.SaveChanges();
         return token;
     }
@@ -276,12 +409,12 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
     {
         var staff = GetStaffByEmail(email);
         if (staff is null) return null;
-        if (staff.ResetCooldownUntil is { } cooldown && cooldown > DateTime.Now) return null;
+        if (staff.ResetCooldownUntil is { } cooldown && cooldown > ShopClock.Now) return null;
 
         var token = GenerateToken();
         staff.ResetTokenHash = HashToken(token);
-        staff.ResetTokenExpiresAt = DateTime.Now.AddMinutes(ResetTokenMinutes);
-        staff.ResetCooldownUntil = DateTime.Now.AddSeconds(ResendCooldownSeconds);
+        staff.ResetTokenExpiresAt = ShopClock.Now.AddMinutes(ResetTokenMinutes);
+        staff.ResetCooldownUntil = ShopClock.Now.AddSeconds(ResendCooldownSeconds);
         db.SaveChanges();
         return token;
     }
@@ -295,7 +428,7 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
         var hash = HashToken(token);
 
         var customer = db.Customers.FirstOrDefault(c =>
-            c.ResetTokenHash == hash && c.ResetTokenExpiresAt > DateTime.Now);
+            c.ResetTokenHash == hash && c.ResetTokenExpiresAt > ShopClock.Now);
         if (customer is not null)
         {
             customer.PasswordHash = HashPassword(newPassword);
@@ -306,7 +439,7 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
         }
 
         var staff = db.Staff.FirstOrDefault(s =>
-            s.ResetTokenHash == hash && s.ResetTokenExpiresAt > DateTime.Now);
+            s.ResetTokenHash == hash && s.ResetTokenExpiresAt > ShopClock.Now);
         if (staff is not null)
         {
             staff.PasswordHash = HashPassword(newPassword);

@@ -2,6 +2,9 @@
 @attribute [ExcludeFromInteractiveRouting]
 
 <PageTitle>Sign In – Fixlosophy</PageTitle>
+<HeadContent>
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
 
 <div class="admin-login">
     <div class="admin-login__card">
@@ -56,17 +59,20 @@
             <input type="hidden" name="returnUrl" value="@ReturnUrl" />
 
             <div class="form-group">
-                <label>Email</label>
-                <input class="form-control" type="email" name="email" required
+                <label for="accountlogin-email">Email</label>
+                <input id="accountlogin-email" class="form-control" type="email" name="email" required
                        autocomplete="username" placeholder="you@example.com" value="@Email" />
             </div>
             <div class="form-group">
-                <label>Password</label>
-                <input class="form-control" type="password" name="password" required
+                <label for="accountlogin-password">Password</label>
+                <div class="password-field">
+<input id="accountlogin-password" class="form-control" type="password" name="password" required
                        autocomplete="current-password" placeholder="Your password" />
+                    <button type="button" class="password-field__toggle" data-password-toggle="accountlogin-password" aria-pressed="false" aria-label="Show password"><Icon Name="eye" /></button>
+                </div>
             </div>
             <label class="remember-row">
-                <input type="checkbox" name="remember" value="true" checked />
+                <input type="checkbox" name="remember" value="true" />
                 <span>Remember me on this device</span>
             </label>
             <p class="auth-alt"><a href="@ForgotPasswordHref">Forgot password?</a></p>

@@ -6,7 +6,7 @@ public class Booking
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public string Reference { get; set; } = "";
-    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime CreatedAt { get; set; } = ShopClock.Now;
     public string CustomerName { get; set; } = "";
     public string CustomerEmail { get; set; } = "";
     public string CustomerPhone { get; set; } = "";
@@ -35,7 +35,7 @@ public class BookingPhoto
     // not a URL — the folder is private, so viewing a photo requires minting a
     // signed URL server-side (see StorageService.GetSignedPhotoUrlAsync).
     public string StoragePath { get; set; } = "";
-    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime CreatedAt { get; set; } = ShopClock.Now;
 
     // Navigation
     public Booking? Booking { get; set; }

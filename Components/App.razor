@@ -3,7 +3,13 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    @* viewport-fit=cover lets the page paint into the notch/home-indicator area; the
+       CSS then uses env(safe-area-inset-*) to keep content out of it. Note there is
+       deliberately no maximum-scale/user-scalable=no here — that would stop iOS's
+       zoom-on-focus, but by disabling pinch-zoom for everyone (a WCAG 1.4.4 failure).
+       The zoom is handled properly with a 16px input floor in app.css. *@
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0A0A" />
     <base href="/" />
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["app.css"]" />
@@ -12,6 +18,15 @@
     <ImportMap />
     <link rel="icon" type="image/svg+xml" href="@SupabaseImageUrls.FaviconSvg" />
     <link rel="icon" type="image/png" href="@SupabaseImageUrls.FaviconPng" />
+    <link rel="apple-touch-icon" href="@SupabaseImageUrls.FaviconPng" />
+
+    @* LocalBusiness structured data. High value for a shop with a physical address:
+       it's what feeds the Google Maps / knowledge panel. Emitted once here rather
+       than per page so it can't drift between them. Serialized rather than
+       hand-written so the address and hours come from SiteContent and stay in step
+       with the booking slots. *@
+    <script type="application/ld+json">@((MarkupString)LocalBusinessJsonLd)</script>
+
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
@@ -19,12 +34,62 @@
     <Routes @rendermode="PageRenderMode" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    @* Behaviours for the statically-rendered auth pages, which have no circuit. *@
+    <script src="@Assets["site.js"]"></script>
 </body>
 
 </html>
 
 @code {
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    // JsonSerializer rather than a hand-written string: it escapes the values, so a
+    // future apostrophe in the shop name can't break out of the JSON and turn the
+    // <script> block into malformed markup.
+    private string LocalBusinessJsonLd => System.Text.Json.JsonSerializer.Serialize(new
+    {
+        context     = "https://schema.org",
+        type        = "BicycleStore",
+        name        = SiteContent.ShopName,
+        legalName   = SiteContent.LegalName,
+        telephone   = SiteContent.PhoneE164,
+        email       = SiteContent.Email,
+        url         = $"{HttpContext.Request.Scheme}://{HttpContext.Request.Host}",
+        sameAs      = new[] { SiteContent.InstagramUrl, SiteContent.GoogleProfileUrl },
+        address = new
+        {
+            type            = "PostalAddress",
+            streetAddress   = $"{SiteContent.AddressVenue}, {SiteContent.AddressStreet}",
+            addressLocality = SiteContent.AddressCity,
+            postalCode      = SiteContent.AddressPostcode,
+            addressCountry  = "GB"
+        },
+        geo = new
+        {
+            type      = "GeoCoordinates",
+            latitude  = SiteContent.Latitude,
+            longitude = SiteContent.Longitude
+        },
+        openingHours = SiteContent.HoursSchemaOrg,
+        aggregateRating = new
+        {
+            type        = "AggregateRating",
+            ratingValue = SiteContent.GoogleRating,
+            reviewCount = SiteContent.GoogleReviewCount,
+            bestRating  = 5
+        }
+    }, JsonLdOptions)
+        // schema.org uses @-prefixed keys, which aren't valid C# identifiers.
+        .Replace("\"context\":", "\"@context\":", StringComparison.Ordinal)
+        .Replace("\"type\":", "\"@type\":", StringComparison.Ordinal);
+
+    // The default encoder is deliberate: it escapes < > & as < > &, so
+    // no value can close the surrounding <script> tag. UnsafeRelaxedJsonEscaping would
+    // do the opposite — it is the wrong choice for JSON embedded in HTML.
+    private static readonly System.Text.Json.JsonSerializerOptions JsonLdOptions = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+    };
 
     // Pages are interactive by default; those marked [ExcludeFromInteractiveRouting]
     // (the auth/login pages) render as static SSR so their <form> posts hit the

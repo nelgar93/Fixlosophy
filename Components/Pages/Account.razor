@@ -4,9 +4,16 @@
 @inject BookingService BookingService
 @inject BikeService BikeService
 @inject ActionRateLimiter RateLimiter
+@inject IEmailSender EmailSender
+@inject NotificationService Notifications
+@inject CustomerService Customers
 @inject NavigationManager Nav
+@inject ILogger<Account> Logger
 
 <PageTitle>My Account – Fixlosophy</PageTitle>
+<HeadContent>
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
 
 @if (loggedInCustomer != null)
 {
@@ -34,9 +41,18 @@
                 }
                 else
                 {
+                    @if (cancelError != null)
+                    {
+                        <div class="booking-error">@cancelError</div>
+                    }
+                    @if (cancelMessage != null)
+                    {
+                        <div class="admin-success"><Icon Name="check" /> @cancelMessage</div>
+                    }
                     <div class="account-booking-list">
-                        @foreach (var b in UpcomingBookings)
+                        @foreach (var booking in UpcomingBookings)
                         {
+                            var b = booking;
                             <div class="account-booking-row">
                                 <span class="ref-badge">@b.Reference</span>
                                 <div class="account-booking-row__info">
@@ -47,7 +63,24 @@
                                         <span>@b.BikeDescription</span>
                                     }
                                 </div>
-                                <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                                <div class="account-booking-row__actions">
+                                    <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                                    @if (cancelConfirmId == b.Id)
+                                    {
+                                        <button class="action-btn action-btn--cancel" @onclick="() => CancelBooking(b.Id)">
+                                            Confirm cancel
+                                        </button>
+                                        <button class="action-btn action-btn--keep" @onclick="() => cancelConfirmId = null">
+                                            Keep
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button class="action-btn action-btn--delete" @onclick="() => StartCancel(b.Id)">
+                                            Cancel
+                                        </button>
+                                    }
+                                </div>
                             </div>
                         }
                     </div>
@@ -67,6 +100,18 @@
                                 <div class="account-booking-row__info">
                                     <strong>@b.ServiceName</strong>
                                     <span>@b.SlotDate.ToString("d MMM yyyy") &middot; @b.SlotTime</span>
+                                    @* Notes the mechanic chose to share — the written
+                                       report the Gold Service advertises. Internal
+                                       notes never reach here. *@
+                                    @if (_sharedNotes.TryGetValue(b.Id, out var notes))
+                                    {
+                                        @foreach (var note in notes)
+                                        {
+                                            <span class="account-booking-row__note">
+                                                <Icon Name="wrench" /> @note
+                                            </span>
+                                        }
+                                    }
                                 </div>
                                 <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
                             </div>
@@ -88,17 +133,17 @@
                 }
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Full Name</label>
-                        <input class="form-control" type="text" @bind="profileName" />
+                        <label for="account-full-name">Full Name</label>
+                        <input id="account-full-name" class="form-control" type="text" @bind="profileName" />
                     </div>
                     <div class="form-group">
-                        <label>Email</label>
-                        <input class="form-control" type="email" value="@loggedInCustomer.Email" disabled />
+                        <label for="account-email">Email</label>
+                        <input id="account-email" class="form-control" type="email" value="@loggedInCustomer.Email" disabled />
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Phone *</label>
-                    <input class="form-control" type="tel" @bind="profilePhone" required />
+                    <label for="account-phone">Phone *</label>
+                    <input id="account-phone" class="form-control" type="tel" @bind="profilePhone" required />
                 </div>
                 <button class="btn btn-primary" @onclick="SaveProfile">Save Details</button>
             </div>
@@ -115,17 +160,17 @@
                     <div class="booking-error">@passwordError</div>
                 }
                 <div class="form-group">
-                    <label>Current Password</label>
-                    <input class="form-control" type="password" @bind="currentPassword" autocomplete="current-password" />
+                    <label for="account-current-password">Current Password</label>
+                    <input id="account-current-password" class="form-control" type="password" @bind="currentPassword" autocomplete="current-password" />
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>New Password</label>
-                        <input class="form-control" type="password" @bind="newPassword" autocomplete="new-password" />
+                        <label for="account-new-password">New Password</label>
+                        <input id="account-new-password" class="form-control" type="password" @bind="newPassword" autocomplete="new-password" />
                     </div>
                     <div class="form-group">
-                        <label>Confirm New Password</label>
-                        <input class="form-control" type="password" @bind="confirmPassword" autocomplete="new-password" />
+                        <label for="account-confirm-new-password">Confirm New Password</label>
+                        <input id="account-confirm-new-password" class="form-control" type="password" @bind="confirmPassword" autocomplete="new-password" />
                     </div>
                 </div>
                 <button class="btn btn-primary" @onclick="SavePassword">Update Password</button>
@@ -151,12 +196,69 @@
                         }
                     </ul>
                 }
-                <div class="form-row">
-                    <div class="form-group">
-                        <input class="form-control" type="text" @bind="newBikeName" placeholder="e.g. Trek Marlin 7, 2022" />
-                    </div>
+                @* Input and button in their own row rather than .form-row's two-column
+                   grid, which stretched the button to the row height and left it
+                   misaligned against the field's bottom margin. *@
+                <div class="inline-add-row">
+                    <label class="sr-only" for="new-bike">Bike make &amp; model</label>
+                    <input id="new-bike" class="form-control" type="text" @bind="newBikeName"
+                           placeholder="e.g. Trek Marlin 7, 2022" />
                     <button class="btn btn-outline" @onclick="AddBike">Add Bike</button>
                 </div>
+            </div>
+
+            <!-- Your Data (UK GDPR) -->
+            <div class="booking-card">
+                <h2 class="booking-card__title">Your Data</h2>
+                <p class="booking-card__subtitle">
+                    See what we hold about you, or close your account. Our
+                    <a href="/privacy">privacy policy</a> explains what we keep and why.
+                </p>
+
+                @if (deleteError != null)
+                {
+                    <div class="booking-error">@deleteError</div>
+                }
+
+                <div class="account-data-actions">
+                    @* A real link, not a button: the browser has to fetch this over HTTP
+                       to receive it as a file — a circuit can't hand over a download. *@
+                    <a class="btn btn-outline" href="/account/export" target="_blank"
+                       rel="noopener" data-enhance-nav="false">Download my data</a>
+
+                    @if (!confirmingDelete)
+                    {
+                        <button class="btn btn-danger" @onclick="() => confirmingDelete = true">
+                            Delete my account
+                        </button>
+                    }
+                </div>
+
+                @if (confirmingDelete)
+                {
+                    <div class="account-danger-zone">
+                        <p>
+                            <strong>This can't be undone.</strong> Your profile, saved bikes and
+                            sign-in will be deleted. Past bookings are kept as a record of work
+                            carried out, but your name, email, phone number and notes are erased
+                            from them.
+                        </p>
+                        @if (UpcomingBookings.Count > 0)
+                        {
+                            <p class="account-danger-zone__warning">
+                                You have @UpcomingBookings.Count upcoming booking@(UpcomingBookings.Count == 1 ? "" : "s").
+                                We'll still expect you — call us on
+                                <a href="tel:@SiteContent.PhoneE164">@SiteContent.PhoneDisplay</a> to cancel.
+                            </p>
+                        }
+                        <div class="account-data-actions">
+                            <button class="btn btn-danger" @onclick="DeleteAccount" disabled="@deleting">
+                                @(deleting ? "Deleting…" : "Yes, delete my account")
+                            </button>
+                            <button class="btn btn-outline" @onclick="() => confirmingDelete = false">Keep my account</button>
+                        </div>
+                    </div>
+                }
             </div>
 
         </div>
@@ -167,6 +269,10 @@
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private Customer? loggedInCustomer;
     private List<Booking> _bookings = [];
+
+    // BookingId -> notes staff chose to share on that job. Internal notes are
+    // filtered out by the query, not here.
+    private Dictionary<string, List<string>> _sharedNotes = [];
 
     private string profileName = "";
     private string profilePhone = "";
@@ -182,12 +288,20 @@
     private string newBikeName = "";
     private string? bikeError;
 
+    private bool confirmingDelete;
+    private bool deleting;
+    private string? deleteError;
+
+    private string? cancelConfirmId;
+    private string? cancelError;
+    private string? cancelMessage;
+
     private List<Booking> UpcomingBookings =>
-        _bookings.Where(b => b.SlotDate.Date >= DateTime.Today && b.Status != BookingStatus.Cancelled)
+        _bookings.Where(b => b.SlotDate.Date >= ShopClock.Today && b.Status != BookingStatus.Cancelled)
                  .OrderBy(b => b.SlotDate).ThenBy(b => b.SlotTime).ToList();
 
     private List<Booking> BookingHistory =>
-        _bookings.Where(b => !(b.SlotDate.Date >= DateTime.Today && b.Status != BookingStatus.Cancelled))
+        _bookings.Where(b => !(b.SlotDate.Date >= ShopClock.Today && b.Status != BookingStatus.Cancelled))
                  .OrderByDescending(b => b.SlotDate).ThenByDescending(b => b.SlotTime).ToList();
 
     protected override async Task OnInitializedAsync()
@@ -219,7 +333,11 @@
         profilePhone = loggedInCustomer.Phone;
     }
 
-    private void LoadBookings() => _bookings = BookingService.GetBookingsForCustomer(loggedInCustomer!.Id);
+    private void LoadBookings()
+    {
+        _bookings = BookingService.GetBookingsForCustomer(loggedInCustomer!.Id);
+        _sharedNotes = Customers.GetCustomerVisibleNotesByBooking(loggedInCustomer.Id);
+    }
 
     private void SaveProfile()
     {
@@ -263,4 +381,56 @@
     }
 
     private void Logout() => Nav.NavigateTo("/auth/logout", forceLoad: true);
+
+    private void StartCancel(string bookingId)
+    {
+        cancelConfirmId = bookingId;
+        cancelError = null;
+        cancelMessage = null;
+    }
+
+    private async Task CancelBooking(string bookingId)
+    {
+        cancelError = null;
+        cancelMessage = null;
+        cancelConfirmId = null;
+
+        // customerId goes into the query, so this can only ever touch their own row.
+        var (booking, error) = BookingService.CancelOwnBooking(loggedInCustomer!.Id, bookingId);
+        if (error != null) { cancelError = error; return; }
+
+        LoadBookings();
+        cancelMessage = $"Booking {booking!.Reference} cancelled. The slot is free again.";
+
+        // Best-effort, like the confirmation email: the cancellation is already
+        // committed and the slot already freed, so a mail failure must not undo it.
+        try
+        {
+            await EmailSender.SendBookingNotificationAsync(booking, isCancellation: true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not notify the shop of cancellation {Reference}", booking.Reference);
+        }
+    }
+
+    private void DeleteAccount()
+    {
+        if (deleting) return;
+        deleting = true;
+        deleteError = null;
+
+        if (!AuthService.DeleteCustomerAccount(loggedInCustomer!.Id))
+        {
+            deleteError = "We couldn't delete the account just now. Please try again, or email "
+                        + SiteContent.Email + " and we'll do it for you.";
+            deleting = false;
+            return;
+        }
+
+        // Sign out on the way past: the cookie now points at a customer row that no
+        // longer exists, and leaving it set would bounce them through the stale-cookie
+        // recovery path in OnInitializedAsync on the next page load.
+        Nav.NavigateTo("/auth/logout?returnUrl=%2F", forceLoad: true);
+    }
 }

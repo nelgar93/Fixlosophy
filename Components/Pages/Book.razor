@@ -4,8 +4,13 @@
 @inject AuthService AuthService
 @inject ActionRateLimiter RateLimiter
 @inject IStorageService Storage
+@inject IEmailSender EmailSender
+@inject NotificationService Notifications
+@inject NavigationManager Nav
+@inject ILogger<Book> Logger
 
-<PageTitle>Book a Repair – Fixlosophy</PageTitle>
+<SeoHead Title="Book a Repair"
+         Description="@($"Book a bike repair online in under a minute. Pick a service, choose a slot, and bring your bike to {SiteContent.AddressShort}. Open seven days.")" />
 
 <div class="page-hero page-hero--sm">
     <div class="container">
@@ -69,23 +74,31 @@
                     <div class="service-category-group">
                         <h3 class="service-category-label">@category</h3>
                         <div class="service-pick-grid">
+                            @* A real <button>, not a <div @onclick>: this is the first
+                               control of the booking flow, and as a div it was
+                               unreachable by keyboard and announced as nothing in
+                               particular. aria-pressed carries the selected state,
+                               which the green tick only conveys visually. *@
                             @foreach (var svc in _services.Where(s => s.Category == category))
                             {
                                 var isSelected = selectedService?.Name == svc.Name;
-                                <div class="service-pick-card @(isSelected ? "selected" : "")" @onclick="() => SelectService(svc)">
-                                    <div class="service-pick-card__icon"><Icon Name="@CategoryIcon(svc.Category)" /></div>
-                                    <div class="service-pick-card__info">
+                                <button type="button"
+                                        class="service-pick-card @(isSelected ? "selected" : "")"
+                                        aria-pressed="@isSelected.ToString().ToLowerInvariant()"
+                                        @onclick="() => SelectService(svc)">
+                                    <span class="service-pick-card__icon"><Icon Name="@CategoryIcon(svc.Category)" /></span>
+                                    <span class="service-pick-card__info">
                                         <strong>@svc.Name</strong>
                                         <span>@svc.Duration</span>
-                                    </div>
-                                    <div class="service-pick-card__price">
+                                    </span>
+                                    <span class="service-pick-card__price">
                                         @(svc.PriceFrom > 0 ? $"From £{svc.PriceFrom}" : "Quote")
-                                    </div>
+                                    </span>
                                     @if (isSelected)
                                     {
-                                        <div class="service-pick-card__check"><Icon Name="check" /></div>
+                                        <span class="service-pick-card__check"><Icon Name="check" /></span>
                                     }
-                                </div>
+                                </button>
                             }
                         </div>
                     </div>
@@ -105,13 +118,13 @@
         {
             <div class="booking-card">
                 <h2 class="booking-card__title">Pick a Date &amp; Time</h2>
-                <p class="booking-card__subtitle">We're open Mon–Fri 9am – 7pm, Sat 9am – 6pm and Sun 11am – 5pm.</p>
+                <p class="booking-card__subtitle">We're open @string.Join(" · ", SiteContent.HoursDisplay).</p>
 
                 <div class="schedule-grid">
                     <!-- Calendar -->
                     <div class="calendar-wrapper">
                         <div class="cal-nav">
-                            <button class="cal-nav__btn" @onclick="PrevMonth" disabled="@(calendarMonth.Year == DateTime.Today.Year && calendarMonth.Month == DateTime.Today.Month)" aria-label="Previous month"><Icon Name="chevron-left" /></button>
+                            <button class="cal-nav__btn" @onclick="PrevMonth" disabled="@(calendarMonth.Year == ShopClock.Today.Year && calendarMonth.Month == ShopClock.Today.Month)" aria-label="Previous month"><Icon Name="chevron-left" /></button>
                             <span class="cal-nav__title">@calendarMonth.ToString("MMMM yyyy")</span>
                             <button class="cal-nav__btn" @onclick="NextMonth" aria-label="Next month"><Icon Name="chevron-right" /></button>
                         </div>
@@ -127,21 +140,31 @@
                                 <div class="cal-day cal-day--empty"></div>
                             }
 
+                            @* Buttons rather than divs, and `disabled` rather than a
+                               click handler that silently returns — an unavailable day
+                               is now skipped by the tab order and announced as
+                               unavailable instead of looking identical to a live one.
+                               The visible number alone doesn't say which month it's
+                               in, so aria-label carries the full date. *@
                             @for (int d = 1; d <= CalDaysInMonth; d++)
                             {
                                 var day = d;
                                 var date = new DateTime(calendarMonth.Year, calendarMonth.Month, day);
-                                var isPast = date.Date < DateTime.Today;
+                                var isPast = date.Date < ShopClock.Today;
                                 var avail = !isPast && GetDateAvailable(date);
                                 var isSelected = selectedDate.HasValue && selectedDate.Value.Date == date.Date;
-                                var isToday = date.Date == DateTime.Today;
+                                var isToday = date.Date == ShopClock.Today;
 
                                 var css = "cal-day"
                                     + (isSelected ? " cal-day--selected" : "")
                                     + (isToday && !isSelected ? " cal-day--today" : "")
                                     + (avail ? " cal-day--available" : " cal-day--disabled");
 
-                                <div class="@css" @onclick="() => OnDayClick(date, avail)">@day</div>
+                                <button type="button" class="@css"
+                                        disabled="@(!avail)"
+                                        aria-pressed="@isSelected.ToString().ToLowerInvariant()"
+                                        aria-label="@date.ToString("dddd d MMMM yyyy")"
+                                        @onclick="() => OnDayClick(date, avail)">@day</button>
                             }
                         </div>
                         <div class="cal-legend">
@@ -166,9 +189,12 @@
                                     @foreach (var slot in availableSlots)
                                     {
                                         var s = slot;
-                                        <div class="timeslot @(selectedTime == s ? "timeslot--selected" : "")" @onclick="() => selectedTime = s">
+                                        <button type="button"
+                                                class="timeslot @(selectedTime == s ? "timeslot--selected" : "")"
+                                                aria-pressed="@((selectedTime == s).ToString().ToLowerInvariant())"
+                                                @onclick="() => selectedTime = s">
                                             @s
-                                        </div>
+                                        </button>
                                     }
                                 </div>
                             }
@@ -207,21 +233,40 @@
                 <div class="details-form">
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Full Name *</label>
-                            <input class="form-control" type="text" @bind="customerName" placeholder="e.g. Jane Smith" />
+                            <label for="booking-name">Full Name *</label>
+                            <input id="booking-name" class="form-control" type="text" autocomplete="name"
+                                   @bind="customerName" placeholder="e.g. Jane Smith" />
                         </div>
                         <div class="form-group">
-                            <label>Email Address *</label>
-                            <input class="form-control" type="email" @bind="customerEmail" placeholder="jane@example.com" />
+                            <label for="booking-email">Email Address *</label>
+                            @if (loggedInCustomer is null)
+                            {
+                                <input id="booking-email" class="form-control" type="email"
+                                       autocomplete="email" inputmode="email"
+                                       @bind="customerEmail" placeholder="jane@example.com" />
+                            }
+                            else
+                            {
+                                @* Read-only: the booking is filed against the account's own
+                                   address regardless of what's typed here, so an editable
+                                   field would only mislead. *@
+                                <input id="booking-email" class="form-control" type="email"
+                                       value="@loggedInCustomer.Email" readonly aria-describedby="booking-email-note" />
+                                <p id="booking-email-note" class="form-hint">
+                                    Your account email. <a href="/auth/logout?returnUrl=%2Fbook" data-enhance-nav="false">Not you?</a>
+                                </p>
+                            }
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Phone Number *</label>
-                            <input class="form-control" type="tel" @bind="customerPhone" placeholder="07700 900000" required />
+                            <label for="booking-phone">Phone Number *</label>
+                            <input id="booking-phone" class="form-control" type="tel"
+                                   autocomplete="tel" inputmode="tel"
+                                   @bind="customerPhone" placeholder="07700 900000" required />
                         </div>
                         <div class="form-group">
-                            <label>Bike Make &amp; Model</label>
+                            <label for="booking-bike">Bike Make &amp; Model</label>
                             @if (loggedInCustomer?.Bikes.Count > 0)
                             {
                                 <div class="bike-chip-row">
@@ -235,16 +280,16 @@
                                     }
                                 </div>
                             }
-                            <input class="form-control" type="text" @bind="bikeDescription" placeholder="e.g. Trek Marlin 7, 2022" />
+                            <input id="booking-bike" class="form-control" type="text" @bind="bikeDescription" placeholder="e.g. Trek Marlin 7, 2022" />
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>Describe the Issue</label>
-                        <textarea class="form-control" rows="4" @bind="notes" placeholder="Any extra details that would help our mechanic prepare..."></textarea>
+                        <label for="booking-notes">Describe the Issue</label>
+                        <textarea id="booking-notes" class="form-control" rows="4" @bind="notes" placeholder="Any extra details that would help our mechanic prepare..."></textarea>
                     </div>
                     <div class="form-group">
-                        <label>Photos of the Issue (optional, up to @MaxPhotos)</label>
-                        <InputFile OnChange="OnPhotosSelected" multiple accept="image/jpeg,image/png,image/webp,image/heic" class="form-control" />
+                        <label for="booking-photos">Photos of the Issue (optional, up to @MaxPhotos)</label>
+                        <InputFile id="booking-photos" OnChange="OnPhotosSelected" multiple accept="image/jpeg,image/png,image/webp,image/heic" class="form-control" />
                         @if (pendingPhotos.Count > 0)
                         {
                             <ul class="photo-picker-list">
@@ -337,6 +382,11 @@
                     Final price confirmed after assessment. You won't be charged until you approve the quote.
                 </div>
 
+                <p class="form-consent">
+                    By confirming, you agree to our <a href="/terms">terms</a> and to us using the details
+                    above to arrange your repair — see our <a href="/privacy">privacy policy</a>.
+                </p>
+
                 <div class="booking-nav">
                     <button class="btn btn-outline" @onclick="() => GoToStep(3)"><Icon Name="arrow-left" /> Back</button>
                     <button class="btn btn-primary btn-lg" @onclick="ConfirmBooking" disabled="@submitting">
@@ -352,7 +402,10 @@
             <div class="booking-confirmed">
                 <div class="confirmed-icon"><Icon Name="check" /></div>
                 <h2>You're booked in!</h2>
-                <p class="confirmed-subtitle">We've received your booking and will send a confirmation shortly.</p>
+                <p class="confirmed-subtitle">
+                    We've sent a confirmation to <strong>@confirmedBooking.CustomerEmail</strong>.
+                    Check your spam folder if it doesn't arrive in a few minutes.
+                </p>
 
                 @if (photoUploadWarning != null)
                 {
@@ -382,8 +435,8 @@
                     <div class="confirmed-row">
                         <span><Icon Name="pin" /></span>
                         <div>
-                            <strong>42 Spoke Street, Chainring Quarter</strong>
-                            <span>Bring your bike 5 minutes early</span>
+                            <strong>@SiteContent.AddressShort</strong>
+                            <span>@SiteContent.AddressCity @SiteContent.AddressPostcode &middot; bring your bike 5 minutes early</span>
                         </div>
                     </div>
                 </div>
@@ -418,7 +471,7 @@
     };
 
     // Step 2
-    private DateTime calendarMonth = DateTime.Today;
+    private DateTime calendarMonth = ShopClock.Today;
     private DateTime? selectedDate;
     private string? selectedTime;
     private List<string> availableSlots = new();
@@ -433,6 +486,16 @@
     private string? validationError;
 
     private const int MaxPhotos = 5;
+
+    /// Total bytes of selected-but-not-yet-uploaded photos allowed per booking form.
+    /// MaxPhotos × MaxFileSizeBytes would be 40MB held in server memory for the whole
+    /// life of the circuit, per person filling in the form — a cheap way to exhaust a
+    /// small VPS. Five typical phone photos land well inside this; five 8MB ones
+    /// don't, and get a clear message rather than a slow death.
+    private const long MaxTotalPhotoBytes = 16 * 1024 * 1024;
+
+    private long PendingPhotoBytes => pendingPhotos.Sum(p => (long)p.Bytes.Length);
+
     private List<PendingPhoto> pendingPhotos = new();
     private string? photoError;
     private sealed record PendingPhoto(string FileName, string ContentType, byte[] Bytes);
@@ -535,7 +598,7 @@
     private void PrevMonth()
     {
         var prev = calendarMonth.AddMonths(-1);
-        if (prev.Year > DateTime.Today.Year || (prev.Year == DateTime.Today.Year && prev.Month >= DateTime.Today.Month))
+        if (prev.Year > ShopClock.Today.Year || (prev.Year == ShopClock.Today.Year && prev.Month >= ShopClock.Today.Month))
         {
             calendarMonth = prev;
             LoadMonthAvailability();
@@ -566,6 +629,15 @@
             var error = Storage.ValidatePhoto(file.ContentType, file.Size);
             if (error != null) { photoError = error; continue; }
 
+            // Checked before reading, so an oversized batch is refused rather than
+            // buffered and then rejected.
+            if (PendingPhotoBytes + file.Size > MaxTotalPhotoBytes)
+            {
+                photoError = $"Those photos come to more than {MaxTotalPhotoBytes / (1024 * 1024)} MB in total. " +
+                             "Please attach fewer, or smaller ones.";
+                continue;
+            }
+
             try
             {
                 using var stream = file.OpenReadStream(Fixlosophy.Services.StorageService.MaxFileSizeBytes);
@@ -594,7 +666,11 @@
         var booking = new Booking
         {
             CustomerName    = customerName,
-            CustomerEmail   = customerEmail,
+            // A signed-in customer books against their own account address, whatever
+            // the field says. The confirmation email goes to this address, so taking
+            // it from the form would let anyone with an account send Fixlosophy-branded
+            // mail to an arbitrary recipient. Guests are unaffected.
+            CustomerEmail   = loggedInCustomer?.Email ?? customerEmail,
             CustomerPhone   = customerPhone,
             ServiceCategory = selectedService.Category,
             ServiceName     = selectedService.Name,
@@ -615,10 +691,49 @@
         }
 
         photoUploadWarning = await UploadPendingPhotosAsync(created!.Id);
+        await SendBookingEmailsAsync(created);
 
         confirmedBooking = created;
         step = 5;
         submitting = false;
+    }
+
+    // Best-effort, exactly like the photo uploads above: the booking is already
+    // committed and the customer is about to be told it's confirmed, so a mail
+    // failure gets logged and the flow continues. Each send is caught separately so
+    // the shop still hears about the booking when the customer's address bounces.
+    private async Task SendBookingEmailsAsync(Booking booking)
+    {
+        var manageLink = Nav.ToAbsoluteUri(booking.CustomerId is null ? "/contact" : "/account").ToString();
+
+        // Lights up the bell on any open dashboard. Independent of the emails below,
+        // so a mail outage still tells whoever is on the shop floor.
+        try
+        {
+            Notifications.RaiseNewBooking(booking);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not raise a notification for booking {Reference}", booking.Reference);
+        }
+
+        try
+        {
+            await EmailSender.SendBookingConfirmationAsync(booking, manageLink);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not email booking confirmation for {Reference}", booking.Reference);
+        }
+
+        try
+        {
+            await EmailSender.SendBookingNotificationAsync(booking, isCancellation: false);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not email shop notification for {Reference}", booking.Reference);
+        }
     }
 
     // Best-effort: a photo failing to upload never rolls back the booking itself.
@@ -638,6 +753,11 @@
         if (uploadedPaths.Count > 0)
             BookingService.AddPhotos(bookingId, uploadedPaths);
 
+        // Release the buffers now the bytes are in storage. Without this they stayed
+        // resident for the rest of the circuit's life — the confirmation screen doesn't
+        // need them, and a customer may leave that tab open for hours.
+        pendingPhotos = new();
+
         return failures == 0 ? null
             : $"{failures} photo{(failures == 1 ? "" : "s")} couldn't be uploaded, but your booking is confirmed.";
     }
@@ -653,7 +773,7 @@
         customerName = customerEmail = customerPhone = bikeDescription = notes = "";
         validationError = null;
         confirmedBooking = null;
-        calendarMonth = DateTime.Today;
+        calendarMonth = ShopClock.Today;
         pendingPhotos = new();
         photoError = null;
         photoUploadWarning = null;

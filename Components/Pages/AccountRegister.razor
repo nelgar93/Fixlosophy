@@ -2,6 +2,9 @@
 @attribute [ExcludeFromInteractiveRouting]
 
 <PageTitle>Create Account – Fixlosophy</PageTitle>
+<HeadContent>
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
 
 <div class="admin-login">
     <div class="admin-login__card">
@@ -21,25 +24,33 @@
             <input type="hidden" name="returnUrl" value="@ReturnUrl" />
 
             <div class="form-group">
-                <label>Full Name</label>
-                <input class="form-control" type="text" name="fullName" required
+                <label for="register-name">Full Name</label>
+                <input id="register-name" class="form-control" type="text" name="fullName" required
                        autocomplete="name" placeholder="Jane Smith" />
             </div>
             <div class="form-group">
-                <label>Email</label>
-                <input class="form-control" type="email" name="email" required
-                       autocomplete="username" placeholder="jane@example.com" />
+                <label for="register-email">Email</label>
+                <input id="register-email" class="form-control" type="email" name="email" required
+                       autocomplete="username" inputmode="email" placeholder="jane@example.com" />
             </div>
             <div class="form-group">
-                <label>Phone</label>
-                <input class="form-control" type="tel" name="phone" required
-                       autocomplete="tel" placeholder="07700 900000" />
+                <label for="register-phone">Phone</label>
+                <input id="register-phone" class="form-control" type="tel" name="phone" required
+                       autocomplete="tel" inputmode="tel" placeholder="07700 900000" />
             </div>
             <div class="form-group">
-                <label>Password</label>
-                <input class="form-control" type="password" name="password" required
-                       autocomplete="new-password" placeholder="Choose a password" />
+                <label for="register-password">Password</label>
+                <div class="password-field">
+<input id="register-password" class="form-control" type="password" name="password" required
+                       minlength="@AuthService.MinPasswordLength"
+                       autocomplete="new-password" placeholder="At least @AuthService.MinPasswordLength characters" />
+                    <button type="button" class="password-field__toggle" data-password-toggle="register-password" aria-pressed="false" aria-label="Show password"><Icon Name="eye" /></button>
+                </div>
             </div>
+            <p class="form-consent">
+                By creating an account you agree to our <a href="/terms">terms</a> and
+                <a href="/privacy">privacy policy</a>.
+            </p>
             <button class="btn btn-primary btn-full" type="submit">Create Account</button>
         </form>
 

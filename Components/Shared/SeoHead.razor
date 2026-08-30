@@ -1,0 +1,78 @@
+@inject NavigationManager Nav
+
+@*
+    Per-page SEO metadata: description, canonical, Open Graph and Twitter card.
+
+    Rendered into <head> via <HeadOutlet>. Drop it at the top of a routed page and
+    give it a Description; everything else has a sensible default.
+
+    Canonical matters more than usual here because this site runs alongside
+    fixlosophy.com on a different domain — without self-referencing canonicals the
+    two would compete for the same search terms and split their own ranking.
+*@
+
+<PageTitle>@FullTitle</PageTitle>
+
+<HeadContent>
+    <meta name="description" content="@Description" />
+    <link rel="canonical" href="@CanonicalUrl" />
+
+    @if (NoIndex)
+    {
+        <meta name="robots" content="noindex, follow" />
+    }
+
+    <meta property="og:type" content="@OgType" />
+    <meta property="og:site_name" content="@SiteContent.ShopName" />
+    <meta property="og:title" content="@FullTitle" />
+    <meta property="og:description" content="@Description" />
+    <meta property="og:url" content="@CanonicalUrl" />
+    <meta property="og:locale" content="en_GB" />
+    @if (!string.IsNullOrEmpty(ImageUrl))
+    {
+        <meta property="og:image" content="@ImageUrl" />
+        <meta name="twitter:card" content="summary_large_image" />
+    }
+    else
+    {
+        <meta name="twitter:card" content="summary" />
+    }
+    <meta name="twitter:title" content="@FullTitle" />
+    <meta name="twitter:description" content="@Description" />
+</HeadContent>
+
+@code {
+    /// Page title without the site suffix — "Our Services", not "Our Services – Fixlosophy".
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// The search snippet. Keep it under about 155 characters.
+    [Parameter, EditorRequired] public string Description { get; set; } = "";
+
+    /// Absolute URL of the sharing image, if the page has a good one.
+    [Parameter] public string? ImageUrl { get; set; }
+
+    /// og:type — "website" for most pages.
+    [Parameter] public string OgType { get; set; } = "website";
+
+    /// Keeps the page out of search results (account, admin, legal, error pages).
+    [Parameter] public bool NoIndex { get; set; }
+
+    private string FullTitle =>
+        Title.Contains(SiteContent.ShopName, StringComparison.OrdinalIgnoreCase)
+            ? Title
+            : $"{Title} – {SiteContent.ShopName}";
+
+    // Strips the query string: ?returnUrl=… and friends are navigation state, not a
+    // distinct page, and canonicalising them would fragment the same content across
+    // many URLs.
+    private string CanonicalUrl
+    {
+        get
+        {
+            var uri = new Uri(Nav.Uri);
+            return $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}".TrimEnd('/') is { Length: > 0 } trimmed
+                ? (uri.AbsolutePath == "/" ? $"{uri.Scheme}://{uri.Authority}/" : trimmed)
+                : Nav.Uri;
+        }
+    }
+}

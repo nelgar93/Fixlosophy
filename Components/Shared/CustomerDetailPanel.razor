@@ -1,0 +1,211 @@
+@using System.Globalization
+
+@*
+    One customer's whole history, for the admin's Customers tab.
+
+    Its own component because Admin.razor is already long, and because this is a
+    self-contained read view: everything it needs arrives as a CustomerDetail, and the
+    three things it can't do itself (go back, add a note, delete one) go out as
+    callbacks rather than the component reaching for services.
+*@
+
+<div class="customer-detail">
+
+    <button type="button" class="btn btn-outline customer-detail__back" @onclick="OnBack">
+        <Icon Name="arrow-left" /> All customers
+    </button>
+
+    <div class="customer-detail__head">
+        <h3>@Detail.Customer.FullName</h3>
+        <p class="text-muted-sm">
+            Member since @Detail.Customer.CreatedAt.ToString("d MMMM yyyy", Uk)
+            @if (!Detail.Customer.EmailConfirmed)
+            {
+                <span class="status-badge status-badge--pending">Email unverified</span>
+            }
+        </p>
+
+        <div class="customer-detail__contact">
+            <a class="action-btn action-btn--call" href="mailto:@Detail.Customer.Email">@Detail.Customer.Email</a>
+            @if (AuthService.IsValidPhone(Detail.Customer.Phone))
+            {
+                <a class="action-btn action-btn--call" href="tel:@TelHref(Detail.Customer.Phone)">@Detail.Customer.Phone</a>
+                <a class="action-btn action-btn--whatsapp" href="@WhatsAppHref(Detail.Customer.Phone)"
+                   target="_blank" rel="noopener">WhatsApp</a>
+            }
+        </div>
+    </div>
+
+    @* Lifetime spend counts completed jobs only — a pending or cancelled booking
+       isn't money, and the price is an estimate until the work is done. *@
+    <div class="admin-stats customer-detail__stats">
+        <div class="admin-stat">
+            <div class="admin-stat__number">@Detail.Bookings.Count</div>
+            <div class="admin-stat__label">Bookings</div>
+        </div>
+        <div class="admin-stat">
+            <div class="admin-stat__number">@Detail.CompletedCount</div>
+            <div class="admin-stat__label">Completed</div>
+        </div>
+        <div class="admin-stat admin-stat--highlight">
+            <div class="admin-stat__number">£@Detail.LifetimeSpend.ToString("0.##", CultureInfo.InvariantCulture)</div>
+            <div class="admin-stat__label">Lifetime spend</div>
+        </div>
+        <div class="admin-stat">
+            <div class="admin-stat__number">@(Detail.LastVisit is { } lv ? lv.ToString("d MMM", Uk) : "—")</div>
+            <div class="admin-stat__label">Last visit</div>
+        </div>
+    </div>
+
+    <!-- Notes -->
+    <h4 class="admin-subheading">Notes</h4>
+
+    @if (CanManage)
+    {
+        <div class="complete-note customer-detail__add-note">
+            <label class="complete-note__label" for="customer-note-body">Add a note</label>
+            <textarea id="customer-note-body" class="form-control" rows="3"
+                      placeholder="Anything worth remembering about this customer or their bike"
+                      @bind="noteBody" @bind:event="oninput"></textarea>
+            <label class="complete-note__share">
+                <input type="checkbox" @bind="noteVisible" />
+                <span>Share this with the customer</span>
+            </label>
+            <div class="complete-note__actions">
+                <button class="action-btn action-btn--confirm"
+                        disabled="@string.IsNullOrWhiteSpace(noteBody)"
+                        @onclick="SaveNote">Save note</button>
+            </div>
+        </div>
+    }
+
+    @if (Detail.Notes.Count == 0)
+    {
+        <p class="text-muted-sm customer-detail__empty">No notes yet.</p>
+    }
+    else
+    {
+        <ul class="customer-notes">
+            @foreach (var note in Detail.Notes)
+            {
+                var n = note;
+                <li class="customer-note @(n.VisibleToCustomer ? "customer-note--shared" : "")">
+                    <div class="customer-note__head">
+                        <span class="status-badge @(n.VisibleToCustomer ? "status-badge--confirmed" : "status-badge--completed")">
+                            @(n.VisibleToCustomer ? "Shared" : "Internal")
+                        </span>
+                        <span class="text-faint-sm">@n.CreatedAt.ToString("d MMM yyyy, HH:mm", Uk)</span>
+                        @if (CanManage)
+                        {
+                            <button class="action-btn action-btn--delete customer-note__delete"
+                                    @onclick="() => OnDeleteNote.InvokeAsync(n.Id)">Delete</button>
+                        }
+                    </div>
+                    <p class="customer-note__body">@n.Body</p>
+                </li>
+            }
+        </ul>
+    }
+
+    <!-- Bookings -->
+    <h4 class="admin-subheading">Bookings</h4>
+    @if (Detail.Bookings.Count == 0)
+    {
+        <p class="text-muted-sm customer-detail__empty">No bookings on this account.</p>
+    }
+    else
+    {
+        <ul class="customer-bookings">
+            @foreach (var b in Detail.Bookings)
+            {
+                <li class="customer-booking">
+                    <span class="ref-badge">@b.Reference</span>
+                    <span class="customer-booking__main">
+                        <strong>@b.ServiceName</strong>
+                        <span class="text-muted-sm">
+                            @b.SlotDate.ToString("d MMM yyyy", Uk) &middot; @b.SlotTime
+                            @if (!string.IsNullOrWhiteSpace(b.BikeDescription))
+                            {
+                                <text> &middot; @b.BikeDescription</text>
+                            }
+                        </span>
+                    </span>
+                    <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                </li>
+            }
+        </ul>
+    }
+
+    @* Bookings made under this email before they had an account. They exist in the
+       database today and appear nowhere in the admin — someone who booked as a guest
+       and registered afterwards looks like a first-time customer without this. *@
+    @if (Detail.UnlinkedGuestBookings.Count > 0)
+    {
+        <h4 class="admin-subheading">
+            Earlier bookings under this email
+            <span class="text-faint-sm">(made before they had an account)</span>
+        </h4>
+        <ul class="customer-bookings">
+            @foreach (var b in Detail.UnlinkedGuestBookings)
+            {
+                <li class="customer-booking customer-booking--unlinked">
+                    <span class="ref-badge">@b.Reference</span>
+                    <span class="customer-booking__main">
+                        <strong>@b.ServiceName</strong>
+                        <span class="text-muted-sm">@b.SlotDate.ToString("d MMM yyyy", Uk) &middot; @b.SlotTime</span>
+                    </span>
+                    <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                </li>
+            }
+        </ul>
+    }
+
+    <!-- Bikes -->
+    @if (Detail.Customer.Bikes.Count > 0)
+    {
+        <h4 class="admin-subheading">Bikes</h4>
+        <ul class="customer-bikes">
+            @foreach (var bike in Detail.Customer.Bikes)
+            {
+                <li>@bike.MakeModel</li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public CustomerDetail Detail { get; set; } = default!;
+    [Parameter] public bool CanManage { get; set; }
+    [Parameter] public EventCallback OnBack { get; set; }
+
+    /// (body, visibleToCustomer)
+    [Parameter] public EventCallback<(string Body, bool Visible)> OnAddNote { get; set; }
+    [Parameter] public EventCallback<string> OnDeleteNote { get; set; }
+
+    private static readonly CultureInfo Uk = CultureInfo.GetCultureInfo("en-GB");
+
+    private string noteBody = "";
+    private bool noteVisible;
+
+    private async Task SaveNote()
+    {
+        if (string.IsNullOrWhiteSpace(noteBody)) return;
+        await OnAddNote.InvokeAsync((noteBody, noteVisible));
+        noteBody = "";
+        noteVisible = false;
+    }
+
+    // Same normalisation the booking actions use: wa.me wants international format
+    // with no '+' or leading zero, and a bare national number is assumed to be UK.
+    private static string WhatsAppHref(string phone)
+    {
+        var digits = new string(phone.Where(char.IsDigit).ToArray());
+        var international = digits.StartsWith("00", StringComparison.Ordinal) ? digits[2..]
+                          : digits.StartsWith('0') ? "44" + digits[1..]
+                          : digits;
+        return $"https://wa.me/{international}";
+    }
+
+    private static string TelHref(string phone) =>
+        new(phone.Where(c => char.IsDigit(c) || c == '+').ToArray());
+}

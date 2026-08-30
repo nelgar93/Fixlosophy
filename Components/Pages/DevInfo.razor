@@ -1,0 +1,118 @@
+@page "/devinfo"
+@attribute [ExcludeFromInteractiveRouting]
+@inject IWebHostEnvironment Env
+
+@*
+    What the device actually reports, for testing on a real phone.
+
+    Safari's Web Inspector needs a Mac, so on Windows there is no console to read when
+    something looks wrong on an iPhone. Every reading below exists to turn "it looks
+    off" into a number: each one tests a specific fix that could only be verified
+    against emulation, never against real iOS.
+
+    Static SSR (no circuit) on purpose — it has to work even when Blazor doesn't
+    connect, since "did the circuit connect?" is itself one of the things being
+    diagnosed. wwwroot/site.js fills in the values, reusing the [data-*] pattern
+    already there for the resend countdown.
+
+    Development-only. Nothing here is sensitive (it's all browser-side state the page
+    could read anyway), but it has no business existing in production.
+*@
+
+<PageTitle>Device Info – Fixlosophy</PageTitle>
+<HeadContent>
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
+
+@if (!Env.IsDevelopment())
+{
+    <div class="page-hero page-hero--sm">
+        <div class="container">
+            <h1>Not available</h1>
+            <p>This page only exists in development.</p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="page-hero page-hero--sm">
+        <div class="container">
+            <p class="section-eyebrow">Development</p>
+            <h1>Device Info</h1>
+            <p>What this device reports. Tap <strong>Copy</strong> and paste the results back.</p>
+        </div>
+    </div>
+
+    <section class="section">
+        <div class="container devinfo">
+
+            @* The headline test. iOS zooms the viewport when a field under 16px is
+               focused and never zooms back; this scale is how you see it happen.
+               The input below is a real .form-control, so it inherits exactly the
+               styling the rest of the site's fields get. *@
+            <div class="devinfo__hero" data-devinfo-zoom-card>
+                <p class="devinfo__hero-label">Viewport scale</p>
+                <p class="devinfo__hero-value" data-devinfo="scale">–</p>
+                <p class="devinfo__hero-note" data-devinfo="scale-verdict">
+                    Tap the field below. If this stays at 1.00, the iOS zoom fix is working.
+                </p>
+                <label class="sr-only" for="devinfo-probe">Test field</label>
+                <input id="devinfo-probe" class="form-control" type="text"
+                       placeholder="Tap here to test zoom" autocomplete="off" />
+            </div>
+
+            <dl class="devinfo__list">
+                <div class="devinfo__row">
+                    <dt>Input font size</dt>
+                    <dd data-devinfo="input-font">–</dd>
+                </div>
+                <div class="devinfo__row">
+                    <dt>hover: hover &amp; pointer: fine</dt>
+                    <dd data-devinfo="hover">–</dd>
+                </div>
+                <div class="devinfo__row">
+                    <dt>Safe-area insets</dt>
+                    <dd data-devinfo="safe-area">–</dd>
+                </div>
+                <div class="devinfo__row">
+                    <dt>Viewport</dt>
+                    <dd data-devinfo="viewport">–</dd>
+                </div>
+                <div class="devinfo__row">
+                    <dt>100svh vs innerHeight</dt>
+                    <dd data-devinfo="svh">–</dd>
+                </div>
+                <div class="devinfo__row">
+                    <dt>Reduced motion</dt>
+                    <dd data-devinfo="reduced-motion">–</dd>
+                </div>
+                <div class="devinfo__row">
+                    <dt>Touch targets</dt>
+                    <dd data-devinfo="touch">–</dd>
+                </div>
+                <div class="devinfo__row">
+                    <dt>Blazor circuit</dt>
+                    <dd data-devinfo="circuit">–</dd>
+                </div>
+                <div class="devinfo__row">
+                    <dt>User agent</dt>
+                    <dd data-devinfo="ua" class="devinfo__ua">–</dd>
+                </div>
+            </dl>
+
+            @* Measured, not computed: these are real elements laid out on this page,
+               so the numbers are what a thumb actually gets. *@
+            <div class="devinfo__samples" aria-hidden="true">
+                <button type="button" class="btn btn-outline" data-devinfo-sample="btn">Sample button</button>
+                <span class="cal-day cal-day--available" data-devinfo-sample="cal-day">15</span>
+            </div>
+
+            <div class="devinfo__actions">
+                <button type="button" class="btn btn-primary" data-devinfo-copy>Copy results</button>
+                <a href="/" class="btn btn-outline">Back to site</a>
+            </div>
+            <p class="devinfo__copied" data-devinfo="copied" hidden>Copied.</p>
+
+        </div>
+    </section>
+}

@@ -2,6 +2,9 @@
 @attribute [ExcludeFromInteractiveRouting]
 
 <PageTitle>Check Your Email – Fixlosophy</PageTitle>
+<HeadContent>
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
 
 <div class="admin-login">
     <div class="admin-login__card">
@@ -20,29 +23,17 @@
         <form method="post" action="/auth/resend-verification">
             <AntiforgeryToken />
             <div class="form-group">
-                <label>Email</label>
-                <input class="form-control" type="email" name="email" required
+                <label for="accountregisterconfirmation-email">Email</label>
+                <input id="accountregisterconfirmation-email" class="form-control" type="email" name="email" required
                        autocomplete="username" placeholder="you@example.com" />
             </div>
-            <button class="btn btn-outline btn-full" type="submit" id="resend-btn">Resend Verification Email</button>
+            @* The countdown lives in wwwroot/site.js; the duration is passed through
+               the attribute so it can't drift from the server's own cooldown. *@
+            <button class="btn btn-outline btn-full" type="submit" id="resend-btn"
+                    data-cooldown-seconds="@AuthService.ResendCooldownSeconds">
+                Resend Verification Email
+            </button>
         </form>
-
-        <script>
-            (function () {
-                var btn = document.getElementById('resend-btn');
-                if (!btn) return;
-                var seconds = 60; // matches AuthService.ResendCooldownSeconds
-                var label = btn.textContent;
-                function tick() {
-                    if (seconds <= 0) { btn.disabled = false; btn.textContent = label; return; }
-                    btn.disabled = true;
-                    btn.textContent = 'Resend available in ' + seconds + 's';
-                    seconds--;
-                    setTimeout(tick, 1000);
-                }
-                tick();
-            })();
-        </script>
 
         <p class="auth-alt">
             <a href="@LoginHref">Back to sign in</a>

@@ -28,7 +28,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.85rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     color: rgba(255,255,255,0.4);
     transition: all 0.3s;
@@ -48,7 +48,7 @@
 }
 
 .step-indicator__label {
-    font-size: 0.7rem;
+    font-size: var(--fs-2xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -90,7 +90,7 @@
 .booking-card__subtitle {
     color: rgba(255,255,255,0.5);
     margin-bottom: 1.75rem;
-    font-size: 0.95rem;
+    font-size: var(--fs-body);
 }
 
 .booking-error {
@@ -124,10 +124,70 @@
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    font-size: 0.85rem;
+    font-size: var(--fs-xs);
 }
 
 .account-booking-row__info span { color: rgba(255,255,255,0.5); }
+
+/* Status badge plus the cancel controls. Wraps under the booking details on a
+   narrow screen rather than squeezing the service name. */
+.account-booking-row__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+@media (max-width: 479px) {
+    .account-booking-row {
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+    .account-booking-row__info { flex: 1 1 100%; order: 2; }
+    .account-booking-row__actions { flex: 1 1 100%; order: 3; justify-content: flex-start; }
+}
+
+/* An input with a button beside it. Not .form-row: that's a two-column grid whose
+   cells stretch to the row height, which left the button taller than the field and
+   misaligned against the field's bottom margin. */
+.inline-add-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+.inline-add-row .form-control { flex: 1 1 12rem; }
+.inline-add-row .btn { flex: 0 0 auto; }
+
+/* Account → Your Data */
+.account-data-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.account-danger-zone {
+    margin-top: 1rem;
+    padding: 1rem 1.25rem;
+    background: rgba(220,38,38,0.06);
+    border: 1px solid rgba(220,38,38,0.25);
+    border-radius: var(--radius);
+}
+
+.account-danger-zone p {
+    color: rgba(255,255,255,0.7);
+    font-size: var(--fs-sm);
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+.account-danger-zone__warning { color: #f87171 !important; }
+
+@media (max-width: 479px) {
+    .account-data-actions { flex-direction: column; }
+    .account-data-actions .btn { width: 100%; justify-content: center; }
+}
 
 .booking-nav {
     display: flex;
@@ -151,7 +211,7 @@
     border-radius: .5rem;
     padding: .6rem 1rem;
     margin-bottom: 1.5rem;
-    font-size: .9rem;
+    font-size: var(--fs-body-sm);
     color: rgba(255,255,255,0.65);
 }
 .customer-auth-strip strong { color: var(--white); }
@@ -159,12 +219,14 @@
     background: none;
     border: none;
     color: var(--green);
-    font-size: .9rem;
+    font-size: var(--fs-body-sm);
     font-weight: 600;
     cursor: pointer;
     padding: 0;
 }
-.customer-auth-strip__link:hover { color: var(--green-dark); text-decoration: underline; }
+@media (hover: hover) and (pointer: fine) {
+    .customer-auth-strip__link:hover { color: var(--green-dark); text-decoration: underline; }
+}
 
 /* ---------- Service Picker ---------- */
 .service-category-group {
@@ -172,7 +234,7 @@
 }
 
 .service-category-label {
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     text-transform: uppercase;
     letter-spacing: 2px;
     color: var(--green);
@@ -186,10 +248,16 @@
     gap: 0.6rem;
 }
 
+/* A <button> since the a11y pass — width/text-align/color are reset explicitly
+   because a button doesn't inherit them the way the old <div> did. */
 .service-pick-card {
     display: flex;
     align-items: center;
     gap: 1rem;
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    font-family: inherit;
     padding: 1rem 1.25rem;
     background: var(--dark-3);
     border: 1.5px solid var(--border-dark);
@@ -199,9 +267,24 @@
     position: relative;
 }
 
-.service-pick-card:hover {
-    border-color: var(--green);
-    background: var(--dark-4);
+.service-pick-card:focus-visible,
+.cal-day:focus-visible,
+.timeslot:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 2px;
+}
+
+/* An unavailable day is a disabled <button> now, so the cursor and pointer-events
+   follow from the attribute rather than from a handler that quietly did nothing. */
+.cal-day:disabled {
+    cursor: default;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .service-pick-card:hover {
+        border-color: var(--green);
+        background: var(--dark-4);
+    }
 }
 
 .service-pick-card.selected {
@@ -223,17 +306,17 @@
 
 .service-pick-card__info strong {
     display: block;
-    font-size: 0.95rem;
+    font-size: var(--fs-body);
     color: var(--white);
 }
 
 .service-pick-card__info span {
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     color: rgba(255,255,255,0.45);
 }
 
 .service-pick-card__price {
-    font-size: 0.875rem;
+    font-size: var(--fs-sm);
     font-weight: 700;
     color: var(--green);
     white-space: nowrap;
@@ -245,7 +328,7 @@
     border-radius: 50%;
     background: var(--green);
     color: var(--white);
-    font-size: 0.75rem;
+    font-size: var(--fs-tiny);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -303,7 +386,9 @@
     display: block;
 }
 
-.cal-nav__btn:hover:not(:disabled) { background: var(--green); border-color: var(--green); }
+@media (hover: hover) and (pointer: fine) {
+    .cal-nav__btn:hover:not(:disabled) { background: var(--green); border-color: var(--green); }
+}
 .cal-nav__btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .cal-grid {
@@ -314,7 +399,7 @@
 
 .cal-head {
     text-align: center;
-    font-size: 0.7rem;
+    font-size: var(--fs-2xs);
     font-weight: 700;
     text-transform: uppercase;
     color: rgba(255,255,255,0.35);
@@ -327,10 +412,17 @@
     align-items: center;
     justify-content: center;
     border-radius: 8px;
-    font-size: 0.85rem;
+    font-size: var(--fs-xs);
     font-weight: 500;
     transition: all 0.15s;
     cursor: default;
+    /* Button resets — these are <button> elements since the a11y pass. */
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    color: inherit;
 }
 
 .cal-day--empty { background: transparent; }
@@ -346,7 +438,9 @@
     cursor: pointer;
 }
 
-.cal-day--available:hover { background: var(--green-glow); color: var(--green); }
+@media (hover: hover) and (pointer: fine) {
+    .cal-day--available:hover { background: var(--green-glow); color: var(--green); }
+}
 
 .cal-day--today {
     border: 1.5px solid rgba(255,255,255,0.2);
@@ -362,7 +456,7 @@
     display: flex;
     gap: 1rem;
     margin-top: 0.75rem;
-    font-size: 0.75rem;
+    font-size: var(--fs-tiny);
     color: rgba(255,255,255,0.4);
     align-items: center;
     flex-wrap: wrap;
@@ -402,11 +496,11 @@
 }
 
 .timeslot-prompt span { font-size: 2rem; }
-.timeslot-prompt p { font-size: 0.875rem; margin: 0; }
+.timeslot-prompt p { font-size: var(--fs-sm); margin: 0; }
 
 .timeslot-none {
     color: rgba(255,255,255,0.4);
-    font-size: 0.875rem;
+    font-size: var(--fs-sm);
     padding: 1.5rem;
     text-align: center;
     background: var(--dark-3);
@@ -425,14 +519,19 @@
     background: var(--dark-3);
     border: 1.5px solid var(--border-dark);
     border-radius: var(--radius-sm);
-    font-size: 0.9rem;
+    font-size: var(--fs-body-sm);
     font-weight: 600;
     color: var(--white);
     cursor: pointer;
     transition: all 0.15s;
+    /* Button reset — a <button> since the a11y pass. */
+    width: 100%;
+    font-family: inherit;
 }
 
-.timeslot:hover { border-color: var(--green); color: var(--green); }
+@media (hover: hover) and (pointer: fine) {
+    .timeslot:hover { border-color: var(--green); color: var(--green); }
+}
 
 .timeslot--selected {
     background: var(--green) !important;
@@ -451,13 +550,15 @@
     border: 1px solid var(--border-dark);
     border-radius: 50px;
     color: rgba(255,255,255,0.65);
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
 }
 
-.bike-chip:hover { border-color: var(--green); color: var(--white); }
+@media (hover: hover) and (pointer: fine) {
+    .bike-chip:hover { border-color: var(--green); color: var(--white); }
+}
 .bike-chip--selected { background: var(--green); border-color: var(--green); color: var(--dark); font-weight: 700; }
 
 .photo-picker-list {
@@ -478,7 +579,7 @@
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
     border-radius: var(--radius);
-    font-size: 0.85rem;
+    font-size: var(--fs-xs);
 }
 
 .photo-picker-remove {
@@ -491,7 +592,9 @@
     padding: 0 0.25rem;
 }
 
-.photo-picker-remove:hover { color: var(--white); }
+@media (hover: hover) and (pointer: fine) {
+    .photo-picker-remove:hover { color: var(--white); }
+}
 
 /* ---------- Review ---------- */
 .review-grid {
@@ -517,7 +620,7 @@
 .review-item:last-child { border-bottom: none; }
 
 .review-label {
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     color: rgba(255,255,255,0.45);
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -526,7 +629,7 @@
 
 .review-value {
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: var(--fs-body-sm);
     text-align: right;
 }
 
@@ -540,7 +643,7 @@
     background: rgba(61,187,72,0.07);
     border: 1px solid var(--green-glow);
     border-radius: var(--radius-sm);
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     color: rgba(255,255,255,0.55);
     margin-bottom: 0.5rem;
 }
@@ -585,7 +688,7 @@
     margin-bottom: 2rem;
 }
 
-.confirmed-ref span { font-size: 0.75rem; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px; }
+.confirmed-ref span { font-size: var(--fs-tiny); color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px; }
 .confirmed-ref strong { font-size: 1.3rem; color: var(--green); letter-spacing: 1px; }
 
 .confirmed-summary {
@@ -614,8 +717,8 @@
     flex-direction: column;
 }
 
-.confirmed-row div strong { font-size: 0.9rem; color: var(--white); }
-.confirmed-row div span { font-size: 0.8rem; color: rgba(255,255,255,0.45); }
+.confirmed-row div strong { font-size: var(--fs-body-sm); color: var(--white); }
+.confirmed-row div span { font-size: var(--fs-caption); color: rgba(255,255,255,0.45); }
 
 .confirmed-actions {
     display: flex;
@@ -652,7 +755,7 @@
 .admin-logo-img { height: 64px; width: auto; display: block; margin: 0 auto; mix-blend-mode: screen; }
 
 .admin-login__card h2 { margin-bottom: 0.5rem; }
-.admin-login__card p { color: rgba(255,255,255,0.5); margin-bottom: 1.5rem; font-size: 0.9rem; }
+.admin-login__card p { color: rgba(255,255,255,0.5); margin-bottom: 1.5rem; font-size: var(--fs-body-sm); }
 .admin-login__card .form-group { text-align: left; margin-bottom: 1.25rem; }
 
 .remember-row {
@@ -662,12 +765,12 @@
     text-align: left;
     margin-bottom: 1.25rem;
     color: rgba(255,255,255,0.7);
-    font-size: 0.9rem;
+    font-size: var(--fs-body-sm);
     cursor: pointer;
 }
 .remember-row input { width: auto; margin: 0; }
 
-.auth-alt { margin-top: 1.25rem; margin-bottom: 0; font-size: 0.9rem; color: rgba(255,255,255,0.5); }
+.auth-alt { margin-top: 1.25rem; margin-bottom: 0; font-size: var(--fs-body-sm); color: rgba(255,255,255,0.5); }
 .auth-alt a { color: var(--green); font-weight: 600; }
 
 /* ---------- Admin Dashboard ---------- */
@@ -684,7 +787,7 @@
     .booking-card { padding: 1.25rem; }
 
     /* Step indicator: shrink dots and hide labels on tiny screens */
-    .step-indicator__dot { width: 28px; height: 28px; font-size: 0.75rem; }
+    .step-indicator__dot { width: 28px; height: 28px; font-size: var(--fs-tiny); }
     .step-indicator__label { display: none; }
     .step-indicator__line { margin-bottom: 0; min-width: 16px; }
     .steps-indicator { margin-bottom: 1.75rem; }
@@ -695,8 +798,11 @@
     .booking-nav > span { display: none; }
 
     /* Calendar: tighten up */
-    .cal-day { font-size: 0.8rem; border-radius: 6px; }
-    .cal-head { font-size: 0.6rem; }
+    .cal-day { font-size: var(--fs-caption); border-radius: 6px; }
+    /* Was 0.6rem — the smallest text anywhere on the site, for the one row that
+       has to stay readable at arm's length while you pick a date. The weekday
+       initials are two characters, so --fs-2xs still fits the cell at 320px. */
+    .cal-head { font-size: var(--fs-2xs); }
 
     /* Service picker: reduce padding */
     .service-pick-card { padding: 0.75rem 0.9rem; }
@@ -728,11 +834,22 @@
     color: rgba(255,255,255,0.7);
     font-size: var(--fs-sm);
 }
-.admin-header-actions__name .status-badge { font-size: 0.75rem; }
+.admin-header-actions__name .status-badge { font-size: var(--fs-tiny); }
 
 .form-control--compact { font-size: var(--fs-xs); padding: 0.25rem 0.5rem; }
 .form-control--price   { font-size: var(--fs-sm); padding: 0.3rem 0.5rem; width: 100px; }
+.form-control--assign  { min-width: 130px; }
 .admin-subheading      { font-size: var(--fs-h3-compact); margin: 2rem 0 1rem; }
+
+/* Replaces repeated inline styles in Admin.razor. */
+.admin-inline-error    { margin-bottom: 0.75rem; }
+.admin-checkbox-label  { margin-left: 0.3rem; }
+.price-current         { font-weight: 700; color: var(--green); }
+
+/* Pricing table column widths, previously inline on the <th>. */
+.admin-table .col-price       { width: 130px; }
+.admin-table .col-price-input { width: 140px; }
+.admin-table .col-save        { width: 80px; }
 
 .tab-bar-wrapper { margin-bottom: 1.5rem; }
 
@@ -745,6 +862,12 @@
     gap: 0.75rem;
 }
 .pricing-tab-header h3 { margin: 0; }
+
+/* Below 768px the sticky bar at the foot of the list provides Save All, so this one
+   is a second button doing the same job a few pixels away. */
+@media (max-width: 767px) {
+    .pricing-tab-header .btn { display: none; }
+}
 
 .admin-stats {
     display: grid;
@@ -775,7 +898,7 @@
 }
 
 .admin-stat__label {
-    font-size: 0.75rem;
+    font-size: var(--fs-tiny);
     text-transform: uppercase;
     letter-spacing: 1px;
     color: rgba(255,255,255,0.4);
@@ -810,18 +933,20 @@
     border: 1px solid var(--border-dark);
     border-radius: 50px;
     color: rgba(255,255,255,0.6);
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
 }
 
-.filter-tab:hover { border-color: var(--green); color: var(--white); }
+@media (hover: hover) and (pointer: fine) {
+    .filter-tab:hover { border-color: var(--green); color: var(--white); }
+}
 .filter-tab.active { background: var(--green); border-color: var(--green); color: var(--dark); font-weight: 700; }
 
 .admin-search { width: 100%; }
-.admin-search .form-control { font-size: 0.875rem; }
+.admin-search .form-control { font-size: var(--fs-sm); }
 
 /* Today schedule */
 .today-schedule {
@@ -844,14 +969,14 @@
     padding: 0.7rem 0.75rem;
     background: var(--dark-3);
     border-radius: var(--radius-sm);
-    font-size: 0.875rem;
+    font-size: var(--fs-sm);
 }
 
 .today-slot__time { font-weight: 700; color: var(--green); }
 .today-slot__name { font-weight: 600; }
 .today-slot__service {
     color: rgba(255,255,255,0.55);
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     grid-column: 2;
     margin-top: -0.4rem;
 }
@@ -862,7 +987,7 @@
 .admin-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.875rem;
+    font-size: var(--fs-sm);
 }
 
 .admin-table thead tr {
@@ -873,7 +998,7 @@
 .admin-table th {
     padding: 0.85rem 1rem;
     text-align: left;
-    font-size: 0.7rem;
+    font-size: var(--fs-2xs);
     text-transform: uppercase;
     letter-spacing: 1px;
     color: rgba(255,255,255,0.45);
@@ -888,7 +1013,13 @@
 }
 
 .admin-table tbody tr:last-child { border-bottom: none; }
-.admin-table tbody tr:hover, .admin-table tbody tr.row-expanded { background: var(--dark-3); }
+/* An expanded row stays highlighted on touch too — it marks which row is open,
+   which is state rather than hover feedback. Only the hover half is gated. */
+.admin-table tbody tr.row-expanded { background: var(--dark-3); }
+
+@media (hover: hover) and (pointer: fine) {
+    .admin-table tbody tr:hover { background: var(--dark-3); }
+}
 
 .admin-table td { padding: 0.85rem 1rem; vertical-align: middle; }
 
@@ -911,14 +1042,14 @@
     gap: 0.15rem;
 }
 
-.booking-detail__grid strong { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.35); }
-.booking-detail__grid span { font-size: 0.875rem; color: rgba(255,255,255,0.75); }
+.booking-detail__grid strong { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.35); }
+.booking-detail__grid span { font-size: var(--fs-sm); color: rgba(255,255,255,0.75); }
 
 .booking-detail__photos { margin-top: 0.75rem; }
 .booking-detail__photos strong {
     display: block;
     margin-bottom: 0.3rem;
-    font-size: 0.7rem;
+    font-size: var(--fs-2xs);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: rgba(255,255,255,0.35);
@@ -941,7 +1072,7 @@
 
 /* Table cells */
 .ref-badge {
-    font-size: 0.75rem;
+    font-size: var(--fs-tiny);
     font-family: monospace;
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
@@ -957,15 +1088,15 @@
     gap: 0.1rem;
 }
 
-.customer-cell strong, .service-cell strong, .date-cell strong { color: var(--white); font-size: 0.875rem; }
-.customer-cell span, .service-cell span, .date-cell span { font-size: 0.75rem; color: rgba(255,255,255,0.4); }
+.customer-cell strong, .service-cell strong, .date-cell strong { color: var(--white); font-size: var(--fs-sm); }
+.customer-cell span, .service-cell span, .date-cell span { font-size: var(--fs-tiny); color: rgba(255,255,255,0.4); }
 
 /* Status badges */
 .status-badge {
     display: inline-block;
     padding: 0.25rem 0.65rem;
     border-radius: 50px;
-    font-size: 0.7rem;
+    font-size: var(--fs-2xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -992,7 +1123,7 @@
     min-height: 28px;
     border-radius: 6px;
     font-family: inherit;
-    font-size: 0.75rem;
+    font-size: var(--fs-tiny);
     font-weight: 600;
     line-height: 1.35;
     cursor: pointer;
@@ -1002,19 +1133,27 @@
 }
 
 .action-btn--confirm  { background: rgba(61,187,72,0.15);  color: var(--green); border-color: rgba(61,187,72,0.3); }
-.action-btn--confirm:hover  { background: var(--green); color: var(--dark); }
+@media (hover: hover) and (pointer: fine) {
+    .action-btn--confirm:hover  { background: var(--green); color: var(--dark); }
+}
 .action-btn--progress { background: rgba(59,130,246,0.15); color: #60a5fa; border-color: rgba(59,130,246,0.3); }
-.action-btn--progress:hover { background: #3b82f6; color: var(--white); }
+@media (hover: hover) and (pointer: fine) {
+    .action-btn--progress:hover { background: #3b82f6; color: var(--white); }
+}
 .action-btn--complete { background: rgba(107,114,128,0.15); color: #9ca3af; border-color: rgba(107,114,128,0.3); }
-.action-btn--complete:hover { background: #6b7280; color: var(--white); }
+@media (hover: hover) and (pointer: fine) {
+    .action-btn--complete:hover { background: #6b7280; color: var(--white); }
+}
 .action-btn--cancel   { background: rgba(220,38,38,0.1);  color: #f87171; border-color: rgba(220,38,38,0.25); }
-.action-btn--cancel:hover   { background: #dc2626; color: var(--white); }
+@media (hover: hover) and (pointer: fine) {
+    .action-btn--cancel:hover   { background: #dc2626; color: var(--white); }
+}
 
 .admin-empty {
     padding: 3rem;
     text-align: center;
     color: rgba(255,255,255,0.35);
-    font-size: 0.9rem;
+    font-size: var(--fs-body-sm);
 }
 
 /* Staff management / Pricing tab */
@@ -1036,7 +1175,7 @@
     padding: .75rem 1rem;
     border-radius: var(--radius-sm);
     margin-bottom: 1rem;
-    font-size: .875rem;
+    font-size: var(--fs-sm);
 }
 
 .pricing-info-banner {
@@ -1045,7 +1184,7 @@
     border-radius: .5rem;
     padding: .75rem 1rem;
     margin-bottom: 1.5rem;
-    font-size: .875rem;
+    font-size: var(--fs-sm);
     color: rgba(255,255,255,0.5);
 }
 .pricing-info-banner strong { color: var(--white); }
@@ -1054,14 +1193,19 @@
    ADMIN CARD VIEW (mobile only)
    ============================================================ */
 
-/* Mobile: show cards, hide table */
+/* Mobile: show cards, hide the table.
+   The hide is on the --desktop-only modifier, not on .admin-table-wrapper itself.
+   It used to apply to every wrapper, but only the bookings table had a card
+   fallback — so the Pricing and Staff tabs, which reuse the wrapper, rendered a
+   completely blank page on every phone. All three now have card layouts, and a
+   wrapper only opts into being hidden when one exists. */
 .admin-cards {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
 }
 
-.admin-table-wrapper { display: none; }
+.admin-table-wrapper--desktop-only { display: none; }
 
 .admin-card {
     background: var(--dark-2);
@@ -1073,8 +1217,10 @@
 }
 
 .admin-card--open { border-color: rgba(61,187,72,0.4); }
-.admin-card:hover { border-color: var(--border-dark); }
-.admin-card--open:hover { border-color: rgba(61,187,72,0.4); }
+@media (hover: hover) and (pointer: fine) {
+    .admin-card:hover { border-color: var(--border-dark); }
+    .admin-card--open:hover { border-color: rgba(61,187,72,0.4); }
+}
 
 .admin-card__header {
     display: flex;
@@ -1103,7 +1249,7 @@
 .admin-card__name {
     padding: 0 1rem 0.2rem;
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: var(--fs-body);
     color: var(--white);
 }
 
@@ -1116,8 +1262,8 @@
     flex-wrap: wrap;
 }
 
-.admin-card__meta span:first-child { font-size: 0.85rem; color: rgba(255,255,255,0.6); }
-.admin-card__meta span:last-child  { font-size: 0.8rem; color: rgba(255,255,255,0.4); }
+.admin-card__meta span:first-child { font-size: var(--fs-xs); color: rgba(255,255,255,0.6); }
+.admin-card__meta span:last-child  { font-size: var(--fs-caption); color: rgba(255,255,255,0.4); }
 
 .admin-card__detail {
     border-top: 1px solid var(--border-dark);
@@ -1131,20 +1277,24 @@
 .admin-card__detail-row {
     display: flex;
     gap: 0.75rem;
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
 }
 
-.admin-card__detail-row span:first-child {
+/* Direct child, not any descendant: as `span:first-child` this also matched the
+   first <span> inside any nested markup in the value column, which uppercased and
+   shrank the first job note on every expanded booking. */
+.admin-card__detail-row > span:first-child {
     color: rgba(255,255,255,0.35);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    font-size: 0.7rem;
+    font-size: var(--fs-2xs);
     min-width: 48px;
     flex-shrink: 0;
     padding-top: 0.1rem;
 }
 
-.admin-card__detail-row span:last-child {
+/* Direct child for the same reason as the rule above. */
+.admin-card__detail-row > span:last-child {
     color: rgba(255,255,255,0.75);
     word-break: break-word;
 }
@@ -1187,9 +1337,10 @@
     .timeslot-grid { grid-template-columns: repeat(4, 1fr); }
     .booking-card { padding: 2.5rem; }
 
-    /* Show table, hide cards */
+    /* Show tables, hide the bookings card list. (.admin-mobile-cards is hidden
+       next to its own definition further down — see the note there.) */
     .admin-cards { display: none; }
-    .admin-table-wrapper { display: block; }
+    .admin-table-wrapper--desktop-only { display: block; }
 
     /* Filters: horizontal row */
     .admin-filters {
@@ -1201,28 +1352,195 @@
 }
 
 /* ============================================================
-   ADMIN DAY CALENDAR
+   ADMIN PRICING & STAFF — mobile card layouts
+   ------------------------------------------------------------
+   Below 768px the Pricing and Staff tables are replaced by these, rather than
+   hidden with nothing behind them (which is what used to happen). Hidden at
+   768px+ by the .admin-mobile-cards rule in the breakpoint block above.
    ============================================================ */
-.day-cal__nav {
+.admin-mobile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* The hide has to live here, immediately after the rule it overrides, rather than
+   with the other breakpoint rules further up the file: this block is defined below
+   them, and at equal specificity the later declaration wins regardless of the media
+   query. Putting it up there left the cards AND the table both rendering at 768px+,
+   so the Pricing and Staff tabs showed every row twice on desktop. */
+@media (min-width: 768px) {
+    .admin-mobile-cards { display: none; }
+}
+
+.admin-edit-card {
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+    padding: 1rem;
+}
+
+.admin-edit-card__title {
+    font-weight: 700;
+    font-size: var(--fs-body);
+    color: var(--white);
+    margin-bottom: 0.15rem;
+}
+
+.admin-edit-card__meta {
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 0.85rem;
+}
+
+/* Label and control on one line, wrapping to two when the label is long. */
+.admin-edit-card__field {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.75rem;
     flex-wrap: wrap;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--border-dark);
+}
+
+.admin-edit-card__field:first-of-type { border-top: none; }
+
+.admin-edit-card__field > span {
+    font-size: var(--fs-sm);
+    color: rgba(255,255,255,0.6);
+}
+
+.admin-edit-card__field .form-control { width: auto; min-width: 7rem; }
+
+.admin-edit-card__actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+}
+
+.admin-edit-card__actions .btn,
+.admin-edit-card__actions .action-btn { flex: 1; justify-content: center; }
+
+/* A checkbox big enough to hit. The bare 13px checkboxes in the staff table were
+   unusable on touch. */
+.admin-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-top: 1px solid var(--border-dark);
+    font-size: var(--fs-sm);
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    min-height: var(--touch-min);
+}
+
+.admin-toggle input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    accent-color: var(--green);
+    cursor: pointer;
+}
+
+/* The sticky bar floats over the list, so the list needs room to scroll clear of it.
+   Without this the last service's own Save button sits permanently underneath and is
+   unreachable on a phone — you could edit its price but never save it. */
+.admin-mobile-cards--sticky-actions { padding-bottom: 5rem; }
+
+@media (min-width: 768px) {
+    .admin-mobile-cards--sticky-actions { padding-bottom: 0; }
+}
+
+/* Save All follows the list down the page instead of scrolling off the top. */
+.pricing-sticky-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem 0;
+    margin-top: 1rem;
+    background: linear-gradient(to top, var(--dark) 60%, transparent);
+}
+
+.pricing-sticky-actions .btn { flex: 1; justify-content: center; }
+
+@media (min-width: 768px) {
+    .pricing-sticky-actions { display: none; }
+}
+
+/* ============================================================
+   ADMIN DAY CALENDAR
+   ============================================================ */
+/* Stacked on a phone: the date and its two arrows on one line, the jump controls
+   beneath. This was a single wrapping row, which broke wherever it ran out of width —
+   typically leaving "previous day" on one line and "next day" on the next. */
+.day-cal__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
     margin-bottom: 1rem;
 }
 
-.day-cal__title {
+.day-cal__nav-main {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    font-size: 1.05rem;
-    min-width: 240px;
+}
+
+.day-cal__nav-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+/* Wide enough for one row again. */
+@media (min-width: 640px) {
+    .day-cal__nav {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+    .day-cal__nav-main { flex: 1 1 auto; }
+}
+
+/* min-width: 0 rather than the old 240px: that floor is what forced the nav row to
+   wrap on a phone and split the two arrows across separate lines. The title takes the
+   space between the arrows and wraps within it if the date is long. */
+.day-cal__title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: var(--fs-h3-compact);
+    text-align: center;
+}
+
+/* Only one of the two date lengths is ever shown. Below 640px the short form keeps
+   the arrows and the date on a single line; above it there's room for the full one. */
+.day-cal__date--full  { display: none; }
+.day-cal__date--short { display: inline; }
+
+@media (min-width: 640px) {
+    .day-cal__title {
+        justify-content: flex-start;
+        text-align: left;
+    }
+    .day-cal__date--full  { display: inline; }
+    .day-cal__date--short { display: none; }
 }
 
 .day-cal__picker {
     width: auto;
     padding: 0.35rem 0.6rem;
-    font-size: 0.85rem;
+    font-size: var(--fs-xs);
     color-scheme: dark;
 }
 
@@ -1232,12 +1550,12 @@
     gap: 0.75rem;
     margin-bottom: 1.25rem;
     color: rgba(255,255,255,0.6);
-    font-size: 0.9rem;
+    font-size: var(--fs-body-sm);
 }
 
 .day-cal__closed {
     color: #f87171;
-    font-size: 0.85rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
 }
 
@@ -1265,7 +1583,7 @@
 .day-cal-slot__time {
     font-weight: 700;
     color: var(--green);
-    font-size: 0.9rem;
+    font-size: var(--fs-body-sm);
     padding-top: 0.15rem;
 }
 
@@ -1280,7 +1598,7 @@
 
 .day-cal-slot__free {
     color: rgba(255,255,255,0.3);
-    font-size: 0.85rem;
+    font-size: var(--fs-xs);
     padding-top: 0.15rem;
 }
 
@@ -1309,13 +1627,13 @@
 }
 
 .day-cal-booking__meta {
-    font-size: 0.82rem;
+    font-size: var(--fs-xs);
     color: rgba(255,255,255,0.55);
 }
 
 .day-cal-booking__notes {
     margin-top: 0.35rem;
-    font-size: 0.8rem;
+    font-size: var(--fs-caption);
     color: rgba(255,255,255,0.4);
     font-style: italic;
 }
@@ -1330,12 +1648,528 @@
 a.action-btn { text-decoration: none; }
 
 .action-btn--whatsapp { background: rgba(37,211,102,0.12); color: #25d366; border-color: rgba(37,211,102,0.3); }
-.action-btn--whatsapp:hover { background: #25d366; color: var(--dark); }
+@media (hover: hover) and (pointer: fine) {
+    .action-btn--whatsapp:hover { background: #25d366; color: var(--dark); }
+}
 .action-btn--call { background: rgba(59,130,246,0.12); color: #60a5fa; border-color: rgba(59,130,246,0.3); }
-.action-btn--call:hover { background: #3b82f6; color: var(--white); }
+@media (hover: hover) and (pointer: fine) {
+    .action-btn--call:hover { background: #3b82f6; color: var(--white); }
+}
 .action-btn--keep { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.15); }
-.action-btn--keep:hover { background: rgba(255,255,255,0.15); color: var(--white); }
+@media (hover: hover) and (pointer: fine) {
+    .action-btn--keep:hover { background: rgba(255,255,255,0.15); color: var(--white); }
+}
 /* Delete is permanent (two-step), so it stays muted until hover — distinct from
    the always-red "Cancel" which only changes a booking's status. */
 .action-btn--delete { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.5); border-color: rgba(255,255,255,0.12); }
-.action-btn--delete:hover { background: #dc2626; color: var(--white); border-color: #dc2626; }
+@media (hover: hover) and (pointer: fine) {
+    .action-btn--delete:hover { background: #dc2626; color: var(--white); border-color: #dc2626; }
+}
+
+/* ============================================================
+   iOS INPUT ZOOM — admin & booking controls
+   ------------------------------------------------------------
+   Companion to the block of the same name in app.css. It has to live here rather
+   than there because this file is loaded second: the selectors below are defined
+   in this file at 13.6–14px, media queries contribute no specificity, and at equal
+   specificity the later stylesheet wins. Putting the override in app.css alone left
+   every admin field still under the 16px threshold, so the page kept zooming on
+   focus exactly where it was worst — the dashboard, on a phone.
+   ============================================================ */
+@media (max-width: 767px) {
+    .form-control--compact,
+    .form-control--price,
+    .day-cal__picker,
+    .admin-search .form-control {
+        font-size: 16px;
+    }
+
+    /* 16px needs more room than the 13–14px these were spaced for. */
+    .form-control--compact,
+    .form-control--price {
+        padding: 0.45rem 0.6rem;
+    }
+
+    /* Fixed at 100px for a 14px font; too tight once the digits are 16px. */
+    .form-control--price { width: 7.5rem; }
+}
+
+/* ============================================================
+   TOUCH TARGETS (mobile)
+   ------------------------------------------------------------
+   Every control a finger has to hit gets at least --touch-min (44px) in the
+   vertical direction, and as close to it horizontally as the layout allows. The
+   visual sizes are unchanged on desktop, where a mouse makes small targets fine.
+
+   The calendar day is the one compromise: it's a 7-column grid inside the booking
+   card, so at a 390px viewport each cell can only be ~41px wide however the padding
+   is tuned. Dropping aspect-ratio and setting an explicit min-height gives a
+   41×44 target — short on one axis, but the axis that matters least, and far better
+   than the ~31px square it collapsed to at 320px.
+   ============================================================ */
+@media (max-width: 767px) {
+    .cal-nav__btn {
+        width: var(--touch-min);
+        height: var(--touch-min);
+    }
+
+    .cal-day {
+        aspect-ratio: auto;
+        min-height: var(--touch-min);
+    }
+
+    .cal-grid { gap: 3px; }
+
+    .timeslot { min-height: var(--touch-min); }
+
+    .action-btn {
+        min-height: var(--touch-min);
+        padding: 0.5rem 0.9rem;
+    }
+
+    .filter-tab {
+        min-height: var(--touch-min);
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5rem 1rem;
+    }
+
+    .bike-chip {
+        min-height: var(--touch-min);
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5rem 1rem;
+    }
+
+    /* The ✕ was an ~18px glyph with almost no padding around it. */
+    .photo-picker-remove {
+        min-width: var(--touch-min);
+        min-height: var(--touch-min);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+    }
+
+    .service-pick-card { min-height: var(--touch-min); }
+
+    .customer-auth-strip__link {
+        min-height: var(--touch-min);
+        display: inline-flex;
+        align-items: center;
+    }
+}
+
+/* ============================================================
+   NOTIFICATION BELL (admin header)
+   ------------------------------------------------------------
+   Fed by NotificationService and pushed live over the circuit the dashboard already
+   holds — see NotificationHub. The panel is absolutely positioned against .notif,
+   so it needs the header row to allow overflow.
+   ============================================================ */
+.notif { position: relative; }
+
+.notif__bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+    padding: 0.5rem;
+    font-size: 1.25rem;
+    background: transparent;
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+    color: rgba(255,255,255,0.75);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.notif__bell--open { border-color: var(--green); color: var(--green); }
+
+@media (hover: hover) and (pointer: fine) {
+    .notif__bell:hover { border-color: var(--green); color: var(--green); }
+}
+
+/* The unread count. Sits on the bell's top-right corner. */
+.notif__badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: var(--green);
+    color: var(--dark);
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 18px;
+    text-align: center;
+}
+
+.notif__panel {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    z-index: 1200;          /* above the sticky navbar (1000) */
+    /* The panel is rendered inside .page-hero, which is text-align: center — so
+       without this every notification came out centred like a heading. */
+    text-align: left;
+    width: min(22rem, calc(100vw - 2rem));
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+
+.notif__panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-dark);
+    font-size: var(--fs-sm);
+    color: var(--white);
+}
+
+.notif__mark {
+    background: none;
+    border: none;
+    color: var(--green);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.25rem;
+}
+
+.notif__empty {
+    padding: 1.5rem 1rem;
+    text-align: center;
+    color: rgba(255,255,255,0.35);
+    font-size: var(--fs-sm);
+}
+
+.notif__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.notif__item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0 0.75rem;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--border-dark);
+}
+
+.notif__item:last-child { border-bottom: none; }
+
+/* A left bar rather than a background wash, so an unread item still reads as part
+   of the same list. */
+.notif__item--unread { box-shadow: inset 3px 0 0 var(--green); }
+
+.notif__item-title {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--white);
+}
+
+.notif__item-body {
+    grid-column: 1;
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.55);
+}
+
+.notif__item-time {
+    grid-row: 1;
+    grid-column: 2;
+    font-size: var(--fs-2xs);
+    color: rgba(255,255,255,0.35);
+    white-space: nowrap;
+}
+
+/* The panel is anchored to the bell, which sits in a right-aligned header row; on a
+   phone that row wraps, so pin the panel to the viewport edge instead of the bell. */
+@media (max-width: 479px) {
+    /* A 22rem panel anchored to the bell would run off the left edge on a narrow
+       screen, because the bell sits mid-row rather than at the edge. So the panel is
+       anchored to the header row instead — still directly beneath the bell, but
+       right-aligned to the container, where there is room for it.
+
+       Note what this must NOT be: `position: static` on .notif alone. That removes
+       the positioning context entirely, so the panel's `top: calc(100% + 0.5rem)`
+       resolves against a far taller ancestor and it lands halfway down the page,
+       nowhere near the bell that opened it. */
+    .admin-header-actions { position: relative; }
+    .notif { position: static; }
+    .notif__panel {
+        right: 0;
+        left: auto;
+        width: min(22rem, calc(100vw - 2rem));
+    }
+}
+
+/* ---------- Pager (admin bookings list) ---------- */
+/* Explicit prev/next rather than infinite scroll — on a phone, infinite scroll makes
+   anything below the list unreachable. */
+.pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 1.25rem;
+}
+
+.pager__status {
+    font-size: var(--fs-sm);
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    flex: 1 1 auto;
+}
+
+.pager__btn { flex: 0 0 auto; }
+
+@media (max-width: 479px) {
+    .pager__status { order: 3; flex-basis: 100%; }
+    .pager__btn { flex: 1 1 0; justify-content: center; }
+}
+
+/* The toggle between "unread only" and "read too". Sits under the list so the
+   notifications themselves stay the first thing you read. */
+.notif__panel-foot {
+    padding: 0.5rem 1rem 0.6rem;
+    border-top: 1px solid var(--border-dark);
+    text-align: center;
+}
+
+/* ---------- Completion note (admin) ---------- */
+/* Opens inline under the action buttons when a job is marked complete. flex-basis
+   100% so it drops onto its own line rather than squeezing in beside the buttons. */
+.complete-note {
+    flex: 1 1 100%;
+    margin-top: 0.6rem;
+    padding: 0.85rem;
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+    text-align: left;
+}
+
+.complete-note__label {
+    display: block;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--white);
+    margin-bottom: 0.4rem;
+}
+
+.complete-note__optional {
+    font-weight: 400;
+    color: rgba(255,255,255,0.4);
+}
+
+.complete-note__share {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    font-size: var(--fs-sm);
+    color: rgba(255,255,255,0.75);
+    cursor: pointer;
+    min-height: var(--touch-min);
+}
+
+.complete-note__share input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    accent-color: var(--green);
+    cursor: pointer;
+}
+
+.complete-note__hint {
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 0.75rem;
+}
+
+.complete-note__actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* A note the mechanic chose to share, shown on the customer's own booking. Tinted
+   green to read as something from the shop rather than more booking metadata. */
+.account-booking-row__note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+    padding: 0.4rem 0.6rem;
+    background: rgba(61,187,72,0.07);
+    border-left: 2px solid var(--green);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: rgba(255,255,255,0.75) !important;
+    line-height: 1.5;
+}
+
+/* ============================================================
+   CUSTOMERS TAB (admin)
+   ============================================================ */
+.admin-search--wide { flex: 1 1 100%; }
+
+/* A list row that's a button — it opens the detail view. Inherits .admin-edit-card's
+   box, so only the button resets and the stats row are needed here. */
+.customer-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+
+.customer-card__stats {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    margin-top: 0.5rem;
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.45);
+}
+
+.customer-card:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .customer-card:hover { border-color: var(--green); }
+}
+
+/* ---------- Detail ---------- */
+.customer-detail__back { margin-bottom: 1.25rem; }
+
+.customer-detail__head { margin-bottom: 1.25rem; }
+.customer-detail__head h3 { margin-bottom: 0.2rem; }
+
+.customer-detail__contact {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+}
+
+.customer-detail__stats { margin-bottom: 1.5rem; }
+.customer-detail__empty { margin-bottom: 1.25rem; }
+.customer-detail__add-note { margin-bottom: 1.25rem; }
+
+/* ---------- Notes ---------- */
+.customer-notes,
+.customer-bookings,
+.customer-bikes {
+    list-style: none;
+    margin: 0 0 1.5rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.customer-note {
+    padding: 0.75rem 0.9rem;
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+}
+
+/* Shared notes get the same green edge the customer sees on their own booking, so
+   staff can tell at a glance which ones the customer is reading. */
+.customer-note--shared { border-left: 3px solid var(--green); }
+
+.customer-note__head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.4rem;
+}
+
+.customer-note__delete { margin-left: auto; }
+
+.customer-note__body {
+    font-size: var(--fs-sm);
+    color: rgba(255,255,255,0.8);
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+/* ---------- Bookings & bikes ---------- */
+.customer-booking {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.7rem 0.9rem;
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+}
+
+/* Never linked to the account — shown so a guest booking doesn't make a returning
+   customer look like a stranger. */
+.customer-booking--unlinked { opacity: 0.75; border-style: dashed; }
+
+.customer-booking__main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    flex: 1 1 10rem;
+    min-width: 0;
+}
+
+.customer-bikes li {
+    padding: 0.5rem 0.9rem;
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-sm);
+}
+
+/* Staff notes shown on a booking's expanded row. Also the only place a note on a
+   guest booking is visible, since a guest has no customer page to put it on. */
+.booking-notes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.booking-note {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.45rem 0.6rem;
+    background: var(--dark-2);
+    border-left: 2px solid var(--border-dark);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+/* Green edge = the customer can see this one, matching how it looks on their own
+   booking. */
+.booking-note--shared { border-left-color: var(--green); }

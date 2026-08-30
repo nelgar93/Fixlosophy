@@ -1,7 +1,9 @@
 @page "/gallery"
 @inject SiteImages Images
 
-<PageTitle>The Shop – Fixlosophy Bike Repair</PageTitle>
+<SeoHead Title="The Shop"
+         Description="@($"A look round the Fixlosophy workshop in {SiteContent.AddressVenue}, {SiteContent.AddressCity} — bikes out front, wheels on the wall, and a window we painted ourselves.")"
+         ImageUrl="@Images.Url("shop/shopfront.jpg")" />
 
 <div class="page-hero page-hero--sm">
     <div class="container">

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Fixlosophy.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,17 +9,35 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
     public const int MaxPerSlot = 2;
     public const int MaxActiveBookingsPerEmail = 3;
 
-    public static readonly string[] TimeSlots =
-        ["09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
+    // Slots are derived from the trading hours in SiteContent rather than typed out,
+    // so the calendar can never offer an appointment for a time the shop is shut.
+    // Two rules, applied to every day: appointments start on the hour, and the last
+    // one starts a full hour before closing (nobody books the minute they lock up).
+    // SiteContent.LunchStart is skipped.
+    //
+    // This previously lived in two hand-written arrays, which had drifted: Saturday
+    // shared the weekday list and so offered an 18:00 slot even though the shop
+    // closes at 18:00 on Saturdays.
+    private static readonly Dictionary<DayOfWeek, string[]> _slotsByDay =
+        Enum.GetValues<DayOfWeek>().ToDictionary(day => day, BuildSlotsFor);
 
-    // The shop trades 11–17 on Sundays rather than 9–19, so Sunday gets a shorter
-    // list. Both follow the same rule as the weekday one: the last slot starts an
-    // hour before closing, and 13:00 is lunch.
-    public static readonly string[] SundayTimeSlots =
-        ["11:00", "12:00", "14:00", "15:00", "16:00"];
+    private static string[] BuildSlotsFor(DayOfWeek day)
+    {
+        if (SiteContent.HoursFor(day) is not { } hours) return [];
 
-    public static string[] SlotsFor(DateTime date) =>
-        date.DayOfWeek == DayOfWeek.Sunday ? SundayTimeSlots : TimeSlots;
+        var slots = new List<string>();
+        for (var t = hours.Open; t.AddHours(1) <= hours.Close; t = t.AddHours(1))
+        {
+            if (t == SiteContent.LunchStart) continue;
+            // Invariant: these strings are persisted in Bookings.SlotTime and compared
+            // against stored values, so they must not follow the server's locale.
+            slots.Add(t.ToString("HH:mm", CultureInfo.InvariantCulture));
+        }
+        return [.. slots];
+    }
+
+    /// Bookable appointment times for a given date. Empty on a day the shop is closed.
+    public static string[] SlotsFor(DateTime date) => _slotsByDay[date.DayOfWeek];
 
     // Atomic booking-reference counter (Postgres sequence "BookingReferenceSeq",
     // created in Program.cs's EnsureSchema). Static + takes db explicitly so the
@@ -79,7 +98,7 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
 
     public List<string> GetAvailableSlots(DateTime date)
     {
-        if (date.Date < DateTime.Today)
+        if (date.Date < ShopClock.Today)
             return [];
 
         var start = date.Date;
@@ -93,7 +112,7 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
 
         return SlotsFor(date).Where(slot =>
         {
-            if (date.Date == DateTime.Today && TimeOnly.TryParse(slot, out var t) && t <= TimeOnly.FromDateTime(DateTime.Now))
+            if (date.Date == ShopClock.Today && TimeOnly.TryParse(slot, out var t) && t <= TimeOnly.FromDateTime(ShopClock.Now))
                 return false;
             return !booked.TryGetValue(slot, out var count) || count < MaxPerSlot;
         }).ToList();
@@ -101,7 +120,7 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
 
     public bool IsDateAvailable(DateTime date)
     {
-        if (date.Date < DateTime.Today) return false;
+        if (date.Date < ShopClock.Today) return false;
         return GetAvailableSlots(date).Count > 0;
     }
 
@@ -110,7 +129,7 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         booking.CustomerEmail = booking.CustomerEmail.Trim();
         booking.CustomerPhone = booking.CustomerPhone.Trim();
         var normEmail = booking.CustomerEmail.ToLowerInvariant();
-        var today = DateTime.Today;
+        var today = ShopClock.Today;
 
         var slotTaken = db.Bookings.Count(b =>
             b.SlotDate == booking.SlotDate && b.SlotTime == booking.SlotTime &&
@@ -136,8 +155,8 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         if (upcoming >= MaxActiveBookingsPerEmail)
             return (null, $"You already have {MaxActiveBookingsPerEmail} upcoming bookings — please contact us if you need to change one.");
 
-        booking.Reference = $"FIX-{DateTime.Now:yyMMdd}-{NextReferenceSequence(db):D3}";
-        booking.CreatedAt = DateTime.Now;
+        booking.Reference = $"FIX-{ShopClock.Now:yyMMdd}-{NextReferenceSequence(db):D3}";
+        booking.CreatedAt = ShopClock.Now;
         booking.Status = BookingStatus.Pending;
         db.Bookings.Add(booking);
         try
@@ -181,12 +200,73 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         db.SaveChanges();
     }
 
-    public List<Booking> GetAllBookings() =>
-        db.Bookings
-          .Include(b => b.Photos)
-          .OrderByDescending(b => b.SlotDate)
-          .ThenBy(b => b.SlotTime)
-          .ToList();
+    /// <summary>
+    /// One page of bookings for the admin list, filtered and searched in the database.
+    ///
+    /// This used to load every booking with every photo and then filter in memory on
+    /// each keystroke. Photos are deliberately not included: only an expanded row
+    /// needs them, and Admin.razor already fetches those lazily when a row opens.
+    /// </summary>
+    /// <param name="staffId">Non-null to restrict to bookings assigned to that person.</param>
+    /// <returns>The page, plus the total number of matches for the pager.</returns>
+    public (List<Booking> items, int total) GetBookingsPage(
+        string? staffId, string filter, string? search, int page, int pageSize)
+    {
+        var query = db.Bookings.AsQueryable();
+
+        if (staffId is not null)
+            query = query.Where(b => b.AssignedStaffId == staffId);
+
+        var today = ShopClock.Today;
+        var tomorrow = today.AddDays(1);
+        query = filter switch
+        {
+            "Today"       => query.Where(b => b.SlotDate >= today && b.SlotDate < tomorrow),
+            "Pending"     => query.Where(b => b.Status == BookingStatus.Pending),
+            "Confirmed"   => query.Where(b => b.Status == BookingStatus.Confirmed),
+            "In Progress" => query.Where(b => b.Status == BookingStatus.InProgress),
+            "Completed"   => query.Where(b => b.Status == BookingStatus.Completed),
+            "Cancelled"   => query.Where(b => b.Status == BookingStatus.Cancelled),
+            _             => query
+        };
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLowerInvariant();
+            // ToLower() is translated to SQL lower(...) by EF Core — the analyzer's
+            // suggested StringComparison overload isn't SQL-translatable and would throw.
+#pragma warning disable CA1304, CA1311, CA1862
+            query = query.Where(b =>
+                b.CustomerName.ToLower().Contains(term) ||
+                b.CustomerEmail.ToLower().Contains(term) ||
+                b.ServiceName.ToLower().Contains(term) ||
+                b.Reference.ToLower().Contains(term));
+#pragma warning restore CA1304, CA1311, CA1862
+        }
+
+        var total = query.Count();
+
+        // Skip/Take needs a total order; SlotDate alone isn't unique, so Id breaks ties
+        // and stops a row appearing on two pages.
+        var items = query
+            .OrderByDescending(b => b.SlotDate)
+            .ThenBy(b => b.SlotTime)
+            .ThenBy(b => b.Id)
+            .Skip(Math.Max(0, page) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return (items, total);
+    }
+
+    /// Photos for one booking, fetched when its row is expanded rather than for the
+    /// whole list up front.
+    public List<BookingPhoto> GetPhotosForBooking(string bookingId) =>
+        db.BookingPhotos.Where(p => p.BookingId == bookingId).ToList();
+
+    // GetAllBookings() used to live here — every booking with every photo, then
+    // filtered in memory. Superseded by GetBookingsPage above and deliberately
+    // removed rather than left available, so it can't be reached for again.
 
     public List<Booking> GetBookingsByDate(DateTime date)
     {
@@ -208,14 +288,53 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         return true;
     }
 
+    /// How close to the slot a customer can still cancel themselves. Inside this
+    /// window the mechanic may already have set aside the time, so it becomes a phone
+    /// call rather than a silent no-show.
+    public static readonly TimeSpan SelfCancelCutoff = TimeSpan.FromHours(2);
+
+    /// <summary>
+    /// Cancels a booking on the customer's own behalf.
+    ///
+    /// customerId is part of the lookup rather than checked afterwards, so one
+    /// customer can never cancel another's booking by guessing an id — the same
+    /// pattern BikeService.RemoveBike uses. Returns the cancelled booking so the
+    /// caller can notify the shop.
+    /// </summary>
+    public (Booking? booking, string? error) CancelOwnBooking(string customerId, string bookingId)
+    {
+        var booking = db.Bookings.FirstOrDefault(b => b.Id == bookingId && b.CustomerId == customerId);
+        if (booking is null)
+            return (null, "We couldn't find that booking.");
+
+        if (booking.Status == BookingStatus.Cancelled)
+            return (null, "That booking is already cancelled.");
+        if (booking.Status == BookingStatus.Completed)
+            return (null, "That booking is already completed.");
+
+        // SlotTime is "HH:mm"; combine it with the date so the cutoff compares against
+        // the actual appointment, not midnight on the day.
+        var slotStart = booking.SlotDate.Date;
+        if (TimeOnly.TryParse(booking.SlotTime, CultureInfo.InvariantCulture, out var t))
+            slotStart = slotStart.Add(t.ToTimeSpan());
+
+        if (slotStart - ShopClock.Now < SelfCancelCutoff)
+            return (null, $"This booking is less than {SelfCancelCutoff.TotalHours:0} hours away — " +
+                          $"please call us on {SiteContent.PhoneDisplay} so we can free the slot properly.");
+
+        booking.Status = BookingStatus.Cancelled;
+        db.SaveChanges();
+        return (booking, null);
+    }
+
     // Single DB query: returns true/false availability for every day in the given month.
     // A day is available when it has at least one open slot (not at MaxPerSlot capacity).
     public Dictionary<DateTime, bool> GetDateAvailabilityForMonth(int year, int month)
     {
         var start = new DateTime(year, month, 1);
         var end = start.AddMonths(1);
-        var today = DateTime.Today;
-        var now = DateTime.Now;
+        var today = ShopClock.Today;
+        var now = ShopClock.Now;
 
         // One round-trip: booked count per (date, slot) for the whole month
         var bookedPerSlot = db.Bookings
@@ -282,7 +401,7 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
     // round-trips per call site.
     private static (int total, int today, int pending, int confirmed) GetStatsCore(IQueryable<Booking> query)
     {
-        var todayStart = DateTime.Today;
+        var todayStart = ShopClock.Today;
         var tomorrowStart = todayStart.AddDays(1);
 
         var row = query

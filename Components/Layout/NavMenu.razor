@@ -1,7 +1,11 @@
 @inject NavigationManager Nav
 @implements IDisposable
 
-<header class="navbar-wrapper @(scrolled ? "navbar-scrolled" : "")">
+@* The header used to carry a "navbar-scrolled" class driven by a `scrolled` field
+   that was never assigned — there was no scroll listener, so the shadow never
+   appeared. Rather than add JS interop for a decorative shadow, the border-bottom in
+   app.css does the job of separating the bar from the content under it. *@
+<header class="navbar-wrapper">
     <nav class="navbar container">
         <a class="navbar-brand" href="/">
             <Logo ImgClass="navbar-logo" />
@@ -45,7 +49,6 @@
 
 @code {
     private bool menuOpen = false;
-    private bool scrolled = false;
 
     protected override void OnInitialized()
     {
