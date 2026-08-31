@@ -99,3 +99,7 @@ coverage/
 ## =====================
 cookies*.txt
 conf_*.html
+## =====================
+## Demo build output
+## =====================
+demo/dist/
