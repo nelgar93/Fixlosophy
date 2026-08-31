@@ -4356,6 +4356,84 @@ a.action-btn { text-decoration: none; }
     text-decoration: none;
 }
 
+/* The data export. On the real site the button is a link to /account/export and the
+   browser saves a file; a shared demo page is sandboxed and can start no download at
+   all, so the same JSON is shown in full instead. */
+.demo-export {
+    position: fixed;
+    inset: 0;
+    z-index: 4500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0,0,0,0.8);
+}
+
+.demo-export__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    width: min(720px, 100%);
+    max-height: min(80vh, 720px);
+    padding: 1.1rem;
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+    background: var(--dark-2);
+    box-shadow: var(--shadow-lg);
+}
+
+.demo-export__head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+.demo-export__head strong { display: block; color: var(--white); font-size: 1.05rem; }
+.demo-export__head span {
+    display: block;
+    margin-top: 0.3rem;
+    color: var(--mid);
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+}
+
+.demo-export__close {
+    flex-shrink: 0;
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--mid);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.demo-export__json {
+    flex: 1;
+    overflow: auto;
+    margin: 0;
+    padding: 0.85rem;
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+    background: var(--dark);
+    color: rgba(255,255,255,0.82);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: var(--fs-2xs);
+    line-height: 1.55;
+    white-space: pre;
+    -webkit-overflow-scrolling: touch;
+}
+.demo-export__json::selection { background: var(--green-glow); }
+
+.demo-export__actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+@media (max-width: 480px) {
+    .demo-export__panel { max-height: 88vh; padding: 0.85rem; }
+    .demo-export__actions .btn { flex: 1; justify-content: center; }
+}
+
 /* The nav's sign-out is an <a href="/auth/logout"> in the real app; here it has to
    be a button, so it borrows the link's own styling rather than a button's. */
 button.nav-auth-link {
@@ -5750,7 +5828,8 @@ function freshUiState() {
             passwordMessage: null, passwordError: null,
             newBike: '', bikeError: null,
             cancelConfirmId: null, cancelError: null, cancelMessage: null,
-            confirmingDelete: false, deleteError: null
+            confirmingDelete: false, deleteError: null,
+            exportJson: null
         },
 
         // Auth pages
@@ -7341,7 +7420,7 @@ function accountData(a, upcomingCount) {
           '<a href="#/privacy" data-nav>privacy policy</a> explains what we keep and why.</p>' +
         (a.deleteError ? '<div class="booking-error">' + esc(a.deleteError) + '</div>' : '') +
         '<div class="account-data-actions">' +
-          '<button class="btn btn-outline" data-act="account-export">Download my data</button>' +
+          '<button class="btn btn-outline" data-act="account-export">See my data</button>' +
           (a.confirmingDelete ? '' :
             '<button class="btn btn-danger" data-act="account-delete-start">Delete my account</button>') +
         '</div>' + dangerZone +
@@ -7387,48 +7466,61 @@ function accountCancelBooking(bookingId) {
     toast('Shop notified of the cancellation.');
 }
 
-// The real page links to /account/export, because a Blazor circuit can't hand over a
-// file. Here the JSON is built the same way and handed over by the browser.
-//
-// Two routes, because there are two ways to open this file. Opened from disk, a blob
-// link downloads it. Published as an Artifact, the page is framed and can't start its
-// own download at all — the host has to, through the downloads capability, which asks
-// the viewer first. Resolved once at load: it settles later than the first render, and
-// resolves null wherever no viewer answers.
-// Awaited rather than sampled: it settles after the first render, so a viewer quick
-// on the Export button would otherwise fall through to the blob link the frame can't
-// act on. Resolves null wherever no viewer answers.
-const downloadsReady = (window.claude && typeof window.claude.use === 'function')
-    ? window.claude.use('downloads').catch(() => null)
-    : Promise.resolve(null);
+// The real page links to /account/export and the browser saves the JSON. Nothing here
+// can: a published page is sandboxed and starts no downloads, and a page that asks for
+// the capability to hand over a file can't be shared by link at all — which is the
+// whole point of this build. So the export is shown in full instead, which for a demo
+// is the more useful half anyway: the point is what the file contains.
+function accountExport() {
+    state.account.exportJson = JSON.stringify(exportCustomerData(state.session.id), null, 2);
+    render();
+    const panel = document.querySelector('.demo-export__json');
+    if (panel) panel.focus();
+}
 
-async function accountExport() {
-    const json = JSON.stringify(exportCustomerData(state.session.id), null, 2);
-    const filename = 'fixlosophy-my-data.json';
-    const downloadsApi = await downloadsReady;
+function exportPanel() {
+    const json = state.account.exportJson;
+    if (!json) return '';
+    return '<div class="demo-export" role="dialog" aria-modal="true" aria-label="Your data export">' +
+        '<div class="demo-export__panel">' +
+          '<div class="demo-export__head"><div>' +
+            '<strong>Your data export</strong>' +
+            '<span>Everything the account holds. The real site sends this as a JSON file; a shared ' +
+              'demo page can\'t hand you one, so here it is in full. Internal staff notes are ' +
+              'deliberately absent — only the service reports shared with you.</span>' +
+          '</div>' +
+          '<button class="demo-export__close" data-act="export-close" aria-label="Close">&times;</button></div>' +
+          '<pre class="demo-export__json" tabindex="0">' + esc(json) + '</pre>' +
+          '<div class="demo-export__actions">' +
+            '<button class="btn btn-primary" data-act="export-copy">Copy JSON</button>' +
+            '<button class="btn btn-outline" data-act="export-close">Close</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+}
 
-    if (downloadsApi) {
-        try {
-            await downloadsApi.save({ filename, data: json });
-            toast('Data export saved — internal staff notes are deliberately absent.');
-        } catch (err) {
-            // The viewer declining is an answer, not a failure — never retry it.
-            if (!err || err.code !== 'declined') {
-                toast('Couldn\'t save the export here: ' + ((err && err.message) || 'unavailable'), 'warn');
-            }
-        }
-        return;
+function exportCopy() {
+    const el = document.querySelector('.demo-export__json');
+    if (!el) return;
+
+    // Selecting the text is a fallback, not an error path: the clipboard API needs a
+    // secure context and a permission the embed may not carry.
+    const selectInstead = () => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        el.focus();
+        toast('Clipboard blocked here — the export is selected, so copy it with Ctrl/⌘ + C.', 'warn');
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(state.account.exportJson)
+            .then(() => toast('Data export copied.'), selectInstead);
+    } else {
+        selectInstead();
     }
-
-    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast('Data export downloaded — internal staff notes are deliberately absent.');
 }
 
 function accountDelete() {
@@ -8188,7 +8280,7 @@ function render() {
     const route = currentRoute();
     const view = ROUTES[route] || viewNotFound;
     document.getElementById('app').innerHTML =
-        navMenu(route) + '<main class="site-main">' + view() + '</main>' + siteFooter();
+        navMenu(route) + '<main class="site-main">' + view() + '</main>' + siteFooter() + exportPanel();
     renderDemoBar();
     restoreFocus();
 }
@@ -8345,6 +8437,8 @@ document.addEventListener('click', (e) => {
     }
     case 'account-remove-bike': removeBike(state.session.id, id); render(); break;
     case 'account-export': accountExport(); break;
+    case 'export-copy': exportCopy(); break;
+    case 'export-close': state.account.exportJson = null; render(); break;
     case 'account-delete-start': state.account.confirmingDelete = true; render(); break;
     case 'account-delete-cancel': state.account.confirmingDelete = false; render(); break;
     case 'account-delete': accountDelete(); break;

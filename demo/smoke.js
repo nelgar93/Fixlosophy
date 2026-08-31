@@ -131,6 +131,39 @@ const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
     check(/Upcoming/i.test(account), 'account page lists upcoming bookings');
     check(/Specialized Allez/.test(account), 'saved bikes show');
 
+    console.log('\nData export');
+    await page.evaluate(() => applyPersona('customer'));
+    await page.waitForTimeout(200);
+    check(/See my data/.test(await page.locator('#app').innerText()),
+        'the account page offers the export');
+    // Nothing may try to start a download: a page that offers one can't be shared by
+    // link, which is what this build exists for.
+    const attempted = await page.evaluate(() => {
+        let tried = false;
+        const create = document.createElement.bind(document);
+        document.createElement = (tag) => {
+            const el = create(tag);
+            if (tag.toLowerCase() === 'a') {
+                Object.defineProperty(el, 'download', { set() { tried = true; }, get: () => '' });
+            }
+            return el;
+        };
+        accountExport();
+        document.createElement = create;
+        return tried;
+    });
+    check(attempted === false, 'the export starts no download');
+    await page.locator('.demo-export__json').waitFor({ timeout: 5000 });
+    const exportText = await page.locator('.demo-export__json').innerText();
+    check(exportText.includes('"reference": "FIX-'), 'the export panel shows the bookings');
+    check(exportText.includes('aisha.bello@example.com'), 'the export panel shows the account');
+    check(!/Rear hub has a touch of play/.test(exportText), 'internal staff notes stay out of the export');
+    await page.locator('[data-act="export-copy"]').click();
+    await page.waitForTimeout(200);
+    await page.locator('.demo-export__close').click();
+    await page.waitForTimeout(200);
+    check((await page.locator('.demo-export').count()) === 0, 'the export panel closes');
+
     console.log('\nResponsive');
     for (const width of [320, 390, 768, 1440]) {
         await page.setViewportSize({ width, height: 900 });

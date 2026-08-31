@@ -41,7 +41,11 @@ booking, and the staff permission matrix (`CanViewAllBookings`, `CanManageBookin
 
 What it can't stand in for: real email, file uploads reaching storage, password
 hashing, rate limiting, and anything that depends on the server's clock rather than the
-visitor's.
+visitor's. One deliberate divergence: the real account page links to `/account/export`
+and the browser saves the JSON, but a published page is sandboxed and can start no
+download — and declaring the capability that would let it hand over a file stops the
+page being shared by link at all, which is the one thing this build is for. So the
+export is shown on the page in full instead, with a copy button.
 
 ## Driving it
 
