@@ -3,6 +3,7 @@
  * Smoke test for the built demo.
  *
  *   node demo/build.js && node demo/smoke.js
+ *   node demo/smoke.js --url http://localhost:8080/     # against a served site build
  *
  * Drives demo/dist/fixlosophy-demo.html in headless Chromium: every route, the
  * booking wizard end to end, each persona, and the things that only break once the
@@ -19,8 +20,12 @@ const path = require('path');
 const fs = require('fs');
 const { chromium } = require('playwright');
 
+// Either shape of build: the single file by default, or a served site build (the one
+// GitHub Pages publishes) when a URL is passed.
+const urlArg = process.argv.indexOf('--url');
 const FILE = path.join(__dirname, 'dist', 'fixlosophy-demo.html');
-const URL_BASE = 'file://' + FILE;
+const SERVED = urlArg !== -1 ? process.argv[urlArg + 1].replace(/\/$/, '') + '/' : null;
+const URL_BASE = SERVED || 'file://' + FILE;
 
 const ROUTES = ['#/', '#/services', '#/about', '#/gallery', '#/contact', '#/book',
                 '#/privacy', '#/terms', '#/account/login', '#/account/register',
@@ -32,10 +37,11 @@ const pass = (msg) => console.log('  ok    ' + msg);
 const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
 
 (async () => {
-    if (!fs.existsSync(FILE)) {
+    if (!SERVED && !fs.existsSync(FILE)) {
         console.error('Missing ' + FILE + ' — run `node demo/build.js` first.');
         process.exit(1);
     }
+    console.log('Testing ' + URL_BASE);
 
     const browser = await chromium.launch();
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -57,16 +63,17 @@ const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
         check(text.trim().length > 120, route + ' renders (' + text.trim().length + ' chars)');
     }
 
-    console.log('\nPhotography (baked-in data URIs)');
+    console.log('\nPhotography (' + (SERVED ? 'served alongside the page' : 'baked-in data URIs') + ')');
     await go('#/gallery');
     await page.waitForTimeout(400);
     const images = await page.evaluate(() => [...document.querySelectorAll('#app img')]
-        .map((i) => ({ src: i.currentSrc.slice(0, 24), w: i.naturalWidth, alt: i.alt })));
+        .map((i) => ({ src: i.currentSrc.slice(0, 120), w: i.naturalWidth, alt: i.alt })));
     check(images.length >= 8, 'gallery renders ' + images.length + ' photos');
     const broken = images.filter((i) => i.w === 0);
     check(broken.length === 0, 'every gallery photo decoded' +
         (broken.length ? ' — broken: ' + broken.map((b) => b.alt).join(', ') : ''));
-    check(images.every((i) => i.src.startsWith('data:image')), 'photos come from the baked-in data URIs');
+    check(images.every((i) => i.src.startsWith(SERVED ? URL_BASE + 'assets/' : 'data:image')),
+        SERVED ? 'photos come from the site\'s own assets' : 'photos come from the baked-in data URIs');
 
     console.log('\nBooking wizard, end to end');
     await go('#/book');

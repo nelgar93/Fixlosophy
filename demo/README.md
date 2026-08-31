@@ -14,22 +14,33 @@ the browser — there are no network calls at all in the built file.
 |---|---|
 | `index.html` | The demo itself. `wwwroot/app.css` and `wwwroot/booking.css` verbatim, then a demo-harness stylesheet, then the app: an in-memory store standing in for `AppDbContext` and the service layer, and one render function per Razor page. |
 | `assets/` | The shop photography, re-encoded as WebP. The same photos the real site serves from the public Supabase bucket. |
-| `build.js` | Bakes `assets/` into the page as data URIs → `dist/fixlosophy-demo.html`. |
-| `smoke.js` | Drives the built file in headless Chromium: every route, the wizard end to end, each persona, every admin tab, overflow at four widths. |
+| `build.js` | Wires `assets/` into the page — as data URIs for a single travelling file, or as ordinary files for a hosted site. |
+| `smoke.js` | Drives a build in headless Chromium: every route, the wizard end to end, each persona, every admin tab, overflow at four widths. |
 
-`dist/` is generated and gitignored.
+`dist/` and `_site/` are generated and gitignored.
+
+## Where it's published
+
+GitHub Pages, from `.github/workflows/demo-pages.yml`, on every push to `main` that
+touches `demo/`. That is the link to send people. Pages has to be set to deploy from
+GitHub Actions (Settings → Pages → Source: **GitHub Actions**); the workflow's
+`configure-pages` step turns that on by itself the first time.
+
+An Artifact copy exists too, but a published Artifact can only be shared publicly after
+an automated review that this page is too large to get through — hence Pages.
 
 ## Build and check
 
 ```bash
-node demo/build.js                  # -> demo/dist/fixlosophy-demo.html (~2 MB)
-node demo/smoke.js                  # needs Playwright on NODE_PATH
+node demo/build.js                       # -> demo/dist/fixlosophy-demo.html, photos inlined
+node demo/build.js --pages _site         # -> _site/index.html + _site/assets, what Pages serves
+node demo/smoke.js                       # needs Playwright on NODE_PATH
+node demo/smoke.js --url http://localhost:8080/   # ...against a served site build
 ```
 
-`index.html` opens and runs on its own — the build step exists only because a
-published Artifact runs in a sandbox that blocks off-origin images, so the photos have
-to travel inside the file. Opened from disk or served over HTTP, the page falls back to
-the bucket URLs and looks the same.
+`index.html` opens and runs on its own — the builds exist only to cut its one remaining
+dependency, the public Supabase bucket it reads the photos from. Opened from disk it
+falls back to those bucket URLs and looks the same.
 
 ## What it stands in for
 
