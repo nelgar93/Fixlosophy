@@ -1,0 +1,70 @@
+name: Demo site
+
+# Publishes demo/ to GitHub Pages — the shareable copy of the site, running on
+# invented data in the visitor's browser. Nothing here touches the real app or its
+# database; the job builds a static page and uploads it.
+#
+# Pages must be set to deploy from GitHub Actions (Settings → Pages → Build and
+# deployment → Source: GitHub Actions). The configure-pages step below will turn that
+# on by itself the first time if the repository allows it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'demo/**'
+      - '.github/workflows/demo-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never two deploys at once, and never cancel one half-done — a cancelled deploy can
+# leave the site on a partial upload.
+concurrency:
+  group: demo-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build the demo site
+        run: node demo/build.js --pages _site
+
+      - name: Check the build
+        run: |
+          test -s _site/index.html
+          test "$(find _site/assets -type f | wc -l)" -ge 9
+          grep -q '__FIXLOSOPHY_PHOTOS' _site/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
