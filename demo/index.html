@@ -4356,6 +4356,16 @@ a.action-btn { text-decoration: none; }
     text-decoration: none;
 }
 
+/* Said quietly on every page, because the page gets shared on its own and should never
+   be mistaken for the live site. */
+.demo-footnote {
+    margin-top: 0.4rem;
+    /* Clears the floating Demo button, which sits over this corner of the last page. */
+    padding-bottom: 2.75rem;
+    color: var(--mid);
+    font-size: var(--fs-2xs);
+}
+
 /* The data export. On the real site the button is a link to /account/export and the
    browser saves a file; a shared demo page is sandboxed and can start no download at
    all, so the same JSON is shown in full instead. */
@@ -5960,7 +5970,11 @@ function siteFooter() {
           '<p>' + icon('clock') + ' ' + SITE.hoursDisplay.map(esc).join('<br />') + '</p>' +
         '</div>' +
       '</div>' +
-      '<div class="footer-bottom"><p>&copy; ' + now().getFullYear() + ' ' + SITE.legalName + '. All rights reserved.</p></div>' +
+      '<div class="footer-bottom"><p>&copy; ' + now().getFullYear() + ' ' + SITE.legalName + '. All rights reserved.</p>' +
+        // Says on every page what the Demo panel says inside it: this is a sample of the
+        // site, not the site. Bookings made here reach nobody.
+        '<p class="demo-footnote">Demo build — a copy of the Fixlosophy site running on ' +
+          'invented data. Nothing you enter here reaches the shop.</p></div>' +
     '</div></footer>';
 }
 
