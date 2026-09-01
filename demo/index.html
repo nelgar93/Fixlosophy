@@ -7625,7 +7625,7 @@ function accountUpcoming(upcoming, a) {
 
     const rows = upcoming.map((b) => {
         const actions = a.cancelConfirmId === b.id
-            ? '<button class="action-btn action-btn--cancel" data-act="account-cancel" data-id="' + b.id + '">Confirm cancel</button>' +
+            ? '<button class="action-btn action-btn--danger" data-act="account-cancel" data-id="' + b.id + '">Confirm cancel</button>' +
               '<button class="action-btn action-btn--keep" data-act="account-cancel-keep">Keep</button>'
             : '<button class="action-btn action-btn--delete" data-act="account-cancel-start" data-id="' + b.id + '">Cancel</button>';
 
@@ -8694,7 +8694,7 @@ function customerDetailPanel(detail) {
               '<input type="checkbox" data-act="admin-customer-note-share" ' + (a.customerNoteVisible ? 'checked' : '') + ' />' +
               '<span>Share this with the customer</span></label>' +
             '<div class="complete-note__actions">' +
-              '<button class="action-btn action-btn--confirm" data-act="admin-customer-note-save" ' +
+              '<button class="action-btn action-btn--primary" data-act="admin-customer-note-save" ' +
                 (a.customerNoteBody.trim() ? '' : 'disabled') + '>Save note</button>' +
             '</div>' +
           '</div>'
@@ -8797,7 +8797,7 @@ function adminPricingTab() {
                 : '<input class="form-control form-control--price" type="number" min="0" step="1" ' +
                   'data-price-for="' + s.id + '" value="' + a.editPrices[s.id] + '" />') + '</td>' +
             '<td>' + (s.isQuoteOnly ? '' :
-                '<button class="action-btn action-btn--confirm" data-act="admin-save-price" data-id="' + s.id +
+                '<button class="action-btn action-btn--primary" data-act="admin-save-price" data-id="' + s.id +
                 '">Save</button>') + '</td>' +
           '</tr>').join('') +
         '</tbody></table></div>';
@@ -8891,7 +8891,7 @@ function adminStaffTab() {
                     ? '<span class="text-muted-sm">—</span>'
                     : checkbox(m.id, 'isActive', m.isActive) +
                       '<span class="text-muted-sm admin-checkbox-label">Active</span>') + '</td>' +
-                '<td><button class="action-btn action-btn--confirm" data-act="admin-save-staff" ' +
+                '<td><button class="action-btn action-btn--primary" data-act="admin-save-staff" ' +
                   'data-id="' + m.id + '">Save</button></td>' +
             '</tr>';
         }).join('') + '</tbody></table></div>';
