@@ -31,6 +31,52 @@
         try { input.setSelectionRange(pos, pos); } catch (_) { /* type may not support it */ }
     });
 
+    // ── Phone fields accept digits and nothing else ──────────────────────────
+    // Marked up as <input type="tel" data-phone-input>. type="tel" only asks the
+    // phone for a numeric keypad — it does not stop a desktop keyboard, a paste, or
+    // an autofill from putting letters in, and the server used to accept them
+    // because it just counted digits ("call me on 07700 900000" reached the admin
+    // panel as a dead Call link). Punctuation people genuinely write in numbers is
+    // kept: spaces, brackets, dashes, dots, and a leading +.
+    //
+    // Registered in the CAPTURE phase deliberately. Blazor attaches its @bind
+    // handler to the element itself, so a document-level listener in the bubble
+    // phase would run after Blazor had already read the unfiltered value. Capture
+    // runs first, which lets this one listener cover both the Blazor-bound fields
+    // and the statically-rendered POST forms, with no re-dispatch and no event loop.
+    var PHONE_MAX = 20;
+
+    var cleanPhone = function (raw) {
+        var kept = '';
+        for (var i = 0; i < raw.length; i++) {
+            var c = raw[i];
+            if (c >= '0' && c <= '9') { kept += c; continue; }
+            // '+' is a country-code prefix, so it only means anything at the front.
+            if (c === '+' && kept.length === 0) { kept += c; continue; }
+            // Separators only separate — dropping them until there is something to
+            // separate stops "call me on 07700..." leaving its spaces behind.
+            if (kept.length && (c === ' ' || c === '(' || c === ')' || c === '-' || c === '.')) { kept += c; }
+        }
+        return kept.slice(0, PHONE_MAX);
+    };
+
+    document.addEventListener('input', function (e) {
+        var input = e.target;
+        if (!input || !input.hasAttribute || !input.hasAttribute('data-phone-input')) return;
+
+        var cleaned = cleanPhone(input.value);
+        if (cleaned === input.value) return;
+
+        // Hold the caret where the typing was, minus whatever we dropped ahead of it.
+        var caret = input.selectionStart;
+        var removedBeforeCaret = input.value.length - cleaned.length;
+        input.value = cleaned;
+        if (caret !== null) {
+            var pos = Math.max(0, caret - removedBeforeCaret);
+            try { input.setSelectionRange(pos, pos); } catch (_) { /* not supported */ }
+        }
+    }, true);
+
     // ── Device diagnostics (/devinfo, development only) ──────────────────────
     // Safari's Web Inspector needs a Mac, so on Windows there is no console to read
     // when something looks wrong on an iPhone. This fills in what the device actually

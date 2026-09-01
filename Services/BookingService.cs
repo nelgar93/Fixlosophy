@@ -209,8 +209,26 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
     /// </summary>
     /// <param name="staffId">Non-null to restrict to bookings assigned to that person.</param>
     /// <returns>The page, plus the total number of matches for the pager.</returns>
+    /// How the admin bookings list is ordered. <see cref="SortUpcoming"/> is the
+    /// default: the shop works forwards, so what is coming up belongs at the top and
+    /// history belongs below it, most recent first.
+    public const string SortUpcoming = "Upcoming";
+    public const string SortDateAsc  = "DateAsc";
+    public const string SortDateDesc = "DateDesc";
+
+    public static readonly string[] SortOptions = [SortUpcoming, SortDateAsc, SortDateDesc];
+
+    /// Label for each sort, for the dashboard's picker.
+    public static string SortLabel(string sort) => sort switch
+    {
+        SortDateAsc  => "Date: oldest first",
+        SortDateDesc => "Date: newest first",
+        _            => "Soonest first"
+    };
+
     public (List<Booking> items, int total) GetBookingsPage(
-        string? staffId, string filter, string? search, int page, int pageSize)
+        string? staffId, string filter, string? search, int page, int pageSize,
+        string sort = SortUpcoming)
     {
         var query = db.Bookings.AsQueryable();
 
@@ -246,11 +264,28 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
 
         var total = query.Count();
 
-        // Skip/Take needs a total order; SlotDate alone isn't unique, so Id breaks ties
-        // and stops a row appearing on two pages.
-        var items = query
-            .OrderByDescending(b => b.SlotDate)
-            .ThenBy(b => b.SlotTime)
+        // Skip/Take needs a total order; SlotDate alone isn't unique, so SlotTime and
+        // then Id break ties and stop a row appearing on two pages. SlotTime is a
+        // zero-padded "HH:mm" string, so ordering it lexicographically is chronological.
+        //
+        // "Upcoming" needs three keys because it sorts the two halves of the list in
+        // opposite directions. The first splits them (Postgres orders false before
+        // true, putting today and later on top); the second orders the upcoming half
+        // ascending and is a constant for the past half; the third does the reverse.
+        // Each key is inert for the group it doesn't apply to, so neither disturbs the
+        // other. All three translate to SQL.
+        var ordered = sort switch
+        {
+            SortDateAsc  => query.OrderBy(b => b.SlotDate).ThenBy(b => b.SlotTime),
+            SortDateDesc => query.OrderByDescending(b => b.SlotDate).ThenBy(b => b.SlotTime),
+            _            => query
+                .OrderBy(b => b.SlotDate < today)
+                .ThenBy(b => b.SlotDate >= today ? b.SlotDate : DateTime.MinValue)
+                .ThenByDescending(b => b.SlotDate < today ? b.SlotDate : DateTime.MinValue)
+                .ThenBy(b => b.SlotTime)
+        };
+
+        var items = ordered
             .ThenBy(b => b.Id)
             .Skip(Math.Max(0, page) * pageSize)
             .Take(pageSize)

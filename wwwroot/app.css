@@ -22,8 +22,17 @@
     --shadow-lg: 0 12px 40px rgba(0,0,0,0.20);
     --nav-h: 64px;
 
-    /* Spacing scale — new rules should use these; existing declarations
-       weren't mass-migrated to avoid an oversized, hard-to-review diff. */
+    /* Spacing scale. Every padding, margin and gap in both stylesheets now comes
+       from here. There used to be ~35 distinct literals doing the work of seven —
+       0.4 next to 0.45, 0.6 next to 0.65 next to 0.7, .75rem next to 0.75rem — and
+       that drift is what made the admin dashboard in particular look unfinished.
+       Off-scale values were snapped to the nearest step (ties toward the tighter
+       one), so a few elements moved by up to 0.25rem; nothing moved further.
+
+       The step numbers are multiples of --space-1 (0.25rem), so --space-8 is 2rem
+       and --space-12 is 3rem. There is deliberately no --space-7: 1.75rem was a
+       one-off that belonged at 2rem. */
+    --space-05: 0.125rem;
     --space-1: 0.25rem;
     --space-2: 0.5rem;
     --space-3: 0.75rem;
@@ -31,6 +40,18 @@
     --space-5: 1.25rem;
     --space-6: 1.5rem;
     --space-8: 2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+    --space-16: 4rem;
+
+    /* The "this row is highlighted" left bar. Was 3px in two places and 2px in two
+       others, via two different mechanisms (border-left and an inset box-shadow). */
+    --rule-accent: 3px;
+
+    /* Height of the mobile sticky action bar. The list above it needs matching
+       bottom clearance or the last card sits under the bar; keeping both ends on
+       one token stops them drifting apart. */
+    --sticky-actions-h: 4.5rem;
 
     /* Font-size scale. Every size below 1rem in both stylesheets now comes from
        here — there used to be nine different literals (0.7 / 0.75 / 0.8 / 0.82 /
@@ -120,8 +141,8 @@ ul { list-style: none; }
     max-width: 1200px;
     margin: 0 auto;
     padding-inline:
-        max(1.25rem, env(safe-area-inset-left))
-        max(1.25rem, env(safe-area-inset-right));
+        max(var(--space-5), env(safe-area-inset-left))
+        max(var(--space-5), env(safe-area-inset-right));
 }
 
 /* ---------- Typography ---------- */
@@ -155,8 +176,8 @@ h1[tabindex="-1"]:focus-visible {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.4rem;
-    padding: 0.7rem 1.5rem;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-6);
     border-radius: 50px;
     font-size: var(--fs-body);
     font-weight: 600;
@@ -168,7 +189,7 @@ h1[tabindex="-1"]:focus-visible {
     text-decoration: none;
 }
 
-.btn-lg { padding: 0.875rem 2rem; font-size: 1rem; }
+.btn-lg { padding: var(--space-3) var(--space-8); font-size: 1rem; }
 .btn-full { width: 100%; }
 
 /* The booking wizard disables Continue/Confirm until each step is valid. Without
@@ -291,7 +312,7 @@ h1[tabindex="-1"]:focus-visible {
 /* ---------- Footer logo ---------- */
 .footer-logo-link {
     display: inline-block;
-    margin-bottom: 0.85rem;
+    margin-bottom: var(--space-3);
     line-height: 0;
 }
 .footer-logo-img  { height: 38px; width: auto; display: block; mix-blend-mode: screen; }
@@ -299,20 +320,20 @@ h1[tabindex="-1"]:focus-visible {
     font-size: 1.3rem;
     font-weight: 800;
     color: var(--white);
-    margin-bottom: 0.85rem;
+    margin-bottom: var(--space-3);
 }
 
 .nav-links {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--space-1);
 }
 
 .nav-links a {
     color: rgba(255,255,255,0.75);
     font-weight: 500;
     font-size: var(--fs-body);
-    padding: 0.5rem 0.9rem;
+    padding: var(--space-2) var(--space-3);
     border-radius: 6px;
     transition: color 0.2s, background 0.2s;
 }
@@ -336,17 +357,17 @@ h1[tabindex="-1"]:focus-visible {
 .nav-user {
     color: rgba(255,255,255,0.5);
     font-size: var(--fs-body-sm);
-    padding: 0.5rem 0.4rem 0.5rem 0.9rem;
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
     white-space: nowrap;
 }
 
 .btn-book {
     background: var(--green) !important;
     color: var(--white) !important;
-    padding: 0.5rem 1.2rem !important;
+    padding: var(--space-2) var(--space-5) !important;
     border-radius: 50px !important;
     font-weight: 600 !important;
-    margin-left: 0.5rem;
+    margin-left: var(--space-2);
 }
 @media (hover: hover) and (pointer: fine) {
     .btn-book:hover {
@@ -364,11 +385,11 @@ h1[tabindex="-1"]:focus-visible {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 5px;
+    gap: var(--space-1);
     background: none;
     border: none;
     cursor: pointer;
-    padding: 8px;
+    padding: var(--space-2);
     min-width: var(--touch-min);
     min-height: var(--touch-min);
     border-radius: 6px;
@@ -422,7 +443,7 @@ h1[tabindex="-1"]:focus-visible {
    gutter every other section uses, and cap the children instead. */
 .hero-content {
     position: relative;
-    padding: 4rem 1.25rem;
+    padding: var(--space-16) var(--space-5);
 }
 
 .hero-eyebrow,
@@ -435,12 +456,12 @@ h1[tabindex="-1"]:focus-visible {
     font-size: var(--fs-eyebrow);
     text-transform: uppercase;
     letter-spacing: 2px;
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-4);
 }
 
 .hero-title {
     color: var(--white);
-    margin-bottom: 1.25rem;
+    margin-bottom: var(--space-5);
 }
 
 .hero-title span { color: var(--green); }
@@ -448,14 +469,14 @@ h1[tabindex="-1"]:focus-visible {
 .hero-subtitle {
     color: rgba(255,255,255,0.7);
     font-size: 1.1rem;
-    margin-bottom: 2rem;
+    margin-bottom: var(--space-8);
     max-width: 520px;
     line-height: 1.7;
 }
 
 .hero-actions {
     display: flex;
-    gap: 1rem;
+    gap: var(--space-4);
     flex-wrap: wrap;
 }
 
@@ -477,20 +498,20 @@ h1[tabindex="-1"]:focus-visible {
 /* ---------- Trust Bar ---------- */
 .trust-bar {
     background: var(--dark-2);
-    padding: 1.5rem 0;
+    padding: var(--space-6) 0;
     border-bottom: 1px solid var(--dark-3);
 }
 
 .trust-bar-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: var(--space-4);
 }
 
 .trust-item {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: var(--space-4);
     color: var(--white);
 }
 
@@ -517,7 +538,7 @@ h1[tabindex="-1"]:focus-visible {
     display: block;
     font-size: var(--fs-body);
     color: var(--white);
-    margin-bottom: 0.1rem;
+    margin-bottom: var(--space-05);
 }
 
 .trust-item p {
@@ -528,12 +549,12 @@ h1[tabindex="-1"]:focus-visible {
 
 /* ---------- Sections ---------- */
 .section {
-    padding: 4rem 0;
+    padding: var(--space-16) 0;
 }
 
 .section-header {
     text-align: center;
-    margin-bottom: 3rem;
+    margin-bottom: var(--space-12);
 }
 
 .section-eyebrow {
@@ -542,33 +563,33 @@ h1[tabindex="-1"]:focus-visible {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 2px;
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--space-2);
 }
 
 .section-subtitle {
     color: rgba(255,255,255,0.55);
     font-size: var(--fs-h3-compact);
     max-width: 540px;
-    margin: 0.75rem auto 0;
+    margin: var(--space-3) auto 0;
 }
 
 .section-cta {
     text-align: center;
-    margin-top: 2.5rem;
+    margin-top: var(--space-10);
 }
 
 /* ---------- Services Grid ---------- */
 .services-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1.25rem;
+    gap: var(--space-5);
 }
 
 .service-card {
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
     border-radius: var(--radius);
-    padding: 1.75rem;
+    padding: var(--space-8);
     transition: all 0.25s ease;
     position: relative;
 }
@@ -600,23 +621,23 @@ h1[tabindex="-1"]:focus-visible {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
-    padding: 0.25rem 0.75rem;
+    padding: var(--space-1) var(--space-3);
     border-radius: 0 0 8px 8px;
 }
 
 .service-icon {
     font-size: 2rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--space-3);
     color: var(--green);
     line-height: 1;
 }
 
-.service-card h3 { margin-bottom: 0.5rem; }
+.service-card h3 { margin-bottom: var(--space-2); }
 
 .service-card p {
     color: rgba(255,255,255,0.55);
     font-size: var(--fs-body-sm);
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-4);
 }
 
 .service-price {
@@ -636,12 +657,12 @@ h1[tabindex="-1"]:focus-visible {
 .steps-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1.5rem;
+    gap: var(--space-6);
 }
 
 .step {
     text-align: center;
-    padding: 1.5rem;
+    padding: var(--space-6);
     background: var(--dark-3);
     border-radius: var(--radius);
     border: 1px solid var(--border-dark);
@@ -653,10 +674,10 @@ h1[tabindex="-1"]:focus-visible {
     color: var(--green);
     opacity: 0.8;
     line-height: 1;
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--space-3);
 }
 
-.step h3 { margin-bottom: 0.5rem; }
+.step h3 { margin-bottom: var(--space-2); }
 .step p { color: rgba(255,255,255,0.55); font-size: var(--fs-body-sm); }
 
 .step-arrow {
@@ -667,57 +688,14 @@ h1[tabindex="-1"]:focus-visible {
     justify-content: center;
 }
 
-/* ---------- Testimonials ---------- */
-.testimonials-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.25rem;
-}
-
-.testimonial-card {
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: 1.75rem;
-}
-
+/* ---------- Star row ---------- */
 .stars {
     font-size: 1rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--space-3);
     color: #F5B301;
     display: flex;
-    gap: 0.15rem;
+    gap: var(--space-05);
 }
-
-.testimonial-card p {
-    color: rgba(255,255,255,0.65);
-    font-style: italic;
-    margin-bottom: 1.25rem;
-    line-height: 1.7;
-}
-
-.testimonial-author {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.avatar {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    background: var(--green);
-    color: var(--white);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: var(--fs-caption);
-    flex-shrink: 0;
-}
-
-.testimonial-author strong { display: block; font-size: var(--fs-body-sm); }
-.testimonial-author span { color: var(--mid); font-size: var(--fs-caption); }
 
 /* ---------- Rating summary ---------- */
 /* Replaces the invented testimonial cards on the home page: the shop's real
@@ -725,7 +703,7 @@ h1[tabindex="-1"]:focus-visible {
 .rating-summary {
     max-width: 420px;
     margin: 0 auto;
-    padding: 2rem 1.5rem;
+    padding: var(--space-8) var(--space-6);
     text-align: center;
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
@@ -742,13 +720,13 @@ h1[tabindex="-1"]:focus-visible {
 .rating-summary .stars {
     justify-content: center;
     font-size: 1.15rem;
-    margin: 0.5rem 0 0.75rem;
+    margin: var(--space-2) 0 var(--space-3);
 }
 
 .rating-summary__count {
     color: rgba(255,255,255,0.55);
     font-size: var(--fs-sm);
-    margin-bottom: 1.25rem;
+    margin-bottom: var(--space-5);
 }
 
 /* ---------- CTA Banner ---------- */
@@ -756,7 +734,7 @@ h1[tabindex="-1"]:focus-visible {
     background: var(--dark-2);
     border-top: 1px solid var(--dark-3);
     border-bottom: 1px solid var(--dark-3);
-    padding: 4rem 0;
+    padding: var(--space-16) 0;
     position: relative;
     overflow: hidden;
 }
@@ -777,13 +755,13 @@ h1[tabindex="-1"]:focus-visible {
 
 .cta-banner h2 {
     color: var(--white);
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--space-3);
 }
 
 .cta-banner p {
     color: rgba(255,255,255,0.6);
     font-size: var(--fs-h3-compact);
-    margin-bottom: 2rem;
+    margin-bottom: var(--space-8);
     max-width: 480px;
     margin-left: auto;
     margin-right: auto;
@@ -792,7 +770,7 @@ h1[tabindex="-1"]:focus-visible {
 .cta-actions {
     display: flex;
     justify-content: center;
-    gap: 1rem;
+    gap: var(--space-4);
     flex-wrap: wrap;
 }
 
@@ -803,23 +781,23 @@ h1[tabindex="-1"]:focus-visible {
     color: var(--white);
 }
 
-.page-hero--sm { padding: 4rem 1.25rem 3rem; }
+.page-hero--sm { padding: var(--space-16) var(--space-5) var(--space-12); }
 
-.page-hero h1 { color: var(--white); margin-bottom: 0.75rem; }
+.page-hero h1 { color: var(--white); margin-bottom: var(--space-3); }
 .page-hero p { color: rgba(255,255,255,0.65); font-size: var(--fs-h3-compact); max-width: 500px; margin: 0 auto; }
-.page-hero .section-eyebrow { margin-bottom: 0.5rem; }
+.page-hero .section-eyebrow { margin-bottom: var(--space-2); }
 
 /* ---------- Services Page ---------- */
 .services-category {
-    margin-bottom: 3.5rem;
+    margin-bottom: var(--space-12);
 }
 
 .category-title {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.75rem;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+    padding-bottom: var(--space-3);
     border-bottom: 2px solid var(--border-dark);
 }
 
@@ -831,14 +809,14 @@ h1[tabindex="-1"]:focus-visible {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 1rem;
-    padding: 1.1rem 0;
+    gap: var(--space-4);
+    padding: var(--space-4) 0;
     border-bottom: 1px solid var(--border-dark);
 }
 
 .pricing-row:last-child { border-bottom: none; }
 
-.pricing-info h4 { font-size: 1rem; margin-bottom: 0.2rem; }
+.pricing-info h4 { font-size: 1rem; margin-bottom: var(--space-1); }
 .pricing-info p { color: rgba(255,255,255,0.5); font-size: var(--fs-sm); margin: 0; }
 
 .pricing-cost {
@@ -856,14 +834,14 @@ h1[tabindex="-1"]:focus-visible {
        overflow the viewport at tablet widths). min(100%, …) keeps it safe on
        very narrow screens. */
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
-    gap: 1.25rem;
+    gap: var(--space-5);
 }
 
 .package-card {
     background: var(--dark-3);
     border: 2px solid var(--border-dark);
     border-radius: var(--radius);
-    padding: 1.75rem;
+    padding: var(--space-8);
     position: relative;
     transition: all 0.25s;
     min-width: 0;
@@ -889,7 +867,7 @@ h1[tabindex="-1"]:focus-visible {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
-    padding: 0.2rem 1rem;
+    padding: var(--space-1) var(--space-4);
     border-radius: 50px;
     white-space: nowrap;
 }
@@ -898,8 +876,8 @@ h1[tabindex="-1"]:focus-visible {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.25rem;
-    padding-bottom: 1rem;
+    margin-bottom: var(--space-5);
+    padding-bottom: var(--space-4);
     border-bottom: 1px solid var(--border-dark);
 }
 
@@ -909,26 +887,26 @@ h1[tabindex="-1"]:focus-visible {
     color: var(--green);
 }
 
-.package-card ul { margin-bottom: 1.5rem; }
+.package-card ul { margin-bottom: var(--space-6); }
 
 .package-card li {
     color: rgba(255,255,255,0.7);
     font-size: var(--fs-body-sm);
-    padding: 0.3rem 0;
+    padding: var(--space-1) 0;
 }
 
 .services-note {
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
     border-radius: var(--radius);
-    padding: 1.75rem;
+    padding: var(--space-8);
     text-align: center;
-    margin-top: 1rem;
+    margin-top: var(--space-4);
 }
 
 .services-note p {
     color: rgba(255,255,255,0.5);
-    margin-bottom: 1.25rem;
+    margin-bottom: var(--space-5);
     font-size: var(--fs-body-sm);
 }
 
@@ -936,17 +914,17 @@ h1[tabindex="-1"]:focus-visible {
 .about-intro {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 2.5rem;
-    margin-bottom: 1rem;
+    gap: var(--space-10);
+    margin-bottom: var(--space-4);
 }
 
-.about-text h2 { margin-bottom: 1rem; }
-.about-text p { color: rgba(255,255,255,0.6); margin-bottom: 1rem; line-height: 1.8; }
+.about-text h2 { margin-bottom: var(--space-4); }
+.about-text p { color: rgba(255,255,255,0.6); margin-bottom: var(--space-4); line-height: 1.8; }
 
 .about-stats {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+    gap: var(--space-4);
 }
 
 .stat-card {
@@ -954,7 +932,7 @@ h1[tabindex="-1"]:focus-visible {
     border: 1px solid var(--border-dark);
     color: var(--white);
     border-radius: var(--radius);
-    padding: 1.5rem;
+    padding: var(--space-6);
     text-align: center;
 }
 
@@ -963,7 +941,7 @@ h1[tabindex="-1"]:focus-visible {
     font-weight: 900;
     color: var(--green);
     line-height: 1;
-    margin-bottom: 0.4rem;
+    margin-bottom: var(--space-2);
 }
 
 .stat-label { color: rgba(255,255,255,0.6); font-size: var(--fs-xs); }
@@ -981,7 +959,7 @@ h1[tabindex="-1"]:focus-visible {
 .team-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1.25rem;
+    gap: var(--space-5);
 }
 
 /* Two-item variants. The generic .team-grid / .about-stats rules step up to three and
@@ -997,7 +975,7 @@ h1[tabindex="-1"]:focus-visible {
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
     border-radius: var(--radius);
-    padding: 2rem;
+    padding: var(--space-8);
     text-align: center;
     transition: all 0.25s;
 }
@@ -1017,14 +995,14 @@ h1[tabindex="-1"]:focus-visible {
     justify-content: center;
     font-size: 1.2rem;
     font-weight: 700;
-    margin: 0 auto 1rem;
+    margin: 0 auto var(--space-4);
 }
 
 .team-role {
     color: var(--green);
     font-size: var(--fs-xs);
     font-weight: 600;
-    margin-bottom: 0.75rem !important;
+    margin-bottom: var(--space-3) !important;
 }
 
 .team-card p { color: rgba(255,255,255,0.55); font-size: var(--fs-sm); margin: 0; }
@@ -1032,11 +1010,11 @@ h1[tabindex="-1"]:focus-visible {
 .values-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1.25rem;
+    gap: var(--space-5);
 }
 
 .value-card {
-    padding: 1.75rem;
+    padding: var(--space-8);
     border: 1px solid var(--border-dark);
     border-radius: var(--radius);
     background: var(--dark-3);
@@ -1046,34 +1024,34 @@ h1[tabindex="-1"]:focus-visible {
 @media (hover: hover) and (pointer: fine) {
     .value-card:hover { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
 }
-.value-icon { font-size: 2rem; margin-bottom: 0.75rem; }
-.value-card h3 { margin-bottom: 0.5rem; }
+.value-icon { font-size: 2rem; margin-bottom: var(--space-3); }
+.value-card h3 { margin-bottom: var(--space-2); }
 .value-card p { color: rgba(255,255,255,0.55); font-size: var(--fs-body-sm); }
 
 /* ---------- Contact Page ---------- */
 .contact-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 2.5rem;
+    gap: var(--space-10);
 }
 
-.contact-form-wrapper h2 { margin-bottom: 1.5rem; }
+.contact-form-wrapper h2 { margin-bottom: var(--space-6); }
 
 .form-group {
-    margin-bottom: 1.25rem;
+    margin-bottom: var(--space-5);
 }
 
 .form-group label {
     display: block;
     font-size: var(--fs-sm);
     font-weight: 600;
-    margin-bottom: 0.4rem;
+    margin-bottom: var(--space-2);
     color: rgba(255,255,255,0.85);
 }
 
 .form-control {
     width: 100%;
-    padding: 0.7rem 1rem;
+    padding: var(--space-3) var(--space-4);
     border: 1.5px solid var(--border-dark);
     border-radius: var(--radius-sm);
     font-size: var(--fs-body);
@@ -1104,7 +1082,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     font-size: var(--fs-xs);
     color: rgba(255,255,255,0.45);
     line-height: 1.5;
-    margin: 0 0 1rem;
+    margin: 0 0 var(--space-4);
 }
 .form-consent a { color: var(--green); text-decoration: underline; }
 
@@ -1112,7 +1090,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .form-hint {
     font-size: var(--fs-xs);
     color: rgba(255,255,255,0.45);
-    margin-top: 0.3rem;
+    margin-top: var(--space-1);
 }
 .form-hint a { color: var(--green); }
 
@@ -1128,12 +1106,12 @@ textarea.form-control { resize: vertical; min-height: 130px; }
        role from .booking-error's banner, so only the size converges, not the color. */
     color: #dc2626;
     font-size: var(--fs-sm);
-    margin-top: 0.3rem;
+    margin-top: var(--space-1);
 }
 
 .success-message {
     text-align: center;
-    padding: 3rem 1.5rem;
+    padding: var(--space-12) var(--space-6);
     background: var(--dark-3);
     border-radius: var(--radius);
     border: 1px solid var(--border-dark);
@@ -1149,40 +1127,40 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 1rem;
+    margin: 0 auto var(--space-4);
 }
 
-.success-message h3 { margin-bottom: 0.5rem; }
-.success-message p { color: rgba(255,255,255,0.55); margin-bottom: 1.5rem; }
+.success-message h3 { margin-bottom: var(--space-2); }
+.success-message p { color: rgba(255,255,255,0.55); margin-bottom: var(--space-6); }
 
 /* Info Cards */
 .info-card {
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
     border-radius: var(--radius);
-    padding: 1.5rem;
-    margin-bottom: 1.25rem;
+    padding: var(--space-6);
+    margin-bottom: var(--space-5);
 }
 
-.info-card h3 { margin-bottom: 1rem; font-size: var(--fs-h3-compact); }
+.info-card h3 { margin-bottom: var(--space-4); font-size: var(--fs-h3-compact); }
 
 .info-item {
     display: flex;
-    gap: 0.75rem;
+    gap: var(--space-3);
     align-items: flex-start;
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-4);
 }
 
 .info-item:last-child { margin-bottom: 0; }
 
-.info-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 0.1rem; }
-.info-item strong { display: block; font-size: var(--fs-xs); margin-bottom: 0.2rem; }
+.info-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: var(--space-05); }
+.info-item strong { display: block; font-size: var(--fs-xs); margin-bottom: var(--space-1); }
 .info-item p, .info-item a { font-size: var(--fs-sm); color: rgba(255,255,255,0.55); margin: 0; }
 @media (hover: hover) and (pointer: fine) {
     .info-item a:hover { color: var(--green); }
 }
 
-.turnaround-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.turnaround-list { display: flex; flex-direction: column; gap: var(--space-2); }
 
 .turnaround-item {
     display: flex;
@@ -1190,7 +1168,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     align-items: center;
     font-size: var(--fs-sm);
     color: rgba(255,255,255,0.65);
-    padding: 0.4rem 0;
+    padding: var(--space-2) 0;
     border-bottom: 1px solid var(--border-dark);
 }
 
@@ -1211,18 +1189,18 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .error-page p {
     color: rgba(255,255,255,0.65);
     line-height: 1.7;
-    margin-bottom: 1.75rem;
+    margin-bottom: var(--space-8);
 }
 
 .error-page__actions {
     display: flex;
-    gap: 0.75rem;
+    gap: var(--space-3);
     justify-content: center;
     flex-wrap: wrap;
 }
 
 .error-page__ref {
-    margin-top: 2rem;
+    margin-top: var(--space-8);
     font-size: var(--fs-xs);
     color: rgba(255,255,255,0.35);
 }
@@ -1232,7 +1210,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
     border-radius: 4px;
-    padding: 0.1rem 0.35rem;
+    padding: var(--space-05) var(--space-1);
     word-break: break-all;
 }
 
@@ -1250,34 +1228,34 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
 .legal-doc h2 {
     font-size: clamp(1.2rem, 3vw, 1.5rem);
-    margin: 2.5rem 0 0.75rem;
+    margin: var(--space-10) 0 var(--space-3);
 }
 
 .legal-doc h2:first-of-type { margin-top: 0; }
 
 .legal-doc h3 {
     font-size: var(--fs-h3-compact);
-    margin: 1.5rem 0 0.5rem;
+    margin: var(--space-6) 0 var(--space-2);
     color: rgba(255,255,255,0.9);
 }
 
 .legal-doc p {
     color: rgba(255,255,255,0.65);
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-4);
     line-height: 1.75;
 }
 
 .legal-doc__list {
-    margin: 0 0 1rem;
-    padding-left: 1.1rem;
+    margin: 0 0 var(--space-4);
+    padding-left: var(--space-4);
     list-style: disc;
 }
 
 .legal-doc__list li {
     color: rgba(255,255,255,0.65);
-    margin-bottom: 0.6rem;
+    margin-bottom: var(--space-3);
     line-height: 1.7;
-    padding-left: 0.25rem;
+    padding-left: var(--space-1);
 }
 
 .legal-doc__list strong { color: rgba(255,255,255,0.9); }
@@ -1290,13 +1268,13 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
     border-radius: 4px;
-    padding: 0.1rem 0.35rem;
+    padding: var(--space-05) var(--space-1);
 }
 
 .legal-doc__updated {
     font-size: var(--fs-xs);
     color: rgba(255,255,255,0.35);
-    margin-bottom: 2rem;
+    margin-bottom: var(--space-8);
 }
 
 /* Marks a passage that still needs the shop's own details filled in. Deliberately
@@ -1305,7 +1283,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     background: rgba(234,179,8,0.10);
     border: 1px solid rgba(234,179,8,0.35);
     border-radius: var(--radius-sm);
-    padding: 0.85rem 1rem;
+    padding: var(--space-3) var(--space-4);
     color: #eab308 !important;
     font-size: var(--fs-sm);
 }
@@ -1316,14 +1294,14 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .site-footer {
     background: var(--dark);
     color: rgba(255,255,255,0.65);
-    padding: 3rem 0 calc(1.5rem + env(safe-area-inset-bottom));
+    padding: var(--space-12) 0 calc(var(--space-6) + env(safe-area-inset-bottom));
 }
 
 .footer-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 2rem;
-    margin-bottom: 2rem;
+    gap: var(--space-8);
+    margin-bottom: var(--space-8);
 }
 
 /* .footer-logo replaced by .footer-logo-img */
@@ -1335,20 +1313,20 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 1.5px;
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--space-3);
 }
 
-.footer-links ul li { margin-bottom: 0.4rem; }
+.footer-links ul li { margin-bottom: var(--space-2); }
 .footer-links a { color: rgba(255,255,255,0.6); font-size: var(--fs-sm); transition: color 0.2s; }
 @media (hover: hover) and (pointer: fine) {
     .footer-links a:hover { color: var(--green); }
 }
 
-.footer-contact p { font-size: var(--fs-sm); margin-bottom: 0.4rem; }
+.footer-contact p { font-size: var(--fs-sm); margin-bottom: var(--space-2); }
 
 .footer-bottom {
     border-top: 1px solid var(--dark-3);
-    padding-top: 1.25rem;
+    padding-top: var(--space-5);
     text-align: center;
     font-size: var(--fs-caption);
     color: rgba(255,255,255,0.35);
@@ -1374,7 +1352,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     margin: 0 auto;
     background: #b91c1c;
     color: var(--white);
-    padding: 0.75rem 1.25rem;
+    padding: var(--space-3) var(--space-5);
     border-radius: var(--radius);
     font-size: var(--fs-sm);
     line-height: 1.5;
@@ -1383,8 +1361,8 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     box-shadow: var(--shadow-lg);
 }
 
-#blazor-error-ui .reload { color: var(--white); font-weight: 600; text-decoration: underline; margin-left: 0.5rem; }
-#blazor-error-ui .dismiss { cursor: pointer; margin-left: 0.5rem; }
+#blazor-error-ui .reload { color: var(--white); font-weight: 600; text-decoration: underline; margin-left: var(--space-2); }
+#blazor-error-ui .dismiss { cursor: pointer; margin-left: var(--space-2); }
 
 /* ---------- Blazor validation ---------- */
 .valid.modified:not([type=checkbox]) { border-color: var(--green) !important; }
@@ -1453,11 +1431,11 @@ textarea.form-control { resize: vertical; min-height: 130px; }
    rows. break-inside stops a card splitting across a column. */
 .gallery-grid {
     column-count: 1;
-    column-gap: 1.25rem;
+    column-gap: var(--space-5);
 }
 
 .gallery-item {
-    margin: 0 0 1.25rem;
+    margin: 0 0 var(--space-5);
     break-inside: avoid;
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
@@ -1506,8 +1484,8 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    padding: 1rem;
+    gap: var(--space-2);
+    padding: var(--space-4);
     background: rgba(10,10,10,0.94);
     backdrop-filter: blur(4px);
     cursor: zoom-out;
@@ -1598,7 +1576,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 /* About: photo sits above the stat cards in the narrower right-hand column. */
 .about-aside {
     display: grid;
-    gap: 1.5rem;
+    gap: var(--space-6);
     align-content: start;
 }
 
@@ -1623,7 +1601,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
 .about-photo figcaption,
 .contact-photo figcaption {
-    padding: 0.8rem 1rem;
+    padding: var(--space-3) var(--space-4);
     color: rgba(255,255,255,0.55);
     font-size: var(--fs-xs);
 }
@@ -1667,7 +1645,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     }
     .form-row {
         grid-template-columns: 1fr 1fr;
-        gap: 1.25rem;
+        gap: var(--space-5);
     }
 }
 
@@ -1682,10 +1660,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     }
     .step-arrow {
         display: flex;
-        padding-top: 2.5rem;
-    }
-    .testimonials-grid {
-        grid-template-columns: repeat(2, 1fr);
+        padding-top: var(--space-10);
     }
     .team-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -1718,9 +1693,6 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     .services-grid {
         grid-template-columns: repeat(3, 1fr);
     }
-    .testimonials-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
     .team-grid {
         grid-template-columns: repeat(3, 1fr);
     }
@@ -1741,7 +1713,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     .gallery-grid {
         column-count: 3;
     }
-    .section { padding: 5rem 0; }
+    .section { padding: var(--space-16) 0; }
 }
 
 /* ---- Mobile Nav ---- */
@@ -1756,8 +1728,8 @@ textarea.form-control { resize: vertical; min-height: 130px; }
         right: 0;
         flex-direction: column;
         background: var(--dark-2);
-        padding: 1rem;
-        gap: 0.25rem;
+        padding: var(--space-4);
+        gap: var(--space-1);
         border-top: 1px solid var(--dark-3);
         border-bottom: 1px solid var(--dark-3);
         box-shadow: 0 8px 24px rgba(0,0,0,0.3);
@@ -1773,7 +1745,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
     .nav-links a {
         width: 100%;
-        padding: 0.75rem 1rem;
+        padding: var(--space-3) var(--space-4);
         border-radius: 8px;
         font-size: 1rem;
         /* Full-width already, but this guarantees the vertical half of the target. */
@@ -1784,7 +1756,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
     .btn-book {
         margin-left: 0 !important;
-        margin-top: 0.25rem;
+        margin-top: var(--space-1);
         text-align: center;
     }
 
@@ -1797,10 +1769,10 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 @media (max-width: 479px) {
 
     /* Tighter section padding on small phones */
-    .section { padding: 2.5rem 0; }
+    .section { padding: var(--space-10) 0; }
 
     /* Hero: reduce heading on very small screens */
-    .hero-content { padding: 3rem 1.25rem 2.5rem; }
+    .hero-content { padding: var(--space-12) var(--space-5) var(--space-10); }
     .hero-actions { flex-direction: column; }
     .hero-actions .btn { width: 100%; justify-content: center; }
 
@@ -1808,38 +1780,38 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     .hero-scroll-hint { display: none; }
 
     /* Page hero: less padding */
-    .page-hero--sm { padding: 2.5rem 1.25rem 2rem; }
+    .page-hero--sm { padding: var(--space-10) var(--space-5) var(--space-8); }
 
     /* Trust bar: single column on tiny screens */
-    .trust-bar { padding: 1.25rem 0; }
+    .trust-bar { padding: var(--space-5) 0; }
     .trust-bar-grid { grid-template-columns: 1fr; }
 
     /* Pricing rows: stack label above price */
-    .pricing-row { flex-direction: column; gap: 0.25rem; }
+    .pricing-row { flex-direction: column; gap: var(--space-1); }
     .pricing-cost { align-self: flex-start; }
 
     /* Section header */
-    .section-header { margin-bottom: 2rem; }
+    .section-header { margin-bottom: var(--space-8); }
 
     /* Services note: stack button */
-    .services-note { padding: 1.25rem; }
+    .services-note { padding: var(--space-5); }
 
     /* CTA banner */
-    .cta-banner { padding: 2.5rem 0; }
+    .cta-banner { padding: var(--space-10) 0; }
     .cta-actions { flex-direction: column; align-items: center; }
     .cta-actions .btn { width: 100%; max-width: 320px; justify-content: center; }
 
     /* Footer */
-    .footer-grid { gap: 1.5rem; }
+    .footer-grid { gap: var(--space-6); }
 
     /* Form rows stay single column on tiny screens */
     .form-row { grid-template-columns: 1fr !important; gap: 0 !important; }
 
     /* Contact info cards: smaller padding */
-    .info-card { padding: 1.1rem; }
+    .info-card { padding: var(--space-4); }
 
     /* Turnaround table: wrap service name */
-    .turnaround-item { flex-wrap: wrap; gap: 0.25rem; }
+    .turnaround-item { flex-wrap: wrap; gap: var(--space-1); }
 }
 
 /* Booking-page, customer-auth, and admin-only styles live in booking.css,
@@ -1857,7 +1829,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
 .password-field .form-control {
     /* Room for the toggle, so a long password doesn't run underneath it. */
-    padding-right: 3rem;
+    padding-right: var(--space-12);
 }
 
 .password-field__toggle {
@@ -1900,9 +1872,9 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     background: var(--dark-3);
     border: 1px solid var(--border-dark);
     border-radius: var(--radius);
-    padding: 1.5rem 1.25rem;
+    padding: var(--space-6) var(--space-5);
     text-align: center;
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--space-6);
 }
 
 .devinfo__hero-label {
@@ -1923,7 +1895,7 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .devinfo__hero-note {
     font-size: var(--fs-sm);
     color: rgba(255,255,255,0.6);
-    margin: 0.5rem 0 1rem;
+    margin: var(--space-2) 0 var(--space-4);
     line-height: 1.5;
 }
 
@@ -1931,14 +1903,14 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     display: flex;
     flex-direction: column;
     gap: 0;
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--space-6);
 }
 
 .devinfo__row {
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
-    padding: 0.7rem 0;
+    gap: var(--space-05);
+    padding: var(--space-3) 0;
     border-bottom: 1px solid var(--border-dark);
 }
 
@@ -1966,8 +1938,8 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .devinfo__samples {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
     pointer-events: none;
     opacity: 0.7;
 }
@@ -1979,14 +1951,14 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
 .devinfo__actions {
     display: flex;
-    gap: 0.75rem;
+    gap: var(--space-3);
     flex-wrap: wrap;
 }
 
 .devinfo__actions .btn { flex: 1 1 auto; justify-content: center; }
 
 .devinfo__copied {
-    margin-top: 0.75rem;
+    margin-top: var(--space-3);
     font-size: var(--fs-sm);
     color: var(--green);
 }

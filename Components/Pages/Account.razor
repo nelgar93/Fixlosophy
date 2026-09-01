@@ -143,7 +143,9 @@
                 </div>
                 <div class="form-group">
                     <label for="account-phone">Phone *</label>
-                    <input id="account-phone" class="form-control" type="tel" @bind="profilePhone" required />
+                    <input id="account-phone" class="form-control" type="tel"
+                           autocomplete="tel" inputmode="tel" maxlength="@AuthService.MaxPhoneLength" pattern="@AuthService.PhoneInputPattern" data-phone-input
+                           @bind="profilePhone" required />
                 </div>
                 <button class="btn btn-primary" @onclick="SaveProfile">Save Details</button>
             </div>

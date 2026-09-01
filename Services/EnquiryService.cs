@@ -19,9 +19,26 @@ public class EnquiryService(
     /// couldn't be stored — a failed send is logged and swallowed, because telling the
     /// customer "that didn't work" when we do in fact have their message would send
     /// them somewhere else for no reason.
+    ///
+    /// Re-validates email and phone rather than trusting the form. This is a public
+    /// POST target and the client-side attributes are bypassable; up to now the only
+    /// server-side handling was a length clamp, so anything at all could be stored.
     /// </summary>
     public async Task<bool> SubmitAsync(Enquiry enquiry)
     {
+        if (!AuthService.IsValidEmail(enquiry.Email))
+        {
+            logger.LogWarning("Rejected enquiry with an unusable email address.");
+            return false;
+        }
+
+        // Phone is optional on the contact form, but a supplied one has to be dialable.
+        if (!string.IsNullOrWhiteSpace(enquiry.Phone) && !AuthService.IsValidPhone(enquiry.Phone))
+        {
+            logger.LogWarning("Rejected enquiry from {Email} with an unusable phone number.", enquiry.Email);
+            return false;
+        }
+
         enquiry.Name            = Clamp(enquiry.Name, MaxFieldLength);
         enquiry.Email           = Clamp(enquiry.Email, MaxFieldLength);
         enquiry.Phone           = Clamp(enquiry.Phone, MaxFieldLength);

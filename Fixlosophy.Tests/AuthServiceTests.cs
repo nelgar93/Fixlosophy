@@ -555,8 +555,44 @@ public class AuthServiceTests
     [InlineData("07700 900000", true)]
     [InlineData("+44 7700 900000", true)]
     [InlineData("(0161) 496 0000", true)]
+    [InlineData("020 7946 0018", true)]
+    [InlineData("07700-900-000", true)]
     public void IsValidPhone_RequiresEnoughDialableDigits(string? phone, bool expected) =>
         Assert.Equal(expected, AuthService.IsValidPhone(phone));
+
+    // The rule used to be "contains at least 7 digits, anywhere", so a sentence with a
+    // number in it was stored and reached the admin panel as a dead Call/WhatsApp link.
+    [Theory]
+    [InlineData("call me on 07700 900000")]
+    [InlineData("07700 900000 (after 6pm)")]
+    [InlineData("07700900000 or ask for Sam")]
+    [InlineData("tel: 07700900000")]
+    public void IsValidPhone_RejectsFreeTextAroundTheNumber(string phone) =>
+        Assert.False(AuthService.IsValidPhone(phone));
+
+    [Theory]
+    [InlineData("07700 900000+")]        // '+' is a country-code prefix, not a suffix
+    [InlineData("07700+900000")]
+    [InlineData("1234567890123456")]     // 16 digits — past E.164's ceiling
+    [InlineData("07700 900000 900000")]  // two numbers crammed into one field
+    public void IsValidPhone_RejectsMalformedNumbers(string phone) =>
+        Assert.False(AuthService.IsValidPhone(phone));
+
+    [Fact]
+    public void IsValidPhone_AcceptsTheLongestValidNumber() =>
+        Assert.True(AuthService.IsValidPhone(new string('9', AuthService.MaxPhoneDigits)));
+
+    // The booking wizard used to check nothing but Contains('@'), so "@" got through.
+    [Theory]
+    [InlineData("@", false)]
+    [InlineData("jane@", false)]
+    [InlineData("@example.com", false)]
+    [InlineData("jane@example", false)]
+    [InlineData("jane doe@example.com", false)]
+    [InlineData("jane@example.com", true)]
+    [InlineData("  jane@example.co.uk  ", true)]
+    public void IsValidEmail_RequiresAWholeAddress(string? email, bool expected) =>
+        Assert.Equal(expected, AuthService.IsValidEmail(email));
 
     [Fact]
     public void RegisterCustomer_RejectsMissingPhone()

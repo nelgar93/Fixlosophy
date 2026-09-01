@@ -156,4 +156,112 @@ public class BookingPagingTests
 
         Assert.Equal("a.jpg", Assert.Single(photos).StoragePath);
     }
+
+    // ── Sort ─────────────────────────────────────────────────────────────────
+    // The list used to be fixed at "furthest appointment first", which put history on
+    // page one. Default is now "soonest first": what's coming up on top, history below
+    // it, most recent first.
+
+    private static void SeedOn(AppDbContext db, int dayOffset, string time, string name)
+    {
+        db.Bookings.Add(new Booking
+        {
+            Reference = $"FIX-260830-{dayOffset:D3}",
+            CustomerName = name,
+            CustomerEmail = $"{name}@example.com",
+            ServiceName = "Full Service",
+            SlotDate = ShopClock.Today.AddDays(dayOffset),
+            SlotTime = time,
+            Status = BookingStatus.Confirmed
+        });
+        db.SaveChanges();
+    }
+
+    private static AppDbContext SeedAcrossToday()
+    {
+        var db = NewDb();
+        SeedOn(db, -10, "10:00", "past-older");
+        SeedOn(db,  -2, "10:00", "past-recent");
+        SeedOn(db,   0, "09:00", "today-early");
+        SeedOn(db,   0, "16:00", "today-late");
+        SeedOn(db,   5, "10:00", "soon");
+        SeedOn(db,  30, "10:00", "far");
+        return db;
+    }
+
+    private static List<string> Names(AppDbContext db, string sort) =>
+        NewService(db).GetBookingsPage(null, "All", null, 0, 50, sort)
+                      .items.Select(b => b.CustomerName).ToList();
+
+    [Fact]
+    public void GetBookingsPage_DefaultsToUpcomingFirstThenPastMostRecent()
+    {
+        using var db = SeedAcrossToday();
+
+        Assert.Equal(
+            ["today-early", "today-late", "soon", "far", "past-recent", "past-older"],
+            Names(db, BookingService.SortUpcoming));
+    }
+
+    [Fact]
+    public void GetBookingsPage_DefaultSortIsUpcomingWhenNoneIsGiven()
+    {
+        using var db = SeedAcrossToday();
+
+        var withoutArgument = NewService(db).GetBookingsPage(null, "All", null, 0, 50)
+                                            .items.Select(b => b.CustomerName);
+
+        Assert.Equal(Names(db, BookingService.SortUpcoming), withoutArgument);
+    }
+
+    [Fact]
+    public void GetBookingsPage_SortsDateAscendingAcrossTheWholeList()
+    {
+        using var db = SeedAcrossToday();
+
+        Assert.Equal(
+            ["past-older", "past-recent", "today-early", "today-late", "soon", "far"],
+            Names(db, BookingService.SortDateAsc));
+    }
+
+    [Fact]
+    public void GetBookingsPage_SortsDateDescendingAcrossTheWholeList()
+    {
+        using var db = SeedAcrossToday();
+
+        Assert.Equal(
+            ["far", "soon", "today-early", "today-late", "past-recent", "past-older"],
+            Names(db, BookingService.SortDateDesc));
+    }
+
+    // Skip/Take needs a total order or a row can show up on two pages.
+    [Theory]
+    [InlineData(BookingService.SortUpcoming)]
+    [InlineData(BookingService.SortDateAsc)]
+    [InlineData(BookingService.SortDateDesc)]
+    public void GetBookingsPage_PagesWithoutRepeatingOrDroppingRows(string sort)
+    {
+        using var db = NewDb();
+        Seed(db, 25, dayOffset: 0);
+        var svc = NewService(db);
+
+        var seen = new List<string>();
+        for (var page = 0; page < 3; page++)
+            seen.AddRange(svc.GetBookingsPage(null, "All", null, page, 10, sort).items.Select(b => b.Id));
+
+        Assert.Equal(25, seen.Count);
+        Assert.Equal(25, seen.Distinct().Count());
+    }
+
+    [Fact]
+    public void GetBookingsPage_SortAppliesAfterTheSearch()
+    {
+        using var db = SeedAcrossToday();
+
+        var (items, total) = NewService(db).GetBookingsPage(
+            null, "All", "past", 0, 50, BookingService.SortDateAsc);
+
+        Assert.Equal(2, total);
+        Assert.Equal(["past-older", "past-recent"], items.Select(b => b.CustomerName));
+    }
 }

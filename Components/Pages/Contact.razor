@@ -48,7 +48,7 @@
                             <div class="form-group">
                                 <label for="email">Email Address *</label>
                                 <InputText id="email" class="form-control" type="email"
-                                           autocomplete="email" inputmode="email"
+                                           autocomplete="email" inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"
                                            @bind-Value="model.Email" placeholder="jane@example.com" />
                                 <ValidationMessage For="() => model.Email" />
                             </div>
@@ -56,7 +56,9 @@
                                 <label for="phone">Phone (optional)</label>
                                 <InputText id="phone" class="form-control" type="tel"
                                            autocomplete="tel" inputmode="tel"
+                                           maxlength="@AuthService.MaxPhoneLength" pattern="@AuthService.PhoneInputPattern" data-phone-input
                                            @bind-Value="model.Phone" placeholder="07700 900000" />
+                                <ValidationMessage For="() => model.Phone" />
                             </div>
                         </div>
 
@@ -264,6 +266,7 @@
         [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Please enter a valid email.")]
         public string Email { get; set; } = "";
 
+        [PhoneNumber]
         public string? Phone { get; set; }
 
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Please select a service.")]
