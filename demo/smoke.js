@@ -202,6 +202,29 @@ const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
     check(consoleErrors.length === 0, 'no console errors' +
         (consoleErrors.length ? ':\n        ' + consoleErrors.slice(0, 6).join('\n        ') : ''));
 
+    // The two stylesheets are copied in byte for byte, so a CSS change can't drift —
+    // but the markup in this file's render functions can, and silently. Renaming a
+    // modifier in the Razor without renaming it here leaves a button matching only the
+    // base .action-btn: no background, no colour, so the browser falls back to its own
+    // grey-on-black default button chrome. That is exactly what shipped once.
+    //
+    // Scanned from the source rather than the DOM on purpose: only one route and one
+    // persona are rendered at a time, so a DOM sweep silently misses every screen it
+    // isn't currently looking at — which is most of them.
+    console.log('\nClass names');
+    const source = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+    const styleEnd = source.indexOf('</style>');
+    const css = source.slice(0, styleEnd);
+    const markup = source.slice(styleEnd);
+
+    const defined = new Set([...css.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*--[a-zA-Z0-9_-]+)/g)].map((m) => m[1]));
+    const used = new Set([...markup.matchAll(/(?<![-\w])([a-z][a-z0-9]*(?:-[a-z0-9]+)*--[a-z0-9-]+)/g)].map((m) => m[1]));
+    const orphanClasses = [...used].filter((c) => !defined.has(c));
+
+    check(orphanClasses.length === 0,
+        'every BEM modifier in the markup has a CSS rule' +
+        (orphanClasses.length ? ': ' + orphanClasses.join(', ') : ''));
+
     await browser.close();
 
     console.log('\n' + (failures.length === 0
