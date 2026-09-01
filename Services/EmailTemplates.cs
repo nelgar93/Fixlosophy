@@ -133,6 +133,66 @@ public static class EmailTemplates
         return (html, text);
     }
 
+    // ── Status changed by the shop (to the customer) ─────────────────────────
+    /// <summary>
+    /// What the customer hears when staff move a booking on. Only two statuses get an
+    /// email: Confirmed ("we've accepted it") and Cancelled ("we can't do it"). Starting
+    /// work and finishing it stay inside the shop — a customer who is already in the
+    /// diary doesn't need a message when a mechanic picks the bike up.
+    ///
+    /// Until this existed the dashboard's Confirm button told the customer nothing at
+    /// all, so a cancellation reached them by them turning up at the shop.
+    /// </summary>
+    public static (string html, string text) BookingStatusChanged(Booking b, bool isCancellation)
+    {
+        var when = $"{b.SlotDate.ToString("dddd d MMMM yyyy", CultureInfo.GetCultureInfo("en-GB"))} at {b.SlotTime}";
+
+        var rows = new List<string>
+        {
+            Row("Reference", b.Reference),
+            Row("Service",   b.ServiceName),
+            Row("When",      when)
+        };
+        if (!isCancellation)
+            rows.Add(Row("Where", SiteContent.AddressOneLine));
+
+        if (isCancellation)
+        {
+            var html = Shell("Your booking has been cancelled",
+                Para($"Hi {b.CustomerName},") +
+                Para("We're sorry — we've had to cancel this booking, and the slot is now free again.") +
+                Table([.. rows]) +
+                Para($"Give us a ring on {SiteContent.PhoneDisplay} and we'll find you another time.")); 
+
+            var text =
+                $"Hi {b.CustomerName},\n\nWe're sorry — we've had to cancel this booking.\n\n" +
+                $"Reference: {b.Reference}\n" +
+                $"Service:   {b.ServiceName}\n" +
+                $"When:      {when}\n\n" +
+                $"Call us on {SiteContent.PhoneDisplay} and we'll find you another time.\n";
+
+            return (html, text);
+        }
+
+        var confirmedHtml = Shell("Your booking is confirmed",
+            Para($"Hi {b.CustomerName},") +
+            Para("We've confirmed your appointment — we'll see you then.") +
+            Table([.. rows]) +
+            Para("Please bring your bike in about five minutes before your slot. The final price is confirmed after we've assessed the bike.") +
+            Para($"Need to change it? Call us on {SiteContent.PhoneDisplay}."));
+
+        var confirmedText =
+            $"Hi {b.CustomerName},\n\nWe've confirmed your appointment.\n\n" +
+            $"Reference: {b.Reference}\n" +
+            $"Service:   {b.ServiceName}\n" +
+            $"When:      {when}\n" +
+            $"Where:     {SiteContent.AddressOneLine}\n\n" +
+            "Please arrive about five minutes early.\n" +
+            $"Need to change it? Call us on {SiteContent.PhoneDisplay}.\n";
+
+        return (confirmedHtml, confirmedText);
+    }
+
     // ── Booking notification (to the shop) ───────────────────────────────────
     public static (string html, string text) BookingNotification(Booking b, bool isCancellation)
     {

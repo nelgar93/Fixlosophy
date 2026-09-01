@@ -2815,6 +2815,9 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .price-current         { font-weight: 700; color: var(--green); }
 
 /* Pricing table column widths, previously inline on the <th>. */
+/* Enough for the primary button plus two icon buttons and the menu toggle on one
+   line — otherwise the cell squeezes and the set wraps. */
+.admin-table .col-actions     { width: 1%; white-space: nowrap; }
 .admin-table .col-price       { width: 130px; }
 .admin-table .col-price-input { width: 140px; }
 .admin-table .col-save        { width: 80px; }
@@ -3108,22 +3111,30 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     white-space: nowrap;
 }
 
-.action-btn--confirm  { background: rgba(61,187,72,0.15);  color: var(--green); border-color: rgba(61,187,72,0.3); }
+/* The one primary action on a booking. Confirm / Start work / Mark complete were
+   three separately-coloured buttons for what is one control — they were already
+   mutually exclusive, so the colour change only ever signalled "the button moved". */
+.action-btn--primary { background: rgba(61,187,72,0.15); color: var(--green); border-color: rgba(61,187,72,0.3); }
 @media (hover: hover) and (pointer: fine) {
-    .action-btn--confirm:hover  { background: var(--green); color: var(--dark); }
+    .action-btn--primary:hover { background: var(--green); color: var(--dark); }
 }
-.action-btn--progress { background: rgba(59,130,246,0.15); color: #60a5fa; border-color: rgba(59,130,246,0.3); }
+
+/* Confirming a destructive step, at the point of confirming it — never as the
+   resting state of a button that merely opens the confirmation. */
+.action-btn--danger { background: rgba(220,38,38,0.12); color: #f87171; border-color: rgba(220,38,38,0.3); }
 @media (hover: hover) and (pointer: fine) {
-    .action-btn--progress:hover { background: #3b82f6; color: var(--white); }
+    .action-btn--danger:hover { background: #dc2626; color: var(--white); }
 }
-.action-btn--complete { background: rgba(107,114,128,0.15); color: #9ca3af; border-color: rgba(107,114,128,0.3); }
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--complete:hover { background: #6b7280; color: var(--white); }
+
+/* Contact shortcuts. They change nothing — they are links — so they are square
+   icon buttons rather than labelled pills competing with the primary action. */
+.action-btn--icon {
+    padding: var(--space-1);
+    width: 32px;
+    min-width: 32px;
 }
-.action-btn--cancel   { background: rgba(220,38,38,0.1);  color: #f87171; border-color: rgba(220,38,38,0.25); }
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--cancel:hover   { background: #dc2626; color: var(--white); }
-}
+.action-btn--icon .icon { width: 1.05em; height: 1.05em; }
+
 
 /* An empty result inside a table that stays on the page, rather than in place of it.
    Matches .admin-empty so the phone and desktop views read the same. */
@@ -3635,6 +3646,124 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 }
 
 a.action-btn { text-decoration: none; }
+
+/* ── One booking's controls, in three tiers ──────────────────────────────────
+   Was a single flex-wrap row holding up to nine pills of equal weight: the stage
+   change, two contact links that alter nothing, Cancel, and Delete's two-step —
+   with Cancel and "Confirm delete" wearing the identical red. Now: one primary
+   action, contact demoted to icons, and everything that needs a moment behind a
+   menu. Delete has left this row entirely for the expanded detail. */
+.booking-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    /* Its parents (.admin-card__actions, .action-buttons, .day-cal-booking__actions)
+       are themselves flex, so without this it sizes to its content and the primary
+       button below never actually reaches full width. */
+    flex: 1 1 100%;
+    min-width: 0;
+}
+
+/* On a phone the primary action takes the full width and the quiet controls sit
+   under it, so the thing tapped twenty times a day is the easiest target. */
+.booking-actions .action-btn--primary { flex: 1 1 100%; min-height: var(--touch-min); }
+
+/* Pushes the overflow menu to the far end, away from the primary action. */
+.booking-menu { position: relative; margin-left: auto; }
+
+@media (min-width: 640px) {
+    /* Desktop puts the whole set on one line. Left wrapping, the auto margin on the
+       menu breaks it across three rows inside the table's Actions cell. */
+    .booking-actions { flex-wrap: nowrap; justify-content: flex-end; }
+    .booking-actions .action-btn--primary { flex: 0 0 auto; min-height: 28px; }
+    .booking-menu { margin-left: 0; }
+}
+
+.booking-menu__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+}
+
+.booking-menu__panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + var(--space-1));
+    z-index: 20;
+    min-width: 12rem;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-1);
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-lg);
+}
+
+.booking-menu__item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    min-height: var(--touch-min);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: rgba(255,255,255,0.8);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .booking-menu__item:hover { background: rgba(255,255,255,0.07); color: var(--white); }
+}
+
+.booking-menu__item--danger { color: #f87171; }
+@media (hover: hover) and (pointer: fine) {
+    .booking-menu__item--danger:hover { background: rgba(220,38,38,0.15); color: #fca5a5; }
+}
+
+/* The confirm step for Cancel. It used to fire on a single click, despite being
+   irreversible and now emailing the customer. */
+.booking-confirm {
+    flex: 1 1 100%;
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    background: rgba(220,38,38,0.07);
+    border: 1px solid rgba(220,38,38,0.25);
+    border-radius: var(--radius-sm);
+}
+
+.booking-confirm__text {
+    margin-bottom: var(--space-3);
+    color: rgba(255,255,255,0.8);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+}
+
+.booking-confirm__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+/* Delete's new home, at the foot of the expanded detail. Separated by a rule so it
+   reads as a different category of thing, not the next button along. */
+.booking-danger {
+    margin-top: var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-dark);
+}
+
+.booking-danger__text {
+    margin-bottom: var(--space-3);
+    color: rgba(255,255,255,0.6);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+}
+
+.booking-danger__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
 .action-btn--whatsapp { background: rgba(37,211,102,0.12); color: #25d366; border-color: rgba(37,211,102,0.3); }
 @media (hover: hover) and (pointer: fine) {
@@ -4590,6 +4719,9 @@ const fmt = {
     hhmm: (d) => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'),
     money: (n) => String(Math.round(n * 100) / 100)
 };
+// "dddd d MMMM" — no comma, unlike ddddDMMMM above. Matches the date format in
+// Admin.razor's WhatsApp message exactly.
+fmt.ddddDMMMMPlain = (d) => DAYS[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
 fmt.dMMMHHmm = (d) => fmt.dMMM(d) + ', ' + fmt.hhmm(d);
 fmt.dMMMyyyyHHmm = (d) => fmt.dMMMyyyy(d) + ', ' + fmt.hhmm(d);
 
@@ -5456,9 +5588,49 @@ function cancelOwnBooking(customerId, bookingId) {
     return { booking };
 }
 
+// BookingService.AllowedTransitions. Forward through the job, out to Cancelled at any
+// point before it is finished, and back to Confirmed from either terminal state when
+// someone mis-taps. This used to be an unconditional setter.
+const ALLOWED_TRANSITIONS = {
+    [STATUS.Pending]:    [STATUS.Confirmed, STATUS.Cancelled],
+    [STATUS.Confirmed]:  [STATUS.InProgress, STATUS.Cancelled],
+    [STATUS.InProgress]: [STATUS.Completed, STATUS.Cancelled],
+    [STATUS.Completed]:  [STATUS.Confirmed],   // Reopen
+    [STATUS.Cancelled]:  [STATUS.Confirmed]    // Reopen
+};
+
+const canTransition = (from, to) => (ALLOWED_TRANSITIONS[from] || []).includes(to);
+
+// BookingService.NextStage — the next step forward, or null when there isn't one.
+const nextStage = (from) =>
+    from === STATUS.Pending    ? STATUS.Confirmed  :
+    from === STATUS.Confirmed  ? STATUS.InProgress :
+    from === STATUS.InProgress ? STATUS.Completed  : null;
+
+// Admin.razor's StageLabel — the step being taken, not the state it lands in.
+const stageLabel = (next) =>
+    next === STATUS.Confirmed  ? 'Confirm booking' :
+    next === STATUS.InProgress ? 'Start work'      :
+    next === STATUS.Completed  ? 'Mark complete'   : String(next);
+
+// NotificationService.RaiseBookingCancelled. The real method existed but had no
+// production caller at all, so the bell never showed a cancellation from either side.
+// Targets the assigned mechanic, or broadcasts when nobody is assigned.
+function raiseBookingCancelled(b) {
+    if (!b) return;
+    DB.notifications.unshift({
+        id: uid('notif'), type: 'BookingCancelled', createdAt: now(),
+        title: 'Booking cancelled',
+        body: b.customerName + ' — ' + b.reference + ' (' + b.serviceName + ')',
+        linkUrl: '#/admin', targetStaffId: b.assignedStaffId || null
+    });
+    persist();
+}
+
 function updateStatus(id, status) {
     const b = bookingById(id);
     if (!b) return false;
+    if (!canTransition(b.status, status)) return false;
     b.status = status;
     persist();
     return true;
@@ -5738,6 +5910,10 @@ const ICONS = {
     'graduation': '<path d="M22 10L12 5 2 10l10 5z" /><path d="M6 12v4.5c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V12" />',
     'bell': '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" />',
     'globe': '<circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a15.3 15.3 0 0 1 0 18 15.3 15.3 0 0 1 0-18z" />',
+    'whatsapp': '<path d="M3 21l1.7-4.6A8.4 8.4 0 1 1 7.9 19.6z" /><path d="M9 9.2c.2 1 .6 2 1.3 2.8a7 7 0 0 0 2.6 2c.3.1.6.1.8-.2l.6-.7a.7.7 0 0 1 .8-.2l1.5.7c.3.1.4.4.3.7a2 2 0 0 1-2 1.4 8 8 0 0 1-6.7-6.8 2 2 0 0 1 1.4-2c.3-.1.6 0 .7.3l.7 1.5a.7.7 0 0 1-.2.8z" />',
+    'more': '<circle cx="5" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="19" cy="12" r="1.4" />',
+    'undo': '<path d="M3 8h11a6 6 0 0 1 0 12H8" /><path d="M7 4 3 8l4 4" />',
+    'trash': '<path d="M3 6h18" /><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />',
     'sliders-h': '<path d="M4 6h16M4 12h16M4 18h16" />'
 };
 
@@ -5880,6 +6056,8 @@ function freshUiState() {
             page: 0,
             expandedId: null,
             deleteConfirmId: null,
+            cancelConfirmId: null,
+            openMenuId: null,
             completeNoteBookingId: null,
             completeNoteBody: '',
             completeNoteVisible: false,
@@ -6026,6 +6204,16 @@ function whatsAppHref(phone) {
     return 'https://wa.me/' + international;
 }
 const telHref = (phone) => (phone || '').replace(/[^\d+]/g, '');
+
+// Admin.razor's WhatsAppHref(Booking) — the booking version carries a prefilled
+// message naming the customer, reference, service and slot. CustomerDetailPanel's
+// phone-only variant above is the one without it; the demo used to use that for both,
+// so the dashboard's WhatsApp button opened an empty chat.
+function whatsAppBookingHref(b) {
+    const msg = 'Hi ' + b.customerName + ', this is Fixlosophy about your booking ' + b.reference +
+                ' (' + b.serviceName + ') on ' + fmt.ddddDMMMMPlain(b.slotDate) + ' at ' + b.slotTime + '.';
+    return whatsAppHref(b.customerPhone) + '?text=' + encodeURIComponent(msg);
+}
 
 /* ── 50-views-public.js ─────────────────────────────────────────────── */
 /* ============================================================
@@ -7679,48 +7867,92 @@ function adminTabBar(tab) {
     '</div></div>';
 }
 
+/* Admin.razor's CloseTransientPanels. Delete-confirm, cancel-confirm, the overflow
+   menu and the completion note are separate two-step flows on the same row; opening
+   any one closes the others. Leaving two open at once was how a single booking could
+   end up showing twelve controls. */
+function closeTransientPanels() {
+    state.admin.deleteConfirmId = null;
+    state.admin.cancelConfirmId = null;
+    state.admin.openMenuId = null;
+    state.admin.completeNoteBookingId = null;
+}
+
 /* ── Shared action set (Admin.razor's ActionButtons fragment) ── */
 
 function actionButtons(b) {
     const a = state.admin;
-    let out = '';
+    let out = '<div class="booking-actions">';
 
-    if (canManage() && b.status === STATUS.Pending)
-        out += '<button class="action-btn action-btn--confirm" data-act="admin-status" data-id="' + b.id +
-               '" data-status="Confirmed">Confirm</button>';
-    if (canManage() && b.status === STATUS.Confirmed)
-        out += '<button class="action-btn action-btn--progress" data-act="admin-status" data-id="' + b.id +
-               '" data-status="InProgress">In Progress</button>';
-    if (canManage() && b.status === STATUS.InProgress)
-        out += '<button class="action-btn action-btn--complete" data-act="admin-complete-start" data-id="' + b.id +
-               '">Complete</button>';
-
-    // IsValidPhone rather than a blank check: older bookings predate the phone being
-    // required, and a value with no dialable digits produced a dead wa.me/ link.
-    if (canSeeCustomerDetails() && isValidPhone(b.customerPhone)) {
-        out += '<a class="action-btn action-btn--whatsapp" href="' + whatsAppHref(b.customerPhone) +
-               '" target="_blank" rel="noopener">WhatsApp</a>';
-        out += '<a class="action-btn action-btn--call" href="tel:' + telHref(b.customerPhone) + '">Call</a>';
+    // Tier 1 — the one thing you came here to do. Confirm / In Progress / Complete
+    // were three differently-coloured buttons for what is really one control.
+    const next = canManage() ? nextStage(b.status) : null;
+    if (next) {
+        const act = next === STATUS.Completed ? 'admin-complete-start' : 'admin-status';
+        out += '<button class="action-btn action-btn--primary" data-act="' + act + '" data-id="' + b.id +
+               '" data-status="' + next + '">' + stageLabel(next) + '</button>';
     }
 
-    if (canManage() && b.status !== STATUS.Cancelled && b.status !== STATUS.Completed)
-        out += '<button class="action-btn action-btn--cancel" data-act="admin-status" data-id="' + b.id +
-               '" data-status="Cancelled">Cancel</button>';
+    // Tier 2 — contact. These change nothing, so they sit quieter than anything that
+    // does. IsValidPhone rather than a blank check: older bookings predate the phone
+    // being required, and a value with no dialable digits produced a dead wa.me/ link.
+    if (canSeeCustomerDetails() && isValidPhone(b.customerPhone)) {
+        out += '<a class="action-btn action-btn--icon action-btn--whatsapp" href="' + whatsAppBookingHref(b) +
+               '" target="_blank" rel="noopener" title="WhatsApp ' + esc(b.customerName) + '">' +
+               icon('whatsapp', { label: 'WhatsApp ' + b.customerName }) + '</a>';
+        out += '<a class="action-btn action-btn--icon action-btn--call" href="tel:' + telHref(b.customerPhone) +
+               '" title="Call ' + esc(b.customerName) + '">' +
+               icon('phone', { label: 'Call ' + b.customerName }) + '</a>';
+    }
 
+    // Tier 3 — everything that needs a moment's thought.
     if (canManage()) {
-        out += a.deleteConfirmId === b.id
-            ? '<button class="action-btn action-btn--cancel" data-act="admin-delete" data-id="' + b.id + '">Confirm delete</button>' +
-              '<button class="action-btn action-btn--keep" data-act="admin-delete-keep">Keep</button>'
-            : '<button class="action-btn action-btn--delete" data-act="admin-delete-start" data-id="' + b.id + '">Delete</button>';
+        out += '<div class="booking-menu">' +
+            '<button class="action-btn action-btn--icon booking-menu__toggle" aria-haspopup="true" ' +
+              'aria-expanded="' + (a.openMenuId === b.id) + '" data-act="admin-menu" data-id="' + b.id + '">' +
+              icon('more', { label: 'More actions' }) + '</button>';
+
+        if (a.openMenuId === b.id) {
+            out += '<div class="booking-menu__backdrop" data-act="admin-menu-close"></div>' +
+                   '<div class="booking-menu__panel" role="menu">';
+            if (canTransition(b.status, STATUS.Cancelled))
+                out += '<button class="booking-menu__item booking-menu__item--danger" role="menuitem" ' +
+                       'data-act="admin-cancel-start" data-id="' + b.id + '">Cancel booking…</button>';
+            // Reopen is what makes a mis-tap survivable — without it the only way back
+            // from a wrong Cancel was to delete the booking and re-key it.
+            if (canTransition(b.status, STATUS.Confirmed) &&
+                (b.status === STATUS.Cancelled || b.status === STATUS.Completed))
+                out += '<button class="booking-menu__item" role="menuitem" data-act="admin-reopen" data-id="' +
+                       b.id + '">' + icon('undo') + ' Reopen booking</button>';
+            out += '</div>';
+        }
+        out += '</div>';
+    }
+    out += '</div>';
+
+    // Cancel now cannot be undone except by Reopen, so it gets the same two-step
+    // confirm Delete has always had. It used to fire on a single click.
+    if (a.cancelConfirmId === b.id) {
+        out += '<div class="booking-confirm">' +
+            '<p class="booking-confirm__text">Cancel <strong>' + esc(b.reference) + '</strong> and free the slot?' +
+              (b.customerEmail ? ' <span>' + esc(b.customerName) + ' will be emailed.</span>' : '') + '</p>' +
+            '<div class="booking-confirm__actions">' +
+              '<button class="action-btn action-btn--danger" data-act="admin-cancel" data-id="' + b.id +
+                '">Yes, cancel it</button>' +
+              '<button class="action-btn action-btn--keep" data-act="admin-cancel-keep">Keep booking</button>' +
+            '</div></div>';
     }
 
     // Sits on its own line below the buttons, so it reads as a step rather than
     // another control crammed into the row.
     if (a.completeNoteBookingId === b.id) {
+        // Per-booking id: the mobile cards and the desktop table are BOTH always in the
+        // DOM, so a literal id put two elements with the same id on the page.
+        const noteId = 'complete-note-' + b.id;
         out += '<div class="complete-note">' +
-            '<label class="complete-note__label" for="complete-note-body">Add a note about this job ' +
+            '<label class="complete-note__label" for="' + noteId + '">Add a note about this job ' +
               '<span class="complete-note__optional">(optional)</span></label>' +
-            '<textarea id="complete-note-body" class="form-control" rows="3" data-model="admin.completeNoteBody" ' +
+            '<textarea id="' + noteId + '" class="form-control" rows="3" data-model="admin.completeNoteBody" ' +
               'placeholder="e.g. rear hub has play — worth replacing next service">' + esc(a.completeNoteBody) + '</textarea>' +
             '<label class="complete-note__share">' +
               '<input type="checkbox" data-act="admin-complete-share" ' + (a.completeNoteVisible ? 'checked' : '') + ' />' +
@@ -7730,13 +7962,34 @@ function actionButtons(b) {
                 ? 'They\'ll see it on this booking in their account.'
                 : 'Staff only — not shown to the customer.') + '</p>' +
             '<div class="complete-note__actions">' +
-              '<button class="action-btn action-btn--confirm" data-act="admin-complete-save" data-id="' + b.id + '">' +
+              '<button class="action-btn action-btn--primary" data-act="admin-complete-save" data-id="' + b.id + '">' +
                 (a.completeNoteBody.trim() ? 'Save note &amp; complete' : 'Complete without a note') + '</button>' +
               '<button class="action-btn action-btn--keep" data-act="admin-complete-back">Back</button>' +
             '</div>' +
         '</div>';
     }
     return out;
+}
+
+// Admin.razor's DangerZone. Delete used to sit in the action strip, one tap from
+// Cancel and wearing the same red. They are not peers: Cancel keeps the record,
+// Delete removes the row and its photos for good. Admin-only, in the expanded detail.
+function dangerZone(b) {
+    if (!isAdmin()) return '';
+    const a = state.admin;
+    if (a.deleteConfirmId === b.id) {
+        return '<div class="booking-danger">' +
+            '<p class="booking-danger__text">Permanently delete <strong>' + esc(b.reference) + '</strong> and its ' +
+              "photos? This can't be undone — use Cancel if you just want to free the slot.</p>" +
+            '<div class="booking-danger__actions">' +
+              '<button class="action-btn action-btn--danger" data-act="admin-delete" data-id="' + b.id +
+                '">Delete permanently</button>' +
+              '<button class="action-btn action-btn--keep" data-act="admin-delete-keep">Keep</button>' +
+            '</div></div>';
+    }
+    return '<div class="booking-danger">' +
+        '<button class="action-btn action-btn--delete" data-act="admin-delete-start" data-id="' + b.id + '">' +
+          icon('trash') + ' Delete booking</button></div>';
 }
 
 const rowHasActions = (b) => canManage() || (canSeeCustomerDetails() && isValidPhone(b.customerPhone));
@@ -7862,6 +8115,7 @@ function adminBookingCards(bookings, emptyMessage) {
                       '<select class="form-control form-control--compact" data-act="admin-assign" data-id="' + b.id + '">' +
                       staffOptions(b.assignedStaffId) + '</select></div>'
                     : '') +
+                dangerZone(b) +
             '</div>';
         }
 
@@ -7913,6 +8167,7 @@ function adminBookingTable(bookings, emptyMessage) {
                 '<div><strong>Job notes</strong>' + (notes || '<span>—</span>') + '</div>' +
               '</div>' +
               (b.photos.length ? '<div class="booking-detail__photos"><strong>Photos</strong>' + photoThumbs(b) + '</div>' : '') +
+              dangerZone(b) +
               '</div></td></tr>';
         }
         return row;
@@ -7921,7 +8176,7 @@ function adminBookingTable(bookings, emptyMessage) {
     return '<div class="admin-table-wrapper admin-table-wrapper--desktop-only"><table class="admin-table">' +
         '<thead><tr><th>Reference</th><th>Customer</th><th>Service</th><th>Date &amp; Time</th><th>Status</th>' +
           (isAdmin() ? '<th>Assigned To</th>' : '') +
-          ((canManage() || canSeeCustomerDetails()) ? '<th>Actions</th>' : '') +
+          ((canManage() || canSeeCustomerDetails()) ? '<th class="col-actions">Actions</th>' : '') +
         '</tr></thead><tbody>' +
           (bookings.length ? '' :
             '<tr class="admin-table__empty-row"><td colspan="' + columnCount + '">' +
@@ -7969,7 +8224,7 @@ function adminCalendarTab() {
                     '</div>' +
                     (b.notes ? '<div class="day-cal-booking__notes">' + esc(b.notes) + '</div>' : '') +
                   '</div>' +
-                  '<div class="day-cal-booking__actions">' + actionButtons(b) + '</div>' +
+                  (rowHasActions(b) ? '<div class="day-cal-booking__actions">' + actionButtons(b) + '</div>' : '') +
                 '</div>').join('');
 
         return '<div class="day-cal-slot ' + (inSlot.length === 0 ? 'day-cal-slot--free' : '') + '">' +
@@ -8516,23 +8771,67 @@ document.addEventListener('click', (e) => {
     case 'admin-filter':
         state.admin.filter = actEl.dataset.filter;
         state.admin.page = 0;
+        closeTransientPanels();
         render();
         break;
-    case 'admin-page': state.admin.page = parseInt(actEl.dataset.page, 10); render(); break;
+    case 'admin-page':
+        state.admin.page = parseInt(actEl.dataset.page, 10);
+        closeTransientPanels();
+        render();
+        break;
     case 'admin-expand':
         state.admin.expandedId = state.admin.expandedId === id ? null : id;
         render();
         break;
-    case 'admin-status': updateStatus(id, actEl.dataset.status); render(); break;
-    case 'admin-delete-start': state.admin.deleteConfirmId = id; render(); break;
+    case 'admin-status':
+        updateStatus(id, actEl.dataset.status);
+        closeTransientPanels();
+        render();
+        // The real site emails the customer here — Confirm is the moment the booking
+        // becomes real to them. Nothing leaves the browser in the demo, so it says so.
+        if (actEl.dataset.status === STATUS.Confirmed) toast('Confirmed. The customer would be emailed.');
+        break;
+    case 'admin-menu': {
+        const opening = state.admin.openMenuId !== id;
+        closeTransientPanels();
+        state.admin.openMenuId = opening ? id : null;
+        render();
+        break;
+    }
+    case 'admin-menu-close': state.admin.openMenuId = null; render(); break;
+    case 'admin-cancel-start':
+        closeTransientPanels();
+        state.admin.cancelConfirmId = id;
+        render();
+        break;
+    case 'admin-cancel-keep': state.admin.cancelConfirmId = null; render(); break;
+    case 'admin-cancel':
+        updateStatus(id, STATUS.Cancelled);
+        raiseBookingCancelled(bookingById(id));
+        closeTransientPanels();
+        render();
+        toast('Cancelled. The customer would be emailed.');
+        break;
+    case 'admin-reopen':
+        updateStatus(id, STATUS.Confirmed);
+        closeTransientPanels();
+        render();
+        toast('Reopened — it is back in the diary as confirmed.');
+        break;
+    case 'admin-delete-start':
+        closeTransientPanels();
+        state.admin.deleteConfirmId = id;
+        render();
+        break;
     case 'admin-delete-keep': state.admin.deleteConfirmId = null; render(); break;
     case 'admin-delete':
         deleteBooking(id);
-        state.admin.deleteConfirmId = null;
+        closeTransientPanels();
         render();
         toast('Booking deleted, along with its photos.');
         break;
     case 'admin-complete-start':
+        closeTransientPanels();
         state.admin.completeNoteBookingId = id;
         state.admin.completeNoteBody = '';
         state.admin.completeNoteVisible = false;
@@ -8690,7 +8989,7 @@ document.addEventListener('input', (e) => {
 
     // Search boxes filter as you type, so they re-render — and then need the caret back.
     if (el.hasAttribute('data-live')) {
-        if (el.dataset.model === 'admin.search') state.admin.page = 0;
+        if (el.dataset.model === 'admin.search') { state.admin.page = 0; closeTransientPanels(); }
         if (el.dataset.model === 'admin.customerSearch') state.admin.customerPage = 0;
         state.focusModel = el.dataset.model;
         render();
@@ -8717,6 +9016,7 @@ document.addEventListener('change', (e) => {
     if (act === 'admin-sort') {
         state.admin.sort = el.value;
         state.admin.expandedId = null;
+        closeTransientPanels();
         state.admin.page = 0;   // a re-sort starts at the first page
         render();
         return;

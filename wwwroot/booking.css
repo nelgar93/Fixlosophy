@@ -847,6 +847,9 @@
 .price-current         { font-weight: 700; color: var(--green); }
 
 /* Pricing table column widths, previously inline on the <th>. */
+/* Enough for the primary button plus two icon buttons and the menu toggle on one
+   line — otherwise the cell squeezes and the set wraps. */
+.admin-table .col-actions     { width: 1%; white-space: nowrap; }
 .admin-table .col-price       { width: 130px; }
 .admin-table .col-price-input { width: 140px; }
 .admin-table .col-save        { width: 80px; }
@@ -1140,22 +1143,30 @@
     white-space: nowrap;
 }
 
-.action-btn--confirm  { background: rgba(61,187,72,0.15);  color: var(--green); border-color: rgba(61,187,72,0.3); }
+/* The one primary action on a booking. Confirm / Start work / Mark complete were
+   three separately-coloured buttons for what is one control — they were already
+   mutually exclusive, so the colour change only ever signalled "the button moved". */
+.action-btn--primary { background: rgba(61,187,72,0.15); color: var(--green); border-color: rgba(61,187,72,0.3); }
 @media (hover: hover) and (pointer: fine) {
-    .action-btn--confirm:hover  { background: var(--green); color: var(--dark); }
+    .action-btn--primary:hover { background: var(--green); color: var(--dark); }
 }
-.action-btn--progress { background: rgba(59,130,246,0.15); color: #60a5fa; border-color: rgba(59,130,246,0.3); }
+
+/* Confirming a destructive step, at the point of confirming it — never as the
+   resting state of a button that merely opens the confirmation. */
+.action-btn--danger { background: rgba(220,38,38,0.12); color: #f87171; border-color: rgba(220,38,38,0.3); }
 @media (hover: hover) and (pointer: fine) {
-    .action-btn--progress:hover { background: #3b82f6; color: var(--white); }
+    .action-btn--danger:hover { background: #dc2626; color: var(--white); }
 }
-.action-btn--complete { background: rgba(107,114,128,0.15); color: #9ca3af; border-color: rgba(107,114,128,0.3); }
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--complete:hover { background: #6b7280; color: var(--white); }
+
+/* Contact shortcuts. They change nothing — they are links — so they are square
+   icon buttons rather than labelled pills competing with the primary action. */
+.action-btn--icon {
+    padding: var(--space-1);
+    width: 32px;
+    min-width: 32px;
 }
-.action-btn--cancel   { background: rgba(220,38,38,0.1);  color: #f87171; border-color: rgba(220,38,38,0.25); }
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--cancel:hover   { background: #dc2626; color: var(--white); }
-}
+.action-btn--icon .icon { width: 1.05em; height: 1.05em; }
+
 
 /* An empty result inside a table that stays on the page, rather than in place of it.
    Matches .admin-empty so the phone and desktop views read the same. */
@@ -1667,6 +1678,124 @@
 }
 
 a.action-btn { text-decoration: none; }
+
+/* ── One booking's controls, in three tiers ──────────────────────────────────
+   Was a single flex-wrap row holding up to nine pills of equal weight: the stage
+   change, two contact links that alter nothing, Cancel, and Delete's two-step —
+   with Cancel and "Confirm delete" wearing the identical red. Now: one primary
+   action, contact demoted to icons, and everything that needs a moment behind a
+   menu. Delete has left this row entirely for the expanded detail. */
+.booking-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    /* Its parents (.admin-card__actions, .action-buttons, .day-cal-booking__actions)
+       are themselves flex, so without this it sizes to its content and the primary
+       button below never actually reaches full width. */
+    flex: 1 1 100%;
+    min-width: 0;
+}
+
+/* On a phone the primary action takes the full width and the quiet controls sit
+   under it, so the thing tapped twenty times a day is the easiest target. */
+.booking-actions .action-btn--primary { flex: 1 1 100%; min-height: var(--touch-min); }
+
+/* Pushes the overflow menu to the far end, away from the primary action. */
+.booking-menu { position: relative; margin-left: auto; }
+
+@media (min-width: 640px) {
+    /* Desktop puts the whole set on one line. Left wrapping, the auto margin on the
+       menu breaks it across three rows inside the table's Actions cell. */
+    .booking-actions { flex-wrap: nowrap; justify-content: flex-end; }
+    .booking-actions .action-btn--primary { flex: 0 0 auto; min-height: 28px; }
+    .booking-menu { margin-left: 0; }
+}
+
+.booking-menu__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+}
+
+.booking-menu__panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + var(--space-1));
+    z-index: 20;
+    min-width: 12rem;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-1);
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-lg);
+}
+
+.booking-menu__item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    min-height: var(--touch-min);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: rgba(255,255,255,0.8);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .booking-menu__item:hover { background: rgba(255,255,255,0.07); color: var(--white); }
+}
+
+.booking-menu__item--danger { color: #f87171; }
+@media (hover: hover) and (pointer: fine) {
+    .booking-menu__item--danger:hover { background: rgba(220,38,38,0.15); color: #fca5a5; }
+}
+
+/* The confirm step for Cancel. It used to fire on a single click, despite being
+   irreversible and now emailing the customer. */
+.booking-confirm {
+    flex: 1 1 100%;
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    background: rgba(220,38,38,0.07);
+    border: 1px solid rgba(220,38,38,0.25);
+    border-radius: var(--radius-sm);
+}
+
+.booking-confirm__text {
+    margin-bottom: var(--space-3);
+    color: rgba(255,255,255,0.8);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+}
+
+.booking-confirm__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+/* Delete's new home, at the foot of the expanded detail. Separated by a rule so it
+   reads as a different category of thing, not the next button along. */
+.booking-danger {
+    margin-top: var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-dark);
+}
+
+.booking-danger__text {
+    margin-bottom: var(--space-3);
+    color: rgba(255,255,255,0.6);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+}
+
+.booking-danger__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
 .action-btn--whatsapp { background: rgba(37,211,102,0.12); color: #25d366; border-color: rgba(37,211,102,0.3); }
 @media (hover: hover) and (pointer: fine) {
