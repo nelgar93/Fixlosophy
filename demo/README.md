@@ -70,11 +70,13 @@ The two stylesheets are copied in byte for byte, so after a CSS change re-copy t
 confirm the copy is exact:
 
 ```bash
-sed -n '5,1968p'    demo/index.html | diff - wwwroot/app.css
-sed -n '1969,4384p' demo/index.html | diff - wwwroot/booking.css
+sed -n '5,1968p'    demo/index.html | diff --strip-trailing-cr - wwwroot/app.css
+sed -n '1969,4418p' demo/index.html | diff --strip-trailing-cr - wwwroot/booking.css
 ```
 
 (The line ranges move when the stylesheets grow — they start after `<style>` and end at
-the `DEMO HARNESS` banner.) A change to a Razor page or a service means editing the
+the `DEMO HARNESS` banner. `--strip-trailing-cr` because the repo's working tree is
+CRLF and Git Bash's `sed` drops the CR on the way out, which otherwise reports every
+single line as changed.) A change to a Razor page or a service means editing the
 matching render function or store operation here; each carries the name of the C# it
 mirrors.

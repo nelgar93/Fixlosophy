@@ -1042,7 +1042,6 @@
     private List<Booking> _calDayBookings = [];
     private string? deleteConfirmId;
     private string? cancelConfirmId;
-    private string? openMenuId;
 
     // Notifications
     private List<Notification> _notifications = [];
@@ -1102,8 +1101,17 @@
 
     // True when a booking has any actionable controls for the current user —
     // used to decide whether to render the action area / Actions column at all.
-    private bool RowHasActions(Booking b) =>
-        CanManage || (CanSeeCustomerDetails && AuthService.IsValidPhone(b.CustomerPhone));
+    // CanManage always yields at least the primary button: every status either has a
+    // next stage or can be reopened.
+    private bool RowHasActions(Booking b) => CanManage || ShowContact(b);
+
+    // Both the second row's wrapper and RowHasActions ask these, so they live here
+    // rather than inline: an empty wrapper still draws the gap above it.
+    private bool ShowContact(Booking b) =>
+        CanSeeCustomerDetails && AuthService.IsValidPhone(b.CustomerPhone);
+
+    private bool ShowCancel(Booking b) =>
+        CanManage && BookingService.CanTransition(b.Status, BookingStatus.Cancelled);
 
     // One shared action set, reused by the Bookings cards, the Bookings table and
     // the Calendar so every view offers the exact same lifecycle + contact + delete
@@ -1148,69 +1156,61 @@
                Confirm / In Progress / Complete were three differently-coloured
                buttons for what is really one control — they were already mutually
                exclusive, so only ever one showed. Now they share the primary slot
-               and read as the next step rather than the state they set. *@
+               and read as the next step rather than the state they set.
+
+               The else-if is Reopen, which is what makes a mis-tap survivable: without
+               it the only way back from a wrong Cancel was to delete the booking and
+               re-key it, which is why Delete got reached for far more often than it
+               should have been. It used to sit in an overflow menu, but a cancelled or
+               completed booking has no next stage — the primary slot is free, and
+               reopening is the only thing left to do with it. CanTransition is the
+               whole condition: those two statuses are exactly the ones that can go
+               back to Confirmed. *@
             @if (CanManage && BookingService.NextStage(booking.Status) is { } next)
             {
-                <button class="action-btn action-btn--primary"
+                <button class="action-btn action-btn--primary booking-actions__primary"
                         @onclick="() => AdvanceStage(booking, next)">@StageLabel(next)</button>
             }
-
-            @* ── Tier 2: contact. These change nothing — they are just links, so
-               they sit quieter than anything that does.
-               IsValidPhone rather than a blank check: older bookings predate the
-               phone being required, and a value with no dialable digits produced a
-               WhatsApp link to wa.me/ with no number and an empty tel: link. *@
-            @if (CanSeeCustomerDetails && AuthService.IsValidPhone(booking.CustomerPhone))
+            else if (CanManage && BookingService.CanTransition(booking.Status, BookingStatus.Confirmed))
             {
-                <a class="action-btn action-btn--icon action-btn--whatsapp"
-                   href="@WhatsAppHref(booking)" target="_blank" rel="noopener"
-                   title="WhatsApp @booking.CustomerName">
-                    <Icon Name="whatsapp" Label="@($"WhatsApp {booking.CustomerName}")" />
-                </a>
-                <a class="action-btn action-btn--icon action-btn--call"
-                   href="@TelHref(booking.CustomerPhone)"
-                   title="Call @booking.CustomerName">
-                    <Icon Name="phone" Label="@($"Call {booking.CustomerName}")" />
-                </a>
+                <button class="action-btn action-btn--primary booking-actions__primary"
+                        @onclick="() => ReopenBooking(booking)">
+                    <Icon Name="undo" /> Reopen booking
+                </button>
             }
 
-            @* ── Tier 3: everything that needs a moment's thought. ───────────── *@
-            @if (CanManage)
+            @* ── Tier 2: reaching the customer, and calling the job off ───────
+               Cancel spent a release behind a "…" menu — three taps for the second
+               most common thing done to a booking, and invisible until you went
+               looking. It is back on the row and red. The two contact links take the
+               larger share of the width because they are used far more often; Cancel
+               is deliberately the narrow one. It still asks before it fires. *@
+            @if (ShowContact(booking) || ShowCancel(booking))
             {
-                <div class="booking-menu">
-                    <button class="action-btn action-btn--icon booking-menu__toggle"
-                            aria-haspopup="true" aria-expanded="@(openMenuId == booking.Id)"
-                            @onclick="() => ToggleMenu(booking.Id)">
-                        <Icon Name="more" Label="More actions" />
-                    </button>
-
-                    @if (openMenuId == booking.Id)
+                <div class="booking-actions__row">
+                    @* The booking form has required a phone since Book.razor started
+                       validating it, so in practice both links always render. The check
+                       is IsValidPhone rather than a blank test because older rows
+                       predate that, and a value with no dialable digits produced a
+                       WhatsApp link to wa.me/ with no number and an empty tel: link. *@
+                    @if (ShowContact(booking))
                     {
-                        @* A transparent backdrop rather than a document-level JS
-                           listener: openMenuId is server-side state on the circuit, so
-                           a click JS swallows outside Blazor could never close it. *@
-                        <div class="booking-menu__backdrop"
-                             @onclick="() => openMenuId = null"
-                             @onclick:stopPropagation="true"></div>
-                        <div class="booking-menu__panel" role="menu">
-                            @if (BookingService.CanTransition(booking.Status, BookingStatus.Cancelled))
-                            {
-                                <button class="booking-menu__item booking-menu__item--danger" role="menuitem"
-                                        @onclick="() => StartCancel(booking.Id)">Cancel booking…</button>
-                            }
-                            @* Reopen is what makes a mis-tap survivable. Without it the
-                               only way back from a wrong Cancel was to delete the
-                               booking and re-key it, which is why Delete got reached
-                               for far more often than it should have been. *@
-                            @if (BookingService.CanTransition(booking.Status, BookingStatus.Confirmed)
-                                 && booking.Status is BookingStatus.Cancelled or BookingStatus.Completed)
-                            {
-                                <button class="booking-menu__item" role="menuitem"
-                                        @onclick="() => ReopenBooking(booking)">
-                                    <Icon Name="undo" /> Reopen booking
-                                </button>
-                            }
-                        </div>
+                        <a class="action-btn action-btn--whatsapp"
+                           href="@WhatsAppHref(booking)" target="_blank" rel="noopener"
+                           title="WhatsApp @booking.CustomerName">
+                            <Icon Name="whatsapp" /> <span class="action-btn__label">WhatsApp</span>
+                        </a>
+                        <a class="action-btn action-btn--call"
+                           href="@TelHref(booking.CustomerPhone)"
+                           title="Call @booking.CustomerName">
+                            <Icon Name="phone" /> <span class="action-btn__label">Call</span>
+                        </a>
+                    }
+
+                    @if (ShowCancel(booking))
+                    {
+                        <button class="action-btn action-btn--cancel"
+                                @onclick="() => StartCancel(booking.Id)">Cancel</button>
                     }
                 </div>
             }
@@ -1487,7 +1487,6 @@
     {
         deleteConfirmId = null;
         cancelConfirmId = null;
-        openMenuId = null;
         completeNoteBookingId = null;
     }
 
@@ -1499,13 +1498,6 @@
         LoadBookings();
         RefreshStats();
         LoadCalDay();  // Keep the calendar view in sync when acted on from either tab.
-    }
-
-    private void ToggleMenu(string id)
-    {
-        var opening = openMenuId != id;
-        CloseTransientPanels();
-        openMenuId = opening ? id : null;
     }
 
     /// Label for the primary button: the step being taken, not the state it lands in.
