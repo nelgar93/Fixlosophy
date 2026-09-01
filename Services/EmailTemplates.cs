@@ -133,6 +133,98 @@ public static class EmailTemplates
         return (html, text);
     }
 
+    // ── Account claim (to an imported customer) ──────────────────────────────
+    /// <summary>
+    /// Sent once to a customer whose record was brought over from the shop's previous
+    /// system. Deliberately not the password-reset template: they never had a password
+    /// here, and "reset your password" to someone who has never signed in reads as a
+    /// phishing attempt.
+    /// </summary>
+    public static (string html, string text) AccountClaim(string toName, string claimLink)
+    {
+        var greeting = string.IsNullOrWhiteSpace(toName) ? "Hello," : $"Hi {toName},";
+
+        var html = Shell($"Your {SiteContent.ShopName} account is ready",
+            Para(greeting) +
+            Para($"We've moved {SiteContent.ShopName}'s booking system over to a new site, and brought your details with us. " +
+                 "Set a password and you'll be able to book online and see your past visits.") +
+            Button(claimLink, "Set my password") +
+            Para("If you'd rather not have an account, you can ignore this — you can still book by phone " +
+                 $"on {SiteContent.PhoneDisplay} or by dropping in.") +
+            Para("This link is valid for a week."));
+
+        var text =
+            $"{greeting}\n\n" +
+            $"We've moved {SiteContent.ShopName}'s booking system over to a new site, and brought your\n" +
+            "details with us. Set a password and you'll be able to book online and see your\n" +
+            "past visits.\n\n" +
+            $"Set my password: {claimLink}\n\n" +
+            "This link is valid for a week. If you'd rather not have an account, you can\n" +
+            $"ignore this — you can still book on {SiteContent.PhoneDisplay} or by dropping in.\n";
+
+        return (html, text);
+    }
+
+    // ── Status changed by the shop (to the customer) ─────────────────────────
+    /// <summary>
+    /// What the customer hears when staff move a booking on. Only two statuses get an
+    /// email: Confirmed ("we've accepted it") and Cancelled ("we can't do it"). Starting
+    /// work and finishing it stay inside the shop — a customer who is already in the
+    /// diary doesn't need a message when a mechanic picks the bike up.
+    ///
+    /// Until this existed the dashboard's Confirm button told the customer nothing at
+    /// all, so a cancellation reached them by them turning up at the shop.
+    /// </summary>
+    public static (string html, string text) BookingStatusChanged(Booking b, bool isCancellation)
+    {
+        var when = $"{b.SlotDate.ToString("dddd d MMMM yyyy", CultureInfo.GetCultureInfo("en-GB"))} at {b.SlotTime}";
+
+        var rows = new List<string>
+        {
+            Row("Reference", b.Reference),
+            Row("Service",   b.ServiceName),
+            Row("When",      when)
+        };
+        if (!isCancellation)
+            rows.Add(Row("Where", SiteContent.AddressOneLine));
+
+        if (isCancellation)
+        {
+            var html = Shell("Your booking has been cancelled",
+                Para($"Hi {b.CustomerName},") +
+                Para("We're sorry — we've had to cancel this booking, and the slot is now free again.") +
+                Table([.. rows]) +
+                Para($"Give us a ring on {SiteContent.PhoneDisplay} and we'll find you another time.")); 
+
+            var text =
+                $"Hi {b.CustomerName},\n\nWe're sorry — we've had to cancel this booking.\n\n" +
+                $"Reference: {b.Reference}\n" +
+                $"Service:   {b.ServiceName}\n" +
+                $"When:      {when}\n\n" +
+                $"Call us on {SiteContent.PhoneDisplay} and we'll find you another time.\n";
+
+            return (html, text);
+        }
+
+        var confirmedHtml = Shell("Your booking is confirmed",
+            Para($"Hi {b.CustomerName},") +
+            Para("We've confirmed your appointment — we'll see you then.") +
+            Table([.. rows]) +
+            Para("Please bring your bike in about five minutes before your slot. The final price is confirmed after we've assessed the bike.") +
+            Para($"Need to change it? Call us on {SiteContent.PhoneDisplay}."));
+
+        var confirmedText =
+            $"Hi {b.CustomerName},\n\nWe've confirmed your appointment.\n\n" +
+            $"Reference: {b.Reference}\n" +
+            $"Service:   {b.ServiceName}\n" +
+            $"When:      {when}\n" +
+            $"Where:     {SiteContent.AddressOneLine}\n\n" +
+            "Please arrive about five minutes early.\n" +
+            $"Need to change it? Call us on {SiteContent.PhoneDisplay}.\n";
+
+        return (confirmedHtml, confirmedText);
+    }
+
     // ── Booking notification (to the shop) ───────────────────────────────────
     public static (string html, string text) BookingNotification(Booking b, bool isCancellation)
     {

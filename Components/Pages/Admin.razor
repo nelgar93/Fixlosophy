@@ -9,6 +9,8 @@
 @inject NotificationService Notifications
 @inject NotificationHub NotificationHub
 @inject CustomerService Customers
+@inject IEmailSender EmailSender
+@inject ILogger<Admin> Logger
 
 <PageTitle>Admin – Fixlosophy Bookings</PageTitle>
 <HeadContent>
@@ -298,6 +300,7 @@
                                             </select>
                                         </div>
                                     }
+                                    @DangerZone(b)
                                 </div>
                             }
 
@@ -343,7 +346,7 @@
                                 <th>Date &amp; Time</th>
                                 <th>Status</th>
                                 @if (IsAdmin) { <th>Assigned To</th> }
-                                @if (CanManage || CanSeeCustomerDetails) { <th>Actions</th> }
+                                @if (CanManage || CanSeeCustomerDetails) { <th class="col-actions">Actions</th> }
                             </tr>
                         </thead>
                         <tbody>
@@ -453,6 +456,7 @@
                                                         </div>
                                                     </div>
                                                 }
+                                                @DangerZone(b)
                                             </div>
                                         </td>
                                     </tr>
@@ -556,9 +560,12 @@
                                                         <div class="day-cal-booking__notes">@b.Notes</div>
                                                     }
                                                 </div>
-                                                <div class="day-cal-booking__actions">
-                                                    @ActionButtons(b)
-                                                </div>
+                                                @if (RowHasActions(b))
+                                                {
+                                                    <div class="day-cal-booking__actions">
+                                                        @ActionButtons(b)
+                                                    </div>
+                                                }
                                             </div>
                                         }
                                     }
@@ -684,7 +691,7 @@
                                         <td>
                                             @if (!sp.IsQuoteOnly)
                                             {
-                                                <button class="action-btn action-btn--confirm"
+                                                <button class="action-btn action-btn--primary"
                                                         @onclick="() => SavePrice(sid)">Save</button>
                                             }
                                         </td>
@@ -700,7 +707,11 @@
             <!-- ── CUSTOMERS TAB ─────────────────────────────────────────── -->
             @if (activeTab == "customers" && CanSeeCustomerDetails)
             {
-                @if (_selectedCustomer is null)
+                @if (_importingCustomers)
+                {
+                    <CustomerImportPanel OnBack="CloseImport" OnImported="LoadCustomers" />
+                }
+                else if (_selectedCustomer is null)
                 {
                     <div class="admin-filters">
                         <div class="admin-search admin-search--wide">
@@ -709,6 +720,13 @@
                                    value="@customerSearch" @oninput="OnCustomerSearch"
                                    placeholder="Search name, email or phone…" />
                         </div>
+                        @* Bulk-importing personal data is an owner's job, not a
+                           mechanic's — IsAdmin rather than the tab's own
+                           CanSeeCustomerDetails. *@
+                        @if (IsAdmin)
+                        {
+                            <button class="btn btn-outline" @onclick="OpenImport">Import customers</button>
+                        }
                     </div>
 
                     @* Same as the bookings list: the table being searched stays on the
@@ -953,7 +971,7 @@
                                             }
                                         </td>
                                         <td>
-                                            <button class="action-btn action-btn--confirm"
+                                            <button class="action-btn action-btn--primary"
                                                     @onclick="() => SaveStaffMember(m)">Save</button>
                                         </td>
                                     </tr>
@@ -1005,6 +1023,7 @@
     // Customers tab
     private List<CustomerSummary> _customers = [];
     private CustomerDetail? _selectedCustomer;
+    private bool _importingCustomers;
     private string customerSearch = "";
     private int _customerPage;
     private int _customerTotal;
@@ -1022,6 +1041,8 @@
     private DateTime calDay = ShopClock.Today;
     private List<Booking> _calDayBookings = [];
     private string? deleteConfirmId;
+    private string? cancelConfirmId;
+    private string? openMenuId;
 
     // Notifications
     private List<Notification> _notifications = [];
@@ -1087,60 +1108,149 @@
     // One shared action set, reused by the Bookings cards, the Bookings table and
     // the Calendar so every view offers the exact same lifecycle + contact + delete
     // controls. Each call site keeps its own wrapper element for layout/spacing.
+    @* Delete used to sit in the action strip, one tap from Cancel and wearing the same
+       red. They are not peers: Cancel means "this isn't happening" and keeps the record,
+       Delete removes the row and its photos from Supabase Storage for good. It lives in
+       the expanded detail now, admin-only, so reaching it is a decision rather than a
+       mis-tap. Note that job notes SURVIVE this (CustomerNote.BookingId is SET NULL), so
+       on a guest booking a note becomes unreachable from any screen. *@
+    private RenderFragment<Booking> DangerZone => booking => @<text>
+        @if (IsAdmin)
+        {
+            <div class="booking-danger" @onclick:stopPropagation="true">
+                @if (deleteConfirmId == booking.Id)
+                {
+                    <p class="booking-danger__text">
+                        Permanently delete <strong>@booking.Reference</strong> and its photos?
+                        This can't be undone — use Cancel if you just want to free the slot.
+                    </p>
+                    <div class="booking-danger__actions">
+                        <button class="action-btn action-btn--danger"
+                                @onclick="() => DeleteBooking(booking.Id)">Delete permanently</button>
+                        <button class="action-btn action-btn--keep"
+                                @onclick="() => deleteConfirmId = null">Keep</button>
+                    </div>
+                }
+                else
+                {
+                    <button class="action-btn action-btn--delete"
+                            @onclick="() => StartDelete(booking.Id)">
+                        <Icon Name="trash" /> Delete booking
+                    </button>
+                }
+            </div>
+        }
+    </text>;
+
     private RenderFragment<Booking> ActionButtons => booking => @<text>
-        @if (CanManage && booking.Status == BookingStatus.Pending)
-        {
-            <button class="action-btn action-btn--confirm"
-                    @onclick="() => UpdateStatus(booking.Id, BookingStatus.Confirmed)">Confirm</button>
-        }
-        @if (CanManage && booking.Status == BookingStatus.Confirmed)
-        {
-            <button class="action-btn action-btn--progress"
-                    @onclick="() => UpdateStatus(booking.Id, BookingStatus.InProgress)">In Progress</button>
-        }
-        @* Completing opens an inline note field rather than a modal — same two-step
-           shape the Delete button uses, and far lighter on a phone. The note is
-           always optional; "Complete without a note" is the escape hatch. *@
-        @if (CanManage && booking.Status == BookingStatus.InProgress)
-        {
-            <button class="action-btn action-btn--complete"
-                    @onclick="() => StartComplete(booking.Id)">Complete</button>
-        }
-        @* IsValidPhone rather than a blank check: older bookings predate the phone
-           being required, and a value with no dialable digits produced a WhatsApp
-           link to wa.me/ with no number and an empty tel: link. *@
-        @if (CanSeeCustomerDetails && AuthService.IsValidPhone(booking.CustomerPhone))
-        {
-            <a class="action-btn action-btn--whatsapp" href="@WhatsAppHref(booking)" target="_blank" rel="noopener">WhatsApp</a>
-            <a class="action-btn action-btn--call" href="@TelHref(booking.CustomerPhone)">Call</a>
-        }
-        @if (CanManage && booking.Status != BookingStatus.Cancelled && booking.Status != BookingStatus.Completed)
-        {
-            <button class="action-btn action-btn--cancel"
-                    @onclick="() => UpdateStatus(booking.Id, BookingStatus.Cancelled)">Cancel</button>
-        }
-        @if (CanManage)
-        {
-            @if (deleteConfirmId == booking.Id)
+        <div class="booking-actions">
+            @* ── Tier 1: the one thing you came here to do ────────────────────
+               Confirm / In Progress / Complete were three differently-coloured
+               buttons for what is really one control — they were already mutually
+               exclusive, so only ever one showed. Now they share the primary slot
+               and read as the next step rather than the state they set. *@
+            @if (CanManage && BookingService.NextStage(booking.Status) is { } next)
             {
-                <button class="action-btn action-btn--cancel" @onclick="() => DeleteBooking(booking.Id)">Confirm delete</button>
-                <button class="action-btn action-btn--keep" @onclick="() => deleteConfirmId = null">Keep</button>
+                <button class="action-btn action-btn--primary"
+                        @onclick="() => AdvanceStage(booking, next)">@StageLabel(next)</button>
             }
-            else
+
+            @* ── Tier 2: contact. These change nothing — they are just links, so
+               they sit quieter than anything that does.
+               IsValidPhone rather than a blank check: older bookings predate the
+               phone being required, and a value with no dialable digits produced a
+               WhatsApp link to wa.me/ with no number and an empty tel: link. *@
+            @if (CanSeeCustomerDetails && AuthService.IsValidPhone(booking.CustomerPhone))
             {
-                <button class="action-btn action-btn--delete" @onclick="() => deleteConfirmId = booking.Id">Delete</button>
+                <a class="action-btn action-btn--icon action-btn--whatsapp"
+                   href="@WhatsAppHref(booking)" target="_blank" rel="noopener"
+                   title="WhatsApp @booking.CustomerName">
+                    <Icon Name="whatsapp" Label="@($"WhatsApp {booking.CustomerName}")" />
+                </a>
+                <a class="action-btn action-btn--icon action-btn--call"
+                   href="@TelHref(booking.CustomerPhone)"
+                   title="Call @booking.CustomerName">
+                    <Icon Name="phone" Label="@($"Call {booking.CustomerName}")" />
+                </a>
             }
+
+            @* ── Tier 3: everything that needs a moment's thought. ───────────── *@
+            @if (CanManage)
+            {
+                <div class="booking-menu">
+                    <button class="action-btn action-btn--icon booking-menu__toggle"
+                            aria-haspopup="true" aria-expanded="@(openMenuId == booking.Id)"
+                            @onclick="() => ToggleMenu(booking.Id)">
+                        <Icon Name="more" Label="More actions" />
+                    </button>
+
+                    @if (openMenuId == booking.Id)
+                    {
+                        @* A transparent backdrop rather than a document-level JS
+                           listener: openMenuId is server-side state on the circuit, so
+                           a click JS swallows outside Blazor could never close it. *@
+                        <div class="booking-menu__backdrop"
+                             @onclick="() => openMenuId = null"
+                             @onclick:stopPropagation="true"></div>
+                        <div class="booking-menu__panel" role="menu">
+                            @if (BookingService.CanTransition(booking.Status, BookingStatus.Cancelled))
+                            {
+                                <button class="booking-menu__item booking-menu__item--danger" role="menuitem"
+                                        @onclick="() => StartCancel(booking.Id)">Cancel booking…</button>
+                            }
+                            @* Reopen is what makes a mis-tap survivable. Without it the
+                               only way back from a wrong Cancel was to delete the
+                               booking and re-key it, which is why Delete got reached
+                               for far more often than it should have been. *@
+                            @if (BookingService.CanTransition(booking.Status, BookingStatus.Confirmed)
+                                 && booking.Status is BookingStatus.Cancelled or BookingStatus.Completed)
+                            {
+                                <button class="booking-menu__item" role="menuitem"
+                                        @onclick="() => ReopenBooking(booking)">
+                                    <Icon Name="undo" /> Reopen booking
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Cancel now emails the customer and cannot be undone except by Reopen, so it
+           gets the same two-step confirm Delete has always had. It used to fire on a
+           single click. *@
+        @if (cancelConfirmId == booking.Id)
+        {
+            <div class="booking-confirm" @onclick:stopPropagation="true">
+                <p class="booking-confirm__text">
+                    Cancel <strong>@booking.Reference</strong> and free the slot?
+                    @if (!string.IsNullOrWhiteSpace(booking.CustomerEmail))
+                    {
+                        <span>@booking.CustomerName will be emailed.</span>
+                    }
+                </p>
+                <div class="booking-confirm__actions">
+                    <button class="action-btn action-btn--danger"
+                            @onclick="() => CancelBooking(booking)">Yes, cancel it</button>
+                    <button class="action-btn action-btn--keep"
+                            @onclick="() => cancelConfirmId = null">Keep booking</button>
+                </div>
+            </div>
         }
 
-        @* Sits on its own line below the buttons (flex-basis: 100%), so it reads as a
-           step rather than another control crammed into the row. *@
+        @* Sits on its own line below the buttons, so it reads as a step rather than
+           another control crammed into the row. *@
         @if (completeNoteBookingId == booking.Id)
         {
             <div class="complete-note" @onclick:stopPropagation="true">
-                <label class="complete-note__label" for="complete-note-body">
+                @* Per-booking id: the mobile cards and the desktop table are BOTH always
+                   in the DOM (CSS swaps them at 768px), so a literal id here put two
+                   elements with the same id on the page and bound the label to the
+                   wrong one. *@
+                <label class="complete-note__label" for="@($"complete-note-{booking.Id}")">
                     Add a note about this job <span class="complete-note__optional">(optional)</span>
                 </label>
-                <textarea id="complete-note-body" class="form-control" rows="3"
+                <textarea id="@($"complete-note-{booking.Id}")" class="form-control" rows="3"
                           placeholder="e.g. rear hub has play — worth replacing next service"
                           @bind="completeNoteBody" @bind:event="oninput"></textarea>
 
@@ -1155,7 +1265,7 @@
                 </p>
 
                 <div class="complete-note__actions">
-                    <button class="action-btn action-btn--confirm" @onclick="() => CompleteWithNote(booking)">
+                    <button class="action-btn action-btn--primary" @onclick="() => CompleteWithNote(booking)">
                         @(string.IsNullOrWhiteSpace(completeNoteBody) ? "Complete without a note" : "Save note & complete")
                     </button>
                     <button class="action-btn action-btn--keep" @onclick="CancelCompleteNote">Back</button>
@@ -1288,6 +1398,7 @@
     {
         _page = Math.Clamp(page, 0, TotalPages - 1);
         expandedId = null;
+        CloseTransientPanels();
         LoadBookings();
     }
 
@@ -1302,6 +1413,7 @@
     {
         activeFilter = f;
         expandedId = null;
+        CloseTransientPanels();
         _page = 0;          // a new filter starts at the first page
         LoadBookings();
     }
@@ -1310,6 +1422,7 @@
     {
         sortMode = e.Value?.ToString() ?? BookingService.SortUpcoming;
         expandedId = null;
+        CloseTransientPanels();
         _page = 0;          // a re-sort starts at the first page
         LoadBookings();
     }
@@ -1362,18 +1475,114 @@
 
         _page = 0;
         expandedId = null;
+        CloseTransientPanels();
         LoadBookings();
         await InvokeAsync(StateHasChanged);
+    }
+
+    /// Delete-confirm, cancel-confirm and the completion note are three different
+    /// two-step flows on the same row. Opening any one closes the others — leaving two
+    /// open at once was how a single booking could end up showing twelve controls.
+    private void CloseTransientPanels()
+    {
+        deleteConfirmId = null;
+        cancelConfirmId = null;
+        openMenuId = null;
+        completeNoteBookingId = null;
     }
 
     private void UpdateStatus(string id, BookingStatus status)
     {
         if (!CanManage) return;  // server-side guard; don't rely on hidden buttons alone
         BookingService.UpdateStatus(id, status);
-        deleteConfirmId = null;
+        CloseTransientPanels();
         LoadBookings();
         RefreshStats();
         LoadCalDay();  // Keep the calendar view in sync when acted on from either tab.
+    }
+
+    private void ToggleMenu(string id)
+    {
+        var opening = openMenuId != id;
+        CloseTransientPanels();
+        openMenuId = opening ? id : null;
+    }
+
+    /// Label for the primary button: the step being taken, not the state it lands in.
+    private static string StageLabel(BookingStatus next) => next switch
+    {
+        BookingStatus.Confirmed  => "Confirm booking",
+        BookingStatus.InProgress => "Start work",
+        BookingStatus.Completed  => "Mark complete",
+        _                        => next.ToString()
+    };
+
+    /// The one primary action. Completing is the exception — it opens the note panel
+    /// rather than finishing outright, so the mechanic can record what they found.
+    private async Task AdvanceStage(Booking booking, BookingStatus next)
+    {
+        if (!CanManage) return;
+
+        if (next == BookingStatus.Completed)
+        {
+            StartComplete(booking.Id);
+            return;
+        }
+
+        UpdateStatus(booking.Id, next);
+
+        // Confirming is the moment the customer's booking becomes real to them, so it
+        // is the one stage change worth an email. Starting work isn't — they are
+        // already in the diary. Best-effort: the status is committed either way.
+        if (next == BookingStatus.Confirmed)
+            await NotifyCustomerAsync(booking, isCancellation: false);
+    }
+
+    private void StartCancel(string bookingId)
+    {
+        CloseTransientPanels();
+        cancelConfirmId = bookingId;
+    }
+
+    private void StartDelete(string bookingId)
+    {
+        CloseTransientPanels();
+        deleteConfirmId = bookingId;
+    }
+
+    private async Task CancelBooking(Booking booking)
+    {
+        if (!CanManage) return;
+
+        UpdateStatus(booking.Id, BookingStatus.Cancelled);
+
+        // RaiseBookingCancelled existed but had no production caller at all, so the
+        // bell never showed a cancellation from either side.
+        Notifications.RaiseBookingCancelled(booking);
+        await NotifyCustomerAsync(booking, isCancellation: true);
+    }
+
+    private void ReopenBooking(Booking booking)
+    {
+        if (!CanManage) return;
+        UpdateStatus(booking.Id, BookingStatus.Confirmed);
+    }
+
+    /// Best-effort, exactly like the booking confirmation on Book.razor: the status
+    /// change is already committed and the slot already freed, so a mail failure must
+    /// not undo it or surface as an error on an action that did succeed.
+    private async Task NotifyCustomerAsync(Booking booking, bool isCancellation)
+    {
+        if (string.IsNullOrWhiteSpace(booking.CustomerEmail)) return;
+        try
+        {
+            await EmailSender.SendBookingStatusChangedAsync(booking, isCancellation);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not email {Email} about booking {Reference}",
+                booking.CustomerEmail, booking.Reference);
+        }
     }
 
     // ── Completing a job, with an optional note ──────────────────────────────
@@ -1508,11 +1717,25 @@
 
     // ── Customers tab ────────────────────────────────────────────────────────
 
+    private void OpenImport()
+    {
+        if (!IsAdmin) return;   // server-side guard; don't rely on a hidden button
+        _selectedCustomer = null;
+        _importingCustomers = true;
+    }
+
+    private void CloseImport()
+    {
+        _importingCustomers = false;
+        LoadCustomers();
+    }
+
     private void OpenCustomersTab()
     {
         if (!CanSeeCustomerDetails) return;  // server-side guard, not just a hidden tab
         activeTab = "customers";
         _selectedCustomer = null;
+        _importingCustomers = false;   // re-entering the tab starts on the list
         LoadCustomers();
     }
 

@@ -37,6 +37,22 @@ public class SmtpEmailSender(IConfiguration config, ILogger<SmtpEmailSender> log
             replyToEmail: booking.CustomerEmail, replyToName: booking.CustomerName);
     }
 
+    public Task SendBookingStatusChangedAsync(Booking booking, bool isCancellation)
+    {
+        var (html, text) = EmailTemplates.BookingStatusChanged(booking, isCancellation);
+        var subject = isCancellation
+            ? $"Cancelled — {booking.Reference}"
+            : $"Booking confirmed — {booking.Reference}";
+
+        return SendAsync(booking.CustomerEmail, booking.CustomerName, subject, html, text);
+    }
+
+    public Task SendAccountClaimAsync(string toEmail, string toName, string claimLink)
+    {
+        var (html, text) = EmailTemplates.AccountClaim(toName, claimLink);
+        return SendAsync(toEmail, toName, $"Your {SiteContent.ShopName} account is ready", html, text);
+    }
+
     public Task SendContactEnquiryAsync(Enquiry enquiry)
     {
         var (html, text) = EmailTemplates.ContactEnquiry(enquiry);

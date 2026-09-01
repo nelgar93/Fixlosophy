@@ -314,10 +314,47 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
             .ToList();
     }
 
+    /// <summary>
+    /// Which statuses a booking can move to from where it is now.
+    ///
+    /// This used to be a bare setter, with the only thing constraining a transition
+    /// being which buttons the dashboard happened to render — so any caller could put a
+    /// booking into any state, in any order. The shape below is the one the shop
+    /// actually works in: forward through the job, out to Cancelled at any point before
+    /// it is finished, and back to Confirmed from either terminal state when someone
+    /// mis-taps (which is the honest reason people reached for Delete).
+    /// </summary>
+    private static readonly Dictionary<BookingStatus, BookingStatus[]> AllowedTransitions = new()
+    {
+        [BookingStatus.Pending]    = [BookingStatus.Confirmed, BookingStatus.Cancelled],
+        [BookingStatus.Confirmed]  = [BookingStatus.InProgress, BookingStatus.Cancelled],
+        [BookingStatus.InProgress] = [BookingStatus.Completed,  BookingStatus.Cancelled],
+        [BookingStatus.Completed]  = [BookingStatus.Confirmed],   // Reopen
+        [BookingStatus.Cancelled]  = [BookingStatus.Confirmed]    // Reopen
+    };
+
+    /// Whether <paramref name="to"/> is reachable from <paramref name="from"/>.
+    /// Public so the dashboard can decide what to offer from the same source of truth
+    /// it will be judged against.
+    public static bool CanTransition(BookingStatus from, BookingStatus to) =>
+        AllowedTransitions.TryGetValue(from, out var allowed) && allowed.Contains(to);
+
+    /// The next step forward in the job, or null when there isn't one. Drives the
+    /// dashboard's single primary action.
+    public static BookingStatus? NextStage(BookingStatus from) => from switch
+    {
+        BookingStatus.Pending    => BookingStatus.Confirmed,
+        BookingStatus.Confirmed  => BookingStatus.InProgress,
+        BookingStatus.InProgress => BookingStatus.Completed,
+        _                        => null
+    };
+
+    /// <returns>false if the booking is gone, or the transition isn't allowed.</returns>
     public bool UpdateStatus(string id, BookingStatus status)
     {
         var booking = db.Bookings.Find(id);
         if (booking is null) return false;
+        if (!CanTransition(booking.Status, status)) return false;
         booking.Status = status;
         db.SaveChanges();
         return true;

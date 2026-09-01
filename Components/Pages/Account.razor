@@ -67,7 +67,7 @@
                                     <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
                                     @if (cancelConfirmId == b.Id)
                                     {
-                                        <button class="action-btn action-btn--cancel" @onclick="() => CancelBooking(b.Id)">
+                                        <button class="action-btn action-btn--danger" @onclick="() => CancelBooking(b.Id)">
                                             Confirm cancel
                                         </button>
                                         <button class="action-btn action-btn--keep" @onclick="() => cancelConfirmId = null">
@@ -403,6 +403,11 @@
 
         LoadBookings();
         cancelMessage = $"Booking {booking!.Reference} cancelled. The slot is free again.";
+
+        // Puts it in the staff bell. RaiseBookingCancelled existed but had no production
+        // caller on either side, so a cancellation never reached the dashboard's
+        // notifications — only the shop's inbox, below.
+        Notifications.RaiseBookingCancelled(booking);
 
         // Best-effort, like the confirmation email: the cancellation is already
         // committed and the slot already freed, so a mail failure must not undo it.

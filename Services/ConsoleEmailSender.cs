@@ -37,6 +37,21 @@ public class ConsoleEmailSender(ILogger<ConsoleEmailSender> logger) : IEmailSend
         return Task.CompletedTask;
     }
 
+    public Task SendBookingStatusChangedAsync(Booking booking, bool isCancellation)
+    {
+        logger.LogWarning(
+            "[DEV EMAIL] Booking {Kind} to {Email}: {Reference} — {Service} on {Date} at {Time}",
+            isCancellation ? "cancelled" : "confirmed", booking.CustomerEmail, booking.Reference,
+            booking.ServiceName, booking.SlotDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), booking.SlotTime);
+        return Task.CompletedTask;
+    }
+
+    public Task SendAccountClaimAsync(string toEmail, string toName, string claimLink)
+    {
+        logger.LogWarning("[DEV EMAIL] Account claim link for {Email}: {Link}", toEmail, claimLink);
+        return Task.CompletedTask;
+    }
+
     public Task SendContactEnquiryAsync(Enquiry enquiry)
     {
         logger.LogWarning(

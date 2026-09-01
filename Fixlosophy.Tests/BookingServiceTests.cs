@@ -330,6 +330,77 @@ public class BookingServiceTests
         Assert.Equal(BookingStatus.Pending, db.Bookings.Single().Status);
     }
 
+    // ── Transitions ──────────────────────────────────────────────────────────
+    // UpdateStatus used to be an unconditional setter: the only thing stopping a
+    // booking going from Completed straight back to Pending was which buttons the
+    // dashboard happened to render.
+
+    [Theory]
+    [InlineData(BookingStatus.Pending,    BookingStatus.Confirmed)]
+    [InlineData(BookingStatus.Pending,    BookingStatus.Cancelled)]
+    [InlineData(BookingStatus.Confirmed,  BookingStatus.InProgress)]
+    [InlineData(BookingStatus.Confirmed,  BookingStatus.Cancelled)]
+    [InlineData(BookingStatus.InProgress, BookingStatus.Completed)]
+    [InlineData(BookingStatus.InProgress, BookingStatus.Cancelled)]
+    [InlineData(BookingStatus.Completed,  BookingStatus.Confirmed)]   // Reopen
+    [InlineData(BookingStatus.Cancelled,  BookingStatus.Confirmed)]   // Reopen
+    public void UpdateStatus_AllowsForwardStepsCancellationAndReopen(BookingStatus from, BookingStatus to)
+    {
+        using var db = NewDb();
+        var booking = Seed(db, FutureWorkday(), "09:00", status: from);
+
+        Assert.True(NewService(db).UpdateStatus(booking.Id, to));
+        Assert.Equal(to, db.Bookings.Single().Status);
+    }
+
+    [Theory]
+    [InlineData(BookingStatus.Pending,    BookingStatus.InProgress)]  // can't skip Confirm
+    [InlineData(BookingStatus.Pending,    BookingStatus.Completed)]
+    [InlineData(BookingStatus.Confirmed,  BookingStatus.Completed)]   // can't skip the work
+    [InlineData(BookingStatus.Confirmed,  BookingStatus.Pending)]     // no going back a step
+    [InlineData(BookingStatus.InProgress, BookingStatus.Confirmed)]
+    [InlineData(BookingStatus.Completed,  BookingStatus.Cancelled)]   // finished is finished
+    [InlineData(BookingStatus.Completed,  BookingStatus.InProgress)]
+    [InlineData(BookingStatus.Cancelled,  BookingStatus.Completed)]
+    [InlineData(BookingStatus.Cancelled,  BookingStatus.Cancelled)]   // no double-cancel
+    public void UpdateStatus_RejectsDisallowedTransitions(BookingStatus from, BookingStatus to)
+    {
+        using var db = NewDb();
+        var booking = Seed(db, FutureWorkday(), "09:00", status: from);
+
+        Assert.False(NewService(db).UpdateStatus(booking.Id, to));
+        Assert.Equal(from, db.Bookings.Single().Status);
+    }
+
+    [Fact]
+    public void NextStage_WalksTheJobForwardThenStops()
+    {
+        Assert.Equal(BookingStatus.Confirmed,  BookingService.NextStage(BookingStatus.Pending));
+        Assert.Equal(BookingStatus.InProgress, BookingService.NextStage(BookingStatus.Confirmed));
+        Assert.Equal(BookingStatus.Completed,  BookingService.NextStage(BookingStatus.InProgress));
+        Assert.Null(BookingService.NextStage(BookingStatus.Completed));
+        Assert.Null(BookingService.NextStage(BookingStatus.Cancelled));
+    }
+
+    // Reopening is what makes a mis-tapped Cancel survivable, and it has to put the
+    // slot back into contention — a reopened booking blocks its slot again.
+    [Fact]
+    public void Reopening_ACancelledBooking_TakesItsSlotBack()
+    {
+        using var db = NewDb();
+        var day = FutureWorkday();
+        var booking = Seed(db, day, "09:00", status: BookingStatus.Cancelled);
+        var svc = NewService(db);
+
+        Assert.Contains("09:00", svc.GetAvailableSlots(day));
+
+        Assert.True(svc.UpdateStatus(booking.Id, BookingStatus.Confirmed));
+
+        // Two bookings per slot, so one reopened booking doesn't close it outright —
+        // what matters is that it is counted again.
+        Assert.Equal(BookingStatus.Confirmed, db.Bookings.Single().Status);
+    }
+
     [Fact]
     public async Task DeleteBooking_RemovesBooking_AndIsNoOpForUnknownId()
     {

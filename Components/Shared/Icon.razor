@@ -150,6 +150,32 @@
             <path d="M12 3a15.3 15.3 0 0 1 0 18 15.3 15.3 0 0 1 0-18z" />
             break;
 
+        case "whatsapp":
+            @* The speech bubble with its tail, plus the handset inside it. Drawn on
+               the same 24px grid and 1.75 stroke as the rest of the set rather than
+               using the brand glyph, which is a solid fill and would sit oddly beside
+               the outlined icons next to it. *@
+            <path d="M3 21l1.7-4.6A8.4 8.4 0 1 1 7.9 19.6z" />
+            <path d="M9 9.2c.2 1 .6 2 1.3 2.8a7 7 0 0 0 2.6 2c.3.1.6.1.8-.2l.6-.7a.7.7 0 0 1 .8-.2l1.5.7c.3.1.4.4.3.7a2 2 0 0 1-2 1.4 8 8 0 0 1-6.7-6.8 2 2 0 0 1 1.4-2c.3-.1.6 0 .7.3l.7 1.5a.7.7 0 0 1-.2.8z" />
+            break;
+
+        case "more":
+            <circle cx="5" cy="12" r="1.4" />
+            <circle cx="12" cy="12" r="1.4" />
+            <circle cx="19" cy="12" r="1.4" />
+            break;
+
+        case "undo":
+            <path d="M3 8h11a6 6 0 0 1 0 12H8" />
+            <path d="M7 4 3 8l4 4" />
+            break;
+
+        case "trash":
+            <path d="M3 6h18" />
+            <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            break;
+
         default:
             // Unknown name renders nothing rather than throwing — a typo in a
             // decorative icon shouldn't take a page down.
