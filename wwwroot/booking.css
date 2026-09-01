@@ -1138,9 +1138,15 @@
     font-weight: 600;
     line-height: 1.35;
     cursor: pointer;
+    /* Every colour below comes from a --variant class, so a button wearing none of
+       them used to fall through to the user agent's button chrome — a white pill on
+       the dark card. These two make the base neutral instead of undefined. */
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.75);
     border: 1px solid transparent;
     transition: all 0.15s;
     white-space: nowrap;
+    gap: var(--space-1);
 }
 
 /* The one primary action on a booking. Confirm / Start work / Mark complete were
@@ -1158,14 +1164,22 @@
     .action-btn--danger:hover { background: #dc2626; color: var(--white); }
 }
 
-/* Contact shortcuts. They change nothing — they are links — so they are square
-   icon buttons rather than labelled pills competing with the primary action. */
-.action-btn--icon {
-    padding: var(--space-1);
-    width: 32px;
-    min-width: 32px;
+/* Opening the cancel confirmation — quiet red, so it reads as destructive without
+   claiming to be the destruction itself. --danger stays reserved for the button that
+   actually fires inside the confirmation, and the two sit next to each other often
+   enough that the difference in weight is the whole point. */
+.action-btn--cancel {
+    background: rgba(220,38,38,0.08);
+    color: #f87171;
+    border-color: rgba(220,38,38,0.22);
 }
-.action-btn--icon .icon { width: 1.05em; height: 1.05em; }
+@media (hover: hover) and (pointer: fine) {
+    .action-btn--cancel:hover { background: rgba(220,38,38,0.2); border-color: rgba(220,38,38,0.45); }
+}
+
+/* Icons inside action buttons sit beside a label, so they take a touch more than the
+   1em the base .icon rule gives them or they read as a smudge next to 600-weight text. */
+.action-btn .icon { width: 1.05em; height: 1.05em; }
 
 
 /* An empty result inside a table that stays on the page, rather than in place of it.
@@ -1679,85 +1693,105 @@
 
 a.action-btn { text-decoration: none; }
 
-/* ── One booking's controls, in three tiers ──────────────────────────────────
-   Was a single flex-wrap row holding up to nine pills of equal weight: the stage
-   change, two contact links that alter nothing, Cancel, and Delete's two-step —
-   with Cancel and "Confirm delete" wearing the identical red. Now: one primary
-   action, contact demoted to icons, and everything that needs a moment behind a
-   menu. Delete has left this row entirely for the expanded detail. */
+/* ── One booking's controls, in two rows ─────────────────────────────────────
+   Was a single flex-wrap row holding up to nine pills of equal weight; then one
+   primary action with contact demoted to bare icon squares and Cancel hidden behind
+   a "…" menu, which cost three taps to reach the second most common thing done to a
+   booking. Now: the primary action across the top, and under it the three things you
+   might do instead, all labelled. The menu is gone — Reopen was the only other thing
+   in it, and it has the primary slot to itself on a cancelled or completed booking. */
 .booking-actions {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: var(--space-2);
-    flex-wrap: wrap;
     /* Its parents (.admin-card__actions, .action-buttons, .day-cal-booking__actions)
        are themselves flex, so without this it sizes to its content and the primary
-       button below never actually reaches full width. */
+       button never actually reaches full width. */
     flex: 1 1 100%;
     min-width: 0;
 }
 
-/* On a phone the primary action takes the full width and the quiet controls sit
-   under it, so the thing tapped twenty times a day is the easiest target. */
-.booking-actions .action-btn--primary { flex: 1 1 100%; min-height: var(--touch-min); }
+/* The thing tapped twenty times a day gets the full width and a full touch target.
+   Column direction stretches it; the width is not set here. */
+.booking-actions__primary { min-height: var(--touch-min); }
 
-/* Pushes the overflow menu to the far end, away from the primary action. */
-.booking-menu { position: relative; margin-left: auto; }
-
-@media (min-width: 640px) {
-    /* Desktop puts the whole set on one line. Left wrapping, the auto margin on the
-       menu breaks it across three rows inside the table's Actions cell. */
-    .booking-actions { flex-wrap: nowrap; justify-content: flex-end; }
-    .booking-actions .action-btn--primary { flex: 0 0 auto; min-height: 28px; }
-    .booking-menu { margin-left: 0; }
-}
-
-.booking-menu__backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 19;
-}
-
-.booking-menu__panel {
-    position: absolute;
-    right: 0;
-    top: calc(100% + var(--space-1));
-    z-index: 20;
-    min-width: 12rem;
+.booking-actions__row {
     display: flex;
-    flex-direction: column;
-    padding: var(--space-1);
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-lg);
-}
-
-.booking-menu__item {
-    display: flex;
-    align-items: center;
     gap: var(--space-2);
-    width: 100%;
-    padding: var(--space-2) var(--space-3);
+    /* Wraps rather than overflowing if a translation ever outgrows a third of a
+       narrow card — the automatic minimum size keeps each label readable first. */
+    flex-wrap: wrap;
+}
+
+/* flex-basis 0 makes the grow values a straight ratio of the row, rather than a
+   share of whatever is left over after the labels. */
+.booking-actions__row .action-btn {
+    flex: 1 1 0;
     min-height: var(--touch-min);
-    background: none;
-    border: none;
-    border-radius: var(--radius-sm);
-    color: rgba(255,255,255,0.8);
-    font-family: inherit;
-    font-size: var(--fs-sm);
-    font-weight: 500;
-    text-align: left;
-    cursor: pointer;
 }
 
-@media (hover: hover) and (pointer: fine) {
-    .booking-menu__item:hover { background: rgba(255,255,255,0.07); color: var(--white); }
+/* Cancel is the least used of the three by a wide margin, so it takes the smallest
+   share. Not so small that the word crowds its own padding: flex's automatic minimum
+   size stops it shrinking under the label, so on a very narrow card the ratio gives
+   out before the text does. */
+.booking-actions__row .action-btn--cancel {
+    flex-grow: 0.62;
+    padding-inline: var(--space-2);
 }
 
-.booking-menu__item--danger { color: #f87171; }
-@media (hover: hover) and (pointer: fine) {
-    .booking-menu__item--danger:hover { background: rgba(220,38,38,0.15); color: #fca5a5; }
+@media (min-width: 768px) {
+    /* Desktop puts the whole set back on one line — the table's Actions cell has no
+       room for a stacked block, and a mouse does not need 44px targets.
+
+       768px, not the 640px this block used to sit at, because that is where the card
+       list gives way to the table (.admin-cards / .admin-table-wrapper--desktop-only).
+       At 640–767px the cards were still on screen but these rules had already shrunk
+       their buttons to 28px — a mouse-sized target on what is most often a tablet. */
+    .booking-actions {
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: nowrap;
+    }
+    .booking-actions__primary { min-height: 28px; }
+    .booking-actions__row { flex: 0 0 auto; flex-wrap: nowrap; }
+
+    /* Four gaps at --space-2 is 32px of the Actions column spent on air. Half that is
+       still legible at 28px tall and buys back the headroom the table needs to sit
+       inside its wrapper without a scrollbar. */
+    .booking-actions,
+    .booking-actions__row { gap: var(--space-1); }
+    .booking-actions__row .action-btn {
+        flex: 0 0 auto;
+        min-height: 28px;
+    }
+    .booking-actions__row .action-btn--cancel { padding-inline: var(--space-2); }
+
+    /* The bookings table is a dense twelve-column grid inside an overflow-x wrapper,
+       and two labelled contact pills pushed it 110px past that wrapper — a horizontal
+       scrollbar under the whole dashboard. Above 768px they go back to icon squares
+       with their title tooltips. The labels earn their width on the card list, where
+       the target has to be finger-sized and a bare glyph is a guess; a mouse gets the
+       tooltip instead. Cancel keeps its word at every width — it is the destructive
+       one, and a symbol is not enough warning. */
+    .booking-actions__row .action-btn--whatsapp,
+    .booking-actions__row .action-btn--call {
+        width: 32px;
+        min-width: 32px;
+        padding-inline: 0;
+    }
+
+    /* Hidden, not removed: the label is the button's accessible name, and dropping it
+       would leave a link announced as nothing at all. */
+    .booking-actions__row .action-btn--whatsapp .action-btn__label,
+    .booking-actions__row .action-btn--call .action-btn__label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
 }
 
 /* The confirm step for Cancel. It used to fire on a single click, despite being
