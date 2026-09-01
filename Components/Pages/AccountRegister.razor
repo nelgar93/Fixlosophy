@@ -31,12 +31,14 @@
             <div class="form-group">
                 <label for="register-email">Email</label>
                 <input id="register-email" class="form-control" type="email" name="email" required
-                       autocomplete="username" inputmode="email" placeholder="jane@example.com" />
+                       autocomplete="username" inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"
+                       placeholder="jane@example.com" />
             </div>
             <div class="form-group">
                 <label for="register-phone">Phone</label>
                 <input id="register-phone" class="form-control" type="tel" name="phone" required
-                       autocomplete="tel" inputmode="tel" placeholder="07700 900000" />
+                       autocomplete="tel" inputmode="tel" maxlength="@AuthService.MaxPhoneLength" pattern="@AuthService.PhoneInputPattern" data-phone-input
+                       placeholder="07700 900000" />
             </div>
             <div class="form-group">
                 <label for="register-password">Password</label>

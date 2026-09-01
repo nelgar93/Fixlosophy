@@ -242,7 +242,7 @@
                             @if (loggedInCustomer is null)
                             {
                                 <input id="booking-email" class="form-control" type="email"
-                                       autocomplete="email" inputmode="email"
+                                       autocomplete="email" inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"
                                        @bind="customerEmail" placeholder="jane@example.com" />
                             }
                             else
@@ -263,6 +263,7 @@
                             <label for="booking-phone">Phone Number *</label>
                             <input id="booking-phone" class="form-control" type="tel"
                                    autocomplete="tel" inputmode="tel"
+                                   maxlength="@AuthService.MaxPhoneLength" pattern="@AuthService.PhoneInputPattern" data-phone-input
                                    @bind="customerPhone" placeholder="07700 900000" required />
                         </div>
                         <div class="form-group">
@@ -573,12 +574,13 @@
         validationError = null;
         if (string.IsNullOrWhiteSpace(customerName))
         { validationError = "Please enter your name."; return; }
-        if (string.IsNullOrWhiteSpace(customerEmail) || !customerEmail.Contains('@'))
+        // Was a bare Contains('@'), which "@" on its own passed. IsValidEmail is the
+        // same rule registration and staff creation already use.
+        if (!AuthService.IsValidEmail(customerEmail))
         { validationError = "Please enter a valid email address."; return; }
         // The shop rings or texts when the bike is ready, so a reachable number is
-        // required. Counting digits rather than checking for non-empty rejects
-        // "call me" and similar, which would otherwise reach the admin panel as a
-        // Call/WhatsApp button that goes nowhere.
+        // required. IsValidPhone rejects "call me" and similar, which would otherwise
+        // reach the admin panel as a Call/WhatsApp button that goes nowhere.
         if (!AuthService.IsValidPhone(customerPhone))
         { validationError = "Please enter a phone number we can reach you on."; return; }
         step = 4;

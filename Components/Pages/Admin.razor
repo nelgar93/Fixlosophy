@@ -155,8 +155,20 @@
                         </div>
                     </div>
                     <div class="admin-search">
-                        <input class="form-control" type="text" @bind="searchTerm"
-                               @oninput="OnSearch" placeholder="Search name, ref, service…" />
+                        <label class="sr-only" for="booking-search">Search bookings</label>
+                        <input id="booking-search" class="form-control" type="text"
+                               value="@searchTerm" @oninput="OnSearch"
+                               placeholder="Search name, ref, service…" />
+                    </div>
+                    <div class="admin-sort">
+                        <label class="sr-only" for="booking-sort">Sort bookings</label>
+                        <select id="booking-sort" class="form-control"
+                                value="@sortMode" @onchange="SetSort">
+                            @foreach (var opt in BookingService.SortOptions)
+                            {
+                                <option value="@opt">@BookingService.SortLabel(opt)</option>
+                            }
+                        </select>
                     </div>
                 </div>
 
@@ -178,272 +190,277 @@
                     </div>
                 }
 
-                @if (!FilteredBookings.Any())
-                {
-                    <div class="admin-empty">
-                        <p>No bookings match the current filter.</p>
-                    </div>
-                }
-                else
-                {
-                    <!-- MOBILE: Card list -->
-                    <div class="admin-cards">
-                        @foreach (var booking in FilteredBookings)
-                        {
-                            var b = booking;
-                            var isOpen = expandedId == b.Id;
-                            <div class="admin-card @(isOpen ? "admin-card--open" : "")" @onclick="() => ToggleExpand(b.Id)">
-                                <div class="admin-card__header">
-                                    <span class="ref-badge">@b.Reference</span>
-                                    <div class="admin-card__header-right">
-                                        <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
-                                        <span class="admin-card__chevron @(isOpen ? "open" : "")"><Icon Name="chevron-right" /></span>
-                                    </div>
-                                </div>
-                                <div class="admin-card__name">@b.CustomerName</div>
-                                <div class="admin-card__meta">
-                                    <span>@b.ServiceName</span>
-                                    <span>@b.SlotDate.ToString("d MMM") &middot; @b.SlotTime</span>
-                                </div>
-
-                                @if (isOpen)
-                                {
-                                    <div class="admin-card__detail">
-                                        @if (CanSeeCustomerDetails)
-                                        {
-                                            <div class="admin-card__detail-row"><span>Email</span><span>@b.CustomerEmail</span></div>
-                                            @if (!string.IsNullOrWhiteSpace(b.CustomerPhone))
-                                            {
-                                                <div class="admin-card__detail-row"><span>Phone</span><span>@b.CustomerPhone</span></div>
-                                            }
-                                        }
-                                        @if (!string.IsNullOrWhiteSpace(b.BikeDescription))
-                                        {
-                                            <div class="admin-card__detail-row"><span>Bike</span><span>@b.BikeDescription</span></div>
-                                        }
-                                        @if (!string.IsNullOrWhiteSpace(b.Notes))
-                                        {
-                                            <div class="admin-card__detail-row"><span>Notes</span><span>@b.Notes</span></div>
-                                        }
-                                        @* Staff notes on this job. Shown here as well as on the
-                                           customer's page because a guest booking has no customer
-                                           record — without this, a note written against one would
-                                           be stored and then invisible. *@
-                                        @if (_bookingNotes.TryGetValue(b.Id, out var jobNotes) && jobNotes.Count > 0)
-                                        {
-                                            <div class="admin-card__detail-row">
-                                                <span>Job notes</span>
-                                                <span class="booking-notes">
-                                                    @foreach (var note in jobNotes)
-                                                    {
-                                                        <span class="booking-note @(note.VisibleToCustomer ? "booking-note--shared" : "")">
-                                                            @note.Body
-                                                            <span class="text-faint-sm">
-                                                                @(note.VisibleToCustomer ? "shared with customer" : "internal")
-                                                                &middot; @note.CreatedAt.ToString("d MMM")
-                                                            </span>
-                                                        </span>
-                                                    }
-                                                </span>
-                                            </div>
-                                        }
-                                        @if (b.Photos.Count > 0)
-                                        {
-                                            <div class="admin-card__detail-row">
-                                                <span>Photos</span>
-                                                <div class="admin-photo-thumbs">
-                                                    @foreach (var photo in b.Photos)
-                                                    {
-                                                        @if (_photoUrls.TryGetValue(photo.Id, out var url))
-                                                        {
-                                                            <a href="@url" target="_blank" rel="noopener noreferrer" @onclick:stopPropagation="true">
-                                                                <img src="@url" class="admin-photo-thumb" alt="Issue photo" />
-                                                            </a>
-                                                        }
-                                                    }
-                                                </div>
-                                            </div>
-                                        }
-                                        <div class="admin-card__detail-row">
-                                            <span>Price</span><span>@(b.ServicePrice > 0 ? $"From £{b.ServicePrice}" : "Quote")</span>
-                                        </div>
-                                        <div class="admin-card__detail-row">
-                                            <span>Booked</span><span>@b.CreatedAt.ToString("d MMM, HH:mm")</span>
-                                        </div>
-                                        @if (IsAdmin)
-                                        {
-                                            <div class="admin-card__detail-row">
-                                                <span>Assign to</span>
-                                                <select class="form-control form-control--compact"
-                                                        value="@b.AssignedStaffId"
-                                                        @onchange="e => AssignBooking(b.Id, e.Value?.ToString())"
-                                                        @onclick:stopPropagation="true">
-                                                    <option value="">— Unassigned —</option>
-                                                    @foreach (var s in _allStaff.Where(x => x.IsActive))
-                                                    {
-                                                        <option value="@s.Id">@s.FullName</option>
-                                                    }
-                                                </select>
-                                            </div>
-                                        }
-                                    </div>
-                                }
-
-                                @if (RowHasActions(b))
-                                {
-                                    <div class="admin-card__actions" @onclick:stopPropagation="true">
-                                        @ActionButtons(b)
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-
-                    @* Explicit prev/next rather than infinite scroll: on a phone,
-                       infinite scroll makes anything below the list unreachable. *@
-                    @if (TotalPages > 1)
+                @* A search that matches nothing used to remove the cards, the pager AND
+                   the whole table, column headers included, leaving one line of text
+                   where the list had been. The table is the thing being searched, so it
+                   stays put and says it found nothing. *@
+                <!-- MOBILE: Card list -->
+                <div class="admin-cards">
+                    @if (!FilteredBookings.Any())
                     {
-                        <nav class="pager" aria-label="Booking pages">
-                            <button class="btn btn-outline pager__btn"
-                                    disabled="@(_page == 0)"
-                                    @onclick="() => GoToPage(_page - 1)">
-                                <Icon Name="arrow-left" /> Previous
-                            </button>
-                            <span class="pager__status" aria-live="polite">
-                                Page @(_page + 1) of @TotalPages &middot; @_totalMatches booking@(_totalMatches == 1 ? "" : "s")
-                            </span>
-                            <button class="btn btn-outline pager__btn"
-                                    disabled="@(_page >= TotalPages - 1)"
-                                    @onclick="() => GoToPage(_page + 1)">
-                                Next <Icon Name="arrow-right" />
-                            </button>
-                        </nav>
+                        <div class="admin-empty"><p>@BookingsEmptyMessage</p></div>
                     }
+                    @foreach (var booking in FilteredBookings)
+                    {
+                        var b = booking;
+                        var isOpen = expandedId == b.Id;
+                        <div class="admin-card @(isOpen ? "admin-card--open" : "")" @onclick="() => ToggleExpand(b.Id)">
+                            <div class="admin-card__header">
+                                <span class="ref-badge">@b.Reference</span>
+                                <div class="admin-card__header-right">
+                                    <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                                    <span class="admin-card__chevron @(isOpen ? "open" : "")"><Icon Name="chevron-right" /></span>
+                                </div>
+                            </div>
+                            <div class="admin-card__name">@b.CustomerName</div>
+                            <div class="admin-card__meta">
+                                <span>@b.ServiceName</span>
+                                <span>@b.SlotDate.ToString("d MMM") &middot; @b.SlotTime</span>
+                            </div>
 
-                    <!-- DESKTOP: Table -->
-                    <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
-                        <table class="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>Reference</th>
-                                    <th>Customer</th>
-                                    <th>Service</th>
-                                    <th>Date &amp; Time</th>
-                                    <th>Status</th>
-                                    @if (IsAdmin) { <th>Assigned To</th> }
-                                    @if (CanManage || CanSeeCustomerDetails) { <th>Actions</th> }
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var booking in FilteredBookings)
-                                {
-                                    var b = booking;
-                                    <tr class="@(expandedId == b.Id ? "row-expanded" : "")" @onclick="() => ToggleExpand(b.Id)">
-                                        <td><span class="ref-badge">@b.Reference</span></td>
-                                        <td>
-                                            <div class="customer-cell">
-                                                <strong>@b.CustomerName</strong>
-                                                @if (CanSeeCustomerDetails)
+                            @if (isOpen)
+                            {
+                                <div class="admin-card__detail">
+                                    @if (CanSeeCustomerDetails)
+                                    {
+                                        <div class="admin-card__detail-row"><span>Email</span><span>@b.CustomerEmail</span></div>
+                                        @if (!string.IsNullOrWhiteSpace(b.CustomerPhone))
+                                        {
+                                            <div class="admin-card__detail-row"><span>Phone</span><span>@b.CustomerPhone</span></div>
+                                        }
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(b.BikeDescription))
+                                    {
+                                        <div class="admin-card__detail-row"><span>Bike</span><span>@b.BikeDescription</span></div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(b.Notes))
+                                    {
+                                        <div class="admin-card__detail-row"><span>Notes</span><span>@b.Notes</span></div>
+                                    }
+                                    @* Staff notes on this job. Shown here as well as on the
+                                       customer's page because a guest booking has no customer
+                                       record — without this, a note written against one would
+                                       be stored and then invisible. *@
+                                    @if (_bookingNotes.TryGetValue(b.Id, out var jobNotes) && jobNotes.Count > 0)
+                                    {
+                                        <div class="admin-card__detail-row">
+                                            <span>Job notes</span>
+                                            <span class="booking-notes">
+                                                @foreach (var note in jobNotes)
                                                 {
-                                                    <span>@b.CustomerEmail</span>
+                                                    <span class="booking-note @(note.VisibleToCustomer ? "booking-note--shared" : "")">
+                                                        @note.Body
+                                                        <span class="text-faint-sm">
+                                                            @(note.VisibleToCustomer ? "shared with customer" : "internal")
+                                                            &middot; @note.CreatedAt.ToString("d MMM")
+                                                        </span>
+                                                    </span>
+                                                }
+                                            </span>
+                                        </div>
+                                    }
+                                    @if (b.Photos.Count > 0)
+                                    {
+                                        <div class="admin-card__detail-row">
+                                            <span>Photos</span>
+                                            <div class="admin-photo-thumbs">
+                                                @foreach (var photo in b.Photos)
+                                                {
+                                                    @if (_photoUrls.TryGetValue(photo.Id, out var url))
+                                                    {
+                                                        <a href="@url" target="_blank" rel="noopener noreferrer" @onclick:stopPropagation="true">
+                                                            <img src="@url" class="admin-photo-thumb" alt="Issue photo" />
+                                                        </a>
+                                                    }
                                                 }
                                             </div>
-                                        </td>
-                                        <td>
-                                            <div class="service-cell">
-                                                <strong>@b.ServiceName</strong>
-                                                <span>@(b.ServicePrice > 0 ? $"£{b.ServicePrice}" : "Quote")</span>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div class="date-cell">
-                                                <strong>@b.SlotDate.ToString("d MMM yyyy")</strong>
-                                                <span>@b.SlotTime</span>
-                                            </div>
-                                        </td>
-                                        <td><span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span></td>
-                                        @if (IsAdmin)
-                                        {
-                                            <td @onclick:stopPropagation="true">
-                                                <select class="form-control form-control--compact form-control--assign"
-                                                        value="@b.AssignedStaffId"
-                                                        @onchange="e => AssignBooking(b.Id, e.Value?.ToString())">
-                                                    <option value="">— Unassigned —</option>
-                                                    @foreach (var s in _allStaff.Where(x => x.IsActive))
-                                                    {
-                                                        <option value="@s.Id">@s.FullName</option>
-                                                    }
-                                                </select>
-                                            </td>
-                                        }
-                                        @if (CanManage || CanSeeCustomerDetails)
-                                        {
-                                            <td @onclick:stopPropagation="true">
-                                                <div class="action-buttons">
-                                                    @ActionButtons(b)
-                                                </div>
-                                            </td>
-                                        }
-                                    </tr>
-                                    @if (expandedId == b.Id && CanSeeCustomerDetails)
+                                        </div>
+                                    }
+                                    <div class="admin-card__detail-row">
+                                        <span>Price</span><span>@(b.ServicePrice > 0 ? $"From £{b.ServicePrice}" : "Quote")</span>
+                                    </div>
+                                    <div class="admin-card__detail-row">
+                                        <span>Booked</span><span>@b.CreatedAt.ToString("d MMM, HH:mm")</span>
+                                    </div>
+                                    @if (IsAdmin)
                                     {
-                                        <tr class="row-detail">
-                                            <td colspan="@BookingColumnCount">
-                                                <div class="booking-detail">
-                                                    <div class="booking-detail__grid">
-                                                        <div><strong>Phone</strong><span>@(string.IsNullOrWhiteSpace(b.CustomerPhone) ? "—" : b.CustomerPhone)</span></div>
-                                                        <div><strong>Bike</strong><span>@(string.IsNullOrWhiteSpace(b.BikeDescription) ? "—" : b.BikeDescription)</span></div>
-                                                        <div><strong>Booked</strong><span>@b.CreatedAt.ToString("d MMM yyyy, HH:mm")</span></div>
-                                                        <div><strong>Notes</strong><span>@(string.IsNullOrWhiteSpace(b.Notes) ? "—" : b.Notes)</span></div>
-                                                        <div>
-                                                            <strong>Job notes</strong>
-                                                            @if (_bookingNotes.TryGetValue(b.Id, out var rowNotes) && rowNotes.Count > 0)
-                                                            {
-                                                                <span class="booking-notes">
-                                                                    @foreach (var note in rowNotes)
-                                                                    {
-                                                                        <span class="booking-note @(note.VisibleToCustomer ? "booking-note--shared" : "")">
-                                                                            @note.Body
-                                                                            <span class="text-faint-sm">
-                                                                                @(note.VisibleToCustomer ? "shared with customer" : "internal")
-                                                                                &middot; @note.CreatedAt.ToString("d MMM")
-                                                                            </span>
+                                        <div class="admin-card__detail-row">
+                                            <span>Assign to</span>
+                                            <select class="form-control form-control--compact"
+                                                    value="@b.AssignedStaffId"
+                                                    @onchange="e => AssignBooking(b.Id, e.Value?.ToString())"
+                                                    @onclick:stopPropagation="true">
+                                                <option value="">— Unassigned —</option>
+                                                @foreach (var s in _allStaff.Where(x => x.IsActive))
+                                                {
+                                                    <option value="@s.Id">@s.FullName</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @if (RowHasActions(b))
+                            {
+                                <div class="admin-card__actions" @onclick:stopPropagation="true">
+                                    @ActionButtons(b)
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                @* Explicit prev/next rather than infinite scroll: on a phone,
+                   infinite scroll makes anything below the list unreachable. *@
+                @if (TotalPages > 1)
+                {
+                    <nav class="pager" aria-label="Booking pages">
+                        <button class="btn btn-outline pager__btn"
+                                disabled="@(_page == 0)"
+                                @onclick="() => GoToPage(_page - 1)">
+                            <Icon Name="arrow-left" /> Previous
+                        </button>
+                        <span class="pager__status" aria-live="polite">
+                            Page @(_page + 1) of @TotalPages &middot; @_totalMatches booking@(_totalMatches == 1 ? "" : "s")
+                        </span>
+                        <button class="btn btn-outline pager__btn"
+                                disabled="@(_page >= TotalPages - 1)"
+                                @onclick="() => GoToPage(_page + 1)">
+                            Next <Icon Name="arrow-right" />
+                        </button>
+                    </nav>
+                }
+
+                <!-- DESKTOP: Table -->
+                <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Reference</th>
+                                <th>Customer</th>
+                                <th>Service</th>
+                                <th>Date &amp; Time</th>
+                                <th>Status</th>
+                                @if (IsAdmin) { <th>Assigned To</th> }
+                                @if (CanManage || CanSeeCustomerDetails) { <th>Actions</th> }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!FilteredBookings.Any())
+                            {
+                                <tr class="admin-table__empty-row">
+                                    <td colspan="@BookingColumnCount">@BookingsEmptyMessage</td>
+                                </tr>
+                            }
+                            @foreach (var booking in FilteredBookings)
+                            {
+                                var b = booking;
+                                <tr class="@(expandedId == b.Id ? "row-expanded" : "")" @onclick="() => ToggleExpand(b.Id)">
+                                    <td><span class="ref-badge">@b.Reference</span></td>
+                                    <td>
+                                        <div class="customer-cell">
+                                            <strong>@b.CustomerName</strong>
+                                            @if (CanSeeCustomerDetails)
+                                            {
+                                                <span>@b.CustomerEmail</span>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="service-cell">
+                                            <strong>@b.ServiceName</strong>
+                                            <span>@(b.ServicePrice > 0 ? $"£{b.ServicePrice}" : "Quote")</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="date-cell">
+                                            <strong>@b.SlotDate.ToString("d MMM yyyy")</strong>
+                                            <span>@b.SlotTime</span>
+                                        </div>
+                                    </td>
+                                    <td><span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span></td>
+                                    @if (IsAdmin)
+                                    {
+                                        <td @onclick:stopPropagation="true">
+                                            <select class="form-control form-control--compact form-control--assign"
+                                                    value="@b.AssignedStaffId"
+                                                    @onchange="e => AssignBooking(b.Id, e.Value?.ToString())">
+                                                <option value="">— Unassigned —</option>
+                                                @foreach (var s in _allStaff.Where(x => x.IsActive))
+                                                {
+                                                    <option value="@s.Id">@s.FullName</option>
+                                                }
+                                            </select>
+                                        </td>
+                                    }
+                                    @if (CanManage || CanSeeCustomerDetails)
+                                    {
+                                        <td @onclick:stopPropagation="true">
+                                            <div class="action-buttons">
+                                                @ActionButtons(b)
+                                            </div>
+                                        </td>
+                                    }
+                                </tr>
+                                @if (expandedId == b.Id && CanSeeCustomerDetails)
+                                {
+                                    <tr class="row-detail">
+                                        <td colspan="@BookingColumnCount">
+                                            <div class="booking-detail">
+                                                <div class="booking-detail__grid">
+                                                    <div><strong>Phone</strong><span>@(string.IsNullOrWhiteSpace(b.CustomerPhone) ? "—" : b.CustomerPhone)</span></div>
+                                                    <div><strong>Bike</strong><span>@(string.IsNullOrWhiteSpace(b.BikeDescription) ? "—" : b.BikeDescription)</span></div>
+                                                    <div><strong>Booked</strong><span>@b.CreatedAt.ToString("d MMM yyyy, HH:mm")</span></div>
+                                                    <div><strong>Notes</strong><span>@(string.IsNullOrWhiteSpace(b.Notes) ? "—" : b.Notes)</span></div>
+                                                    <div>
+                                                        <strong>Job notes</strong>
+                                                        @if (_bookingNotes.TryGetValue(b.Id, out var rowNotes) && rowNotes.Count > 0)
+                                                        {
+                                                            <span class="booking-notes">
+                                                                @foreach (var note in rowNotes)
+                                                                {
+                                                                    <span class="booking-note @(note.VisibleToCustomer ? "booking-note--shared" : "")">
+                                                                        @note.Body
+                                                                        <span class="text-faint-sm">
+                                                                            @(note.VisibleToCustomer ? "shared with customer" : "internal")
+                                                                            &middot; @note.CreatedAt.ToString("d MMM")
                                                                         </span>
-                                                                    }
-                                                                </span>
-                                                            }
-                                                            else
+                                                                    </span>
+                                                                }
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>—</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                @if (b.Photos.Count > 0)
+                                                {
+                                                    <div class="booking-detail__photos">
+                                                        <strong>Photos</strong>
+                                                        <div class="admin-photo-thumbs">
+                                                            @foreach (var photo in b.Photos)
                                                             {
-                                                                <span>—</span>
+                                                                @if (_photoUrls.TryGetValue(photo.Id, out var url))
+                                                                {
+                                                                    <a href="@url" target="_blank" rel="noopener noreferrer">
+                                                                        <img src="@url" class="admin-photo-thumb" alt="Issue photo" />
+                                                                    </a>
+                                                                }
                                                             }
                                                         </div>
                                                     </div>
-                                                    @if (b.Photos.Count > 0)
-                                                    {
-                                                        <div class="booking-detail__photos">
-                                                            <strong>Photos</strong>
-                                                            <div class="admin-photo-thumbs">
-                                                                @foreach (var photo in b.Photos)
-                                                                {
-                                                                    @if (_photoUrls.TryGetValue(photo.Id, out var url))
-                                                                    {
-                                                                        <a href="@url" target="_blank" rel="noopener noreferrer">
-                                                                            <img src="@url" class="admin-photo-thumb" alt="Issue photo" />
-                                                                        </a>
-                                                                    }
-                                                                }
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    }
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
                                 }
-                            </tbody>
-                        </table>
-                    </div>
-                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
             }
 
             <!-- ── CALENDAR TAB ──────────────────────────────────────────── -->
@@ -694,75 +711,78 @@
                         </div>
                     </div>
 
-                    @if (_customers.Count == 0)
-                    {
-                        <div class="admin-empty">
-                            <p>@(string.IsNullOrWhiteSpace(customerSearch) ? "No customer accounts yet." : "No customers match that search.")</p>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="admin-mobile-cards">
-                            @foreach (var c in _customers)
-                            {
-                                var cust = c;
-                                <button type="button" class="admin-edit-card customer-card"
-                                        @onclick="() => OpenCustomer(cust.Id)">
-                                    <span class="admin-edit-card__title">@cust.FullName</span>
-                                    <span class="admin-edit-card__meta">@cust.Email</span>
-                                    <span class="customer-card__stats">
-                                        <span>@cust.BookingCount booking@(cust.BookingCount == 1 ? "" : "s")</span>
-                                        <span>@(cust.LastVisit is { } lv ? $"Last: {lv:d MMM yyyy}" : "No visits yet")</span>
-                                    </span>
-                                </button>
-                            }
-                        </div>
-
-                        <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
-                            <table class="admin-table">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Email</th>
-                                        <th>Phone</th>
-                                        <th>Bookings</th>
-                                        <th>Last visit</th>
-                                        <th>Member since</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var c in _customers)
-                                    {
-                                        var cust = c;
-                                        <tr @onclick="() => OpenCustomer(cust.Id)">
-                                            <td><strong>@cust.FullName</strong></td>
-                                            <td class="text-muted-sm">@cust.Email</td>
-                                            <td class="text-muted-sm">@cust.Phone</td>
-                                            <td>@cust.BookingCount</td>
-                                            <td class="text-muted-sm">@(cust.LastVisit is { } lv ? lv.ToString("d MMM yyyy") : "—")</td>
-                                            <td class="text-muted-sm">@cust.MemberSince.ToString("d MMM yyyy")</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-
-                        @if (CustomerTotalPages > 1)
+                    @* Same as the bookings list: the table being searched stays on the
+                       page and reports the empty result itself. *@
+                    <div class="admin-mobile-cards">
+                        @if (_customers.Count == 0)
                         {
-                            <nav class="pager" aria-label="Customer pages">
-                                <button class="btn btn-outline pager__btn" disabled="@(_customerPage == 0)"
-                                        @onclick="() => GoToCustomerPage(_customerPage - 1)">
-                                    <Icon Name="arrow-left" /> Previous
-                                </button>
-                                <span class="pager__status" aria-live="polite">
-                                    Page @(_customerPage + 1) of @CustomerTotalPages &middot; @_customerTotal customer@(_customerTotal == 1 ? "" : "s")
-                                </span>
-                                <button class="btn btn-outline pager__btn" disabled="@(_customerPage >= CustomerTotalPages - 1)"
-                                        @onclick="() => GoToCustomerPage(_customerPage + 1)">
-                                    Next <Icon Name="arrow-right" />
-                                </button>
-                            </nav>
+                            <div class="admin-empty"><p>@CustomersEmptyMessage</p></div>
                         }
+                        @foreach (var c in _customers)
+                        {
+                            var cust = c;
+                            <button type="button" class="admin-edit-card customer-card"
+                                    @onclick="() => OpenCustomer(cust.Id)">
+                                <span class="admin-edit-card__title">@cust.FullName</span>
+                                <span class="admin-edit-card__meta">@cust.Email</span>
+                                <span class="customer-card__stats">
+                                    <span>@cust.BookingCount booking@(cust.BookingCount == 1 ? "" : "s")</span>
+                                    <span>@(cust.LastVisit is { } lv ? $"Last: {lv:d MMM yyyy}" : "No visits yet")</span>
+                                </span>
+                            </button>
+                        }
+                    </div>
+
+                    <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>Bookings</th>
+                                    <th>Last visit</th>
+                                    <th>Member since</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (_customers.Count == 0)
+                                {
+                                    <tr class="admin-table__empty-row">
+                                        <td colspan="6">@CustomersEmptyMessage</td>
+                                    </tr>
+                                }
+                                @foreach (var c in _customers)
+                                {
+                                    var cust = c;
+                                    <tr @onclick="() => OpenCustomer(cust.Id)">
+                                        <td><strong>@cust.FullName</strong></td>
+                                        <td class="text-muted-sm">@cust.Email</td>
+                                        <td class="text-muted-sm">@cust.Phone</td>
+                                        <td>@cust.BookingCount</td>
+                                        <td class="text-muted-sm">@(cust.LastVisit is { } lv ? lv.ToString("d MMM yyyy") : "—")</td>
+                                        <td class="text-muted-sm">@cust.MemberSince.ToString("d MMM yyyy")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @if (CustomerTotalPages > 1)
+                    {
+                        <nav class="pager" aria-label="Customer pages">
+                            <button class="btn btn-outline pager__btn" disabled="@(_customerPage == 0)"
+                                    @onclick="() => GoToCustomerPage(_customerPage - 1)">
+                                <Icon Name="arrow-left" /> Previous
+                            </button>
+                            <span class="pager__status" aria-live="polite">
+                                Page @(_customerPage + 1) of @CustomerTotalPages &middot; @_customerTotal customer@(_customerTotal == 1 ? "" : "s")
+                            </span>
+                            <button class="btn btn-outline pager__btn" disabled="@(_customerPage >= CustomerTotalPages - 1)"
+                                    @onclick="() => GoToCustomerPage(_customerPage + 1)">
+                                Next <Icon Name="arrow-right" />
+                            </button>
+                        </nav>
                     }
                 }
                 else
@@ -793,7 +813,9 @@
                             </div>
                             <div class="form-group">
                                 <label for="admin-email">Email</label>
-                                <input id="admin-email" class="form-control" type="email" @bind="newStaff.Email" placeholder="jane@fixlosophy.com" />
+                                <input id="admin-email" class="form-control" type="email"
+                                       autocomplete="email" inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"
+                                       @bind="newStaff.Email" placeholder="jane@fixlosophy.com" />
                             </div>
                         </div>
                         <div class="form-row">
@@ -963,6 +985,7 @@
     private int _page;
     private string activeFilter = "All";
     private string searchTerm = "";
+    private string sortMode = BookingService.SortUpcoming;
     private string? expandedId;
     private (int total, int today, int pending, int confirmed) stats;
 
@@ -1042,6 +1065,19 @@
     // The rendered page of results. Filtering and searching now happen in SQL, so
     // this is simply what came back.
     private List<Booking> FilteredBookings => _pageBookings;
+
+    // Says which of the three reasons the list is empty for. The old text was a flat
+    // "No bookings match the current filter", which read as wrong after a search and
+    // as alarming on a brand-new install.
+    private string CustomersEmptyMessage =>
+        string.IsNullOrWhiteSpace(customerSearch)
+            ? "No customer accounts yet."
+            : $"No customers match \u201c{customerSearch.Trim()}\u201d.";
+
+    private string BookingsEmptyMessage =>
+        !string.IsNullOrWhiteSpace(searchTerm) ? $"No bookings match \u201c{searchTerm.Trim()}\u201d."
+        : activeFilter != "All"               ? $"No {activeFilter.ToLowerInvariant()} bookings."
+                                              : "No bookings yet.";
 
     // True when a booking has any actionable controls for the current user —
     // used to decide whether to render the action area / Actions column at all.
@@ -1228,7 +1264,7 @@
     private void LoadBookings()
     {
         var (items, total) = BookingService.GetBookingsPage(
-            BookingScopeStaffId, activeFilter, searchTerm, _page, PageSize);
+            BookingScopeStaffId, activeFilter, searchTerm, _page, PageSize, sortMode);
 
         // A delete or a status change can shrink the result set past the current page;
         // step back rather than showing an empty list with a pager that says otherwise.
@@ -1236,7 +1272,7 @@
         {
             _page = Math.Max(0, (int)Math.Ceiling(total / (double)PageSize) - 1);
             (items, total) = BookingService.GetBookingsPage(
-                BookingScopeStaffId, activeFilter, searchTerm, _page, PageSize);
+                BookingScopeStaffId, activeFilter, searchTerm, _page, PageSize, sortMode);
         }
 
         _pageBookings = items;
@@ -1267,6 +1303,14 @@
         activeFilter = f;
         expandedId = null;
         _page = 0;          // a new filter starts at the first page
+        LoadBookings();
+    }
+
+    private void SetSort(ChangeEventArgs e)
+    {
+        sortMode = e.Value?.ToString() ?? BookingService.SortUpcoming;
+        expandedId = null;
+        _page = 0;          // a re-sort starts at the first page
         LoadBookings();
     }
 

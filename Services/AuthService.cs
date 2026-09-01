@@ -53,12 +53,41 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
     /// code are 6 digits, so anything under 7 is a typo rather than a number.
     public const int MinPhoneDigits = 7;
 
-    /// Counts digits rather than pattern-matching a format: customers write numbers
-    /// with spaces, dashes, brackets and +44 prefixes, and rejecting those would be
-    /// worse than accepting a loosely-formatted but dialable number. This is also
-    /// what stops "call me" reaching the admin panel as a dead Call/WhatsApp link.
-    public static bool IsValidPhone(string? phone) =>
-        phone is not null && phone.Count(char.IsDigit) >= MinPhoneDigits;
+    /// E.164's ceiling. Longer than this is a mistyped run of digits, not a number.
+    public const int MaxPhoneDigits = 15;
+
+    /// Longest string we accept, digits plus the formatting people put between them.
+    public const int MaxPhoneLength = 20;
+
+    /// The rule below, in the form an <c>&lt;input pattern&gt;</c> understands, so the
+    /// browser and the server can't drift apart. Kept deliberately loose on shape —
+    /// it constrains the alphabet and the length; the digit count is IsValidPhone's job.
+    public const string PhoneInputPattern = @"[0-9 ()+.\-]{7,20}";
+
+    /// Characters a phone number may contain: digits, and the punctuation people
+    /// actually write between them.
+    private static bool IsPhoneChar(char c) =>
+        char.IsDigit(c) || c is ' ' or '(' or ')' or '-' or '.' or '+';
+
+    /// Accepts a loosely-formatted but dialable number — customers write spaces,
+    /// dashes, brackets and +44 prefixes, and rejecting those would be worse than
+    /// accepting them. What it will not accept is free text: this used to count
+    /// digits and nothing else, so "call me on 07700 900000" was stored and reached
+    /// the admin panel as a dead Call/WhatsApp link.
+    public static bool IsValidPhone(string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone)) return false;
+
+        var trimmed = phone.Trim();
+        if (trimmed.Length > MaxPhoneLength) return false;
+        if (!trimmed.All(IsPhoneChar)) return false;
+
+        // '+' is a country-code prefix, so it only means anything at the front.
+        if (trimmed.IndexOf('+') > 0) return false;
+
+        var digits = trimmed.Count(char.IsDigit);
+        return digits >= MinPhoneDigits && digits <= MaxPhoneDigits;
+    }
 
     public StaffMember? AuthenticateStaff(string email, string password)
     {

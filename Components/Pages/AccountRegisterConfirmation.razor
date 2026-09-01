@@ -25,7 +25,8 @@
             <div class="form-group">
                 <label for="accountregisterconfirmation-email">Email</label>
                 <input id="accountregisterconfirmation-email" class="form-control" type="email" name="email" required
-                       autocomplete="username" placeholder="you@example.com" />
+                       autocomplete="username" inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"
+                       placeholder="you@example.com" />
             </div>
             @* The countdown lives in wwwroot/site.js; the duration is passed through
                the attribute so it can't drift from the server's own cooldown. *@

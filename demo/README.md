@@ -70,8 +70,8 @@ The two stylesheets are copied in byte for byte, so after a CSS change re-copy t
 confirm the copy is exact:
 
 ```bash
-sed -n '5,1996p'    demo/index.html | diff - wwwroot/app.css
-sed -n '1997,4171p' demo/index.html | diff - wwwroot/booking.css
+sed -n '5,1968p'    demo/index.html | diff - wwwroot/app.css
+sed -n '1969,4164p' demo/index.html | diff - wwwroot/booking.css
 ```
 
 (The line ranges move when the stylesheets grow — they start after `<style>` and end at
