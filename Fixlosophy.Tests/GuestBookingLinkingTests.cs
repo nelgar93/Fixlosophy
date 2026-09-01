@@ -189,4 +189,36 @@ public class GuestBookingLinkingTests
         Assert.False(auth.ConfirmEmail("jane@example.com", new string('a', 64)));
         Assert.Null(db.Bookings.Single().CustomerId);
     }
+    // ── The empty-email hole ─────────────────────────────────────────────────
+    // DeleteCustomerAccount anonymises bookings in place: CustomerName becomes
+    // "Deleted customer", CustomerEmail becomes "" and CustomerId becomes null. That is
+    // exactly the shape LinkGuestBookings scans for. A customer row with an empty email
+    // would therefore adopt the booking history of every person who asked to be erased.
+    [Fact]
+    public void LinkGuestBookings_AdoptsNothing_WhenTheCustomersEmailIsEmpty()
+    {
+        using var db = NewDb();
+
+        // An erased person's booking, left behind exactly as DeleteCustomerAccount does.
+        db.Bookings.Add(new Booking
+        {
+            Reference = "FIX-260101-001",
+            CustomerName = "Deleted customer",
+            CustomerEmail = "",
+            CustomerPhone = "",
+            ServiceName = "Full Service",
+            SlotDate = ShopClock.Today.AddDays(-30),
+            SlotTime = "10:00",
+            CustomerId = null
+        });
+        var customer = new Customer { Email = "", FullName = "No Email" };
+        db.Customers.Add(customer);
+        db.SaveChanges();
+
+        var adopted = new AuthService(db, new NoopTokenStore()).LinkGuestBookings(customer);
+
+        Assert.Equal(0, adopted);
+        Assert.Null(db.Bookings.Single().CustomerId);
+    }
+
 }

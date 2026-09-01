@@ -235,6 +235,15 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
     public int LinkGuestBookings(Customer customer)
     {
         var normEmail = NormalizeEmail(customer.Email);
+
+        // An empty email would match every anonymised booking in the table:
+        // DeleteCustomerAccount blanks CustomerEmail and nulls CustomerId, which is
+        // exactly the shape scanned below. Adopting those would hand a live account
+        // the booking history of people who asked to be erased. No caller should be
+        // able to reach this with an empty address, but the cost of being wrong is a
+        // GDPR breach rather than a bad row, so it is checked here as well.
+        if (string.IsNullOrEmpty(normEmail)) return 0;
+
 #pragma warning disable CA1304, CA1311, CA1862 // SQL-translated by EF Core; see AuthenticateStaff.
         var orphans = db.Bookings
             .Where(b => b.CustomerId == null && b.CustomerEmail.ToLower() == normEmail)
@@ -420,7 +429,11 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
     // The cooldown is deliberately shorter than the token's own validity
     // (ResetTokenExpiresAt) so a genuinely lost email can be retried quickly; each
     // new token replaces the previous one, so only one link is ever live.
-    public string? RequestCustomerPasswordReset(string email)
+    /// <param name="validForMinutes">Overrides the usual link validity. The bulk
+    /// customer import passes a week: those links go out in one batch and are read
+    /// whenever the customer gets round to it, where an hour is a link that has always
+    /// expired by the time anyone clicks it.</param>
+    public string? RequestCustomerPasswordReset(string email, int? validForMinutes = null)
     {
         var customer = GetCustomerByEmail(email);
         if (customer is null) return null;
@@ -428,7 +441,7 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
 
         var token = GenerateToken();
         customer.ResetTokenHash = HashToken(token);
-        customer.ResetTokenExpiresAt = ShopClock.Now.AddMinutes(ResetTokenMinutes);
+        customer.ResetTokenExpiresAt = ShopClock.Now.AddMinutes(validForMinutes ?? ResetTokenMinutes);
         customer.ResetCooldownUntil = ShopClock.Now.AddSeconds(ResendCooldownSeconds);
         db.SaveChanges();
         return token;

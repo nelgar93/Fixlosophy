@@ -46,6 +46,12 @@ public class ConsoleEmailSender(ILogger<ConsoleEmailSender> logger) : IEmailSend
         return Task.CompletedTask;
     }
 
+    public Task SendAccountClaimAsync(string toEmail, string toName, string claimLink)
+    {
+        logger.LogWarning("[DEV EMAIL] Account claim link for {Email}: {Link}", toEmail, claimLink);
+        return Task.CompletedTask;
+    }
+
     public Task SendContactEnquiryAsync(Enquiry enquiry)
     {
         logger.LogWarning(

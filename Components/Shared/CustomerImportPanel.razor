@@ -1,0 +1,282 @@
+@using Microsoft.AspNetCore.Components.Forms
+@inject CustomerImportService Import
+@inject IEmailSender EmailSender
+@inject NavigationManager Nav
+@inject IConfiguration Config
+@inject ILogger<CustomerImportPanel> Logger
+
+@* Bringing customers over from a previous system. Three states — pick a file, review
+   what it will do, see what it did — because an import that writes as it reads leaves
+   half a migration behind when row 400 turns out to be malformed. *@
+
+<div class="import-panel">
+    <button class="btn btn-outline customer-detail__back" @onclick="OnBack">
+        <Icon Name="arrow-left" /> Back to customers
+    </button>
+
+    <h3 class="import-panel__title">Import customers</h3>
+
+    @if (_result is null)
+    {
+        <p class="import-panel__intro">
+            A CSV with an <code>email</code> column, plus <code>name</code> and
+            <code>phone</code> if you have them. Existing customers are matched on their
+            email address and left alone, except to fill in details you have and we don't.
+            <a href="data:text/csv;charset=utf-8,@Uri.EscapeDataString(CustomerImportService.TemplateCsv)"
+               download="fixlosophy-customer-import-template.csv">Download a template</a>.
+        </p>
+
+        <div class="form-group">
+            <label for="import-file">Choose a CSV file</label>
+            <InputFile id="import-file" class="form-control" accept=".csv,text/csv"
+                       OnChange="OnFileSelected" />
+        </div>
+    }
+
+    @if (_error is not null)
+    {
+        <div class="import-panel__error" role="alert">@_error</div>
+    }
+
+    @if (_preview is not null && _result is null)
+    {
+        <div class="import-summary">
+            <div class="import-summary__row">
+                <span class="import-summary__count import-summary__count--create">@_preview.CountOf(ImportOutcome.Create)</span>
+                <span>to create</span>
+            </div>
+            <div class="import-summary__row">
+                <span class="import-summary__count">@_preview.CountOf(ImportOutcome.Update)</span>
+                <span>existing, with blanks to fill in</span>
+            </div>
+            <div class="import-summary__row">
+                <span class="import-summary__count">@_preview.CountOf(ImportOutcome.Unchanged)</span>
+                <span>already up to date — nothing to do</span>
+            </div>
+            <div class="import-summary__row">
+                <span class="import-summary__count">@_preview.CountOf(ImportOutcome.DuplicateInFile)</span>
+                <span>repeated in the file — the first one wins</span>
+            </div>
+            <div class="import-summary__row">
+                <span class="import-summary__count @(_preview.CountOf(ImportOutcome.Invalid) > 0 ? "import-summary__count--bad" : "")">@_preview.CountOf(ImportOutcome.Invalid)</span>
+                <span>can't be used</span>
+            </div>
+        </div>
+
+        @if (_preview.UnknownHeaders.Count > 0)
+        {
+            <p class="import-panel__note">
+                Ignoring @(string.Join(", ", _preview.UnknownHeaders)) — only email, name
+                and phone are imported. If one of those is a mis-named column, rename it
+                and upload again.
+            </p>
+        }
+
+        @if (Problems.Count > 0)
+        {
+            <div class="import-problems">
+                <h4>Rows that won't be imported</h4>
+                <div class="admin-table-wrapper">
+                    <table class="admin-table">
+                        <thead><tr><th>Line</th><th>Email</th><th>Reason</th></tr></thead>
+                        <tbody>
+                            @foreach (var row in Problems.Take(MaxProblemsShown))
+                            {
+                                <tr>
+                                    <td>@row.LineNumber</td>
+                                    <td class="text-muted-sm">@(string.IsNullOrWhiteSpace(row.Email) ? "—" : row.Email)</td>
+                                    <td class="text-muted-sm">@row.Problem</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (Problems.Count > MaxProblemsShown)
+                {
+                    <p class="import-panel__note">…and @(Problems.Count - MaxProblemsShown) more.</p>
+                }
+            </div>
+        }
+
+        @if (_preview.HasWork)
+        {
+            <label class="import-panel__opt">
+                <input type="checkbox" @bind="_sendClaimEmails" />
+                @{ var newCount = _preview.CountOf(ImportOutcome.Create); }
+                <span>
+                    Email the @newCount new customer@(newCount == 1 ? "" : "s") a link to set a password
+                </span>
+            </label>
+            <p class="import-panel__note">
+                Only people created by this import are emailed, so running it again won't
+                send twice. Existing customers are never emailed.
+            </p>
+
+            <div class="import-panel__actions">
+                <button class="action-btn action-btn--primary" disabled="@_working" @onclick="Commit">
+                    @(_working ? "Importing…" : "Import these customers")
+                </button>
+                <button class="action-btn action-btn--keep" disabled="@_working" @onclick="Reset">Choose another file</button>
+            </div>
+        }
+        else
+        {
+            <p class="import-panel__note">Nothing in this file needs importing.</p>
+            <button class="action-btn action-btn--keep" @onclick="Reset">Choose another file</button>
+        }
+    }
+
+    @if (_result is not null)
+    {
+        <div class="import-summary">
+            <div class="import-summary__row">
+                <span class="import-summary__count import-summary__count--create">@_result.Created</span>
+                <span>customers created</span>
+            </div>
+            <div class="import-summary__row">
+                <span class="import-summary__count">@_result.Updated</span>
+                <span>existing records filled in</span>
+            </div>
+            <div class="import-summary__row">
+                <span class="import-summary__count">@_result.BookingsAdopted</span>
+                <span>past bookings attached to their new accounts</span>
+            </div>
+            @if (_sendClaimEmails)
+            {
+                <div class="import-summary__row">
+                    <span class="import-summary__count">@_result.ClaimEmailsSent</span>
+                    <span>claim emails sent</span>
+                </div>
+            }
+        </div>
+
+        @if (_result.EmailFailures.Count > 0)
+        {
+            <p class="import-panel__note">
+                @_result.EmailFailures.Count couldn't be emailed — those accounts exist,
+                they just haven't been told. They can use "forgot password" to set one:
+                @string.Join(", ", _result.EmailFailures.Take(MaxProblemsShown))
+            </p>
+        }
+
+        <div class="import-panel__actions">
+            <button class="action-btn action-btn--primary" @onclick="OnBack">Done</button>
+            <button class="action-btn action-btn--keep" @onclick="Reset">Import another file</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EventCallback OnBack { get; set; }
+
+    /// Raised after a successful import so the customers list behind this reloads.
+    [Parameter] public EventCallback OnImported { get; set; }
+
+    private const int MaxProblemsShown = 20;
+
+    private ImportPreview? _preview;
+    private ImportResult? _result;
+    private string? _error;
+    private bool _working;
+    private bool _sendClaimEmails = true;
+
+    private List<ImportRow> Problems => _preview is null
+        ? []
+        : [.. _preview.Rows.Where(r => r.Outcome is ImportOutcome.Invalid or ImportOutcome.DuplicateInFile)];
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        _preview = null;
+        _result = null;
+
+        var file = e.File;
+        if (file is null) return;
+
+        // Checked before reading, so an oversized file is refused rather than buffered
+        // and then rejected — the same shape as the booking wizard's photo picker.
+        if (file.Size > CustomerImportService.MaxFileBytes)
+        {
+            _error = $"That file is larger than {CustomerImportService.MaxFileBytes / (1024 * 1024)} MB.";
+            return;
+        }
+
+        try
+        {
+            using var stream = file.OpenReadStream(CustomerImportService.MaxFileBytes);
+            using var reader = new StreamReader(stream);
+            var csv = await reader.ReadToEndAsync();
+            _preview = Import.Preview(csv);
+            _error = _preview.FatalError;
+            if (_error is not null) _preview = null;
+        }
+        catch (IOException)
+        {
+            _error = "That file couldn't be read.";
+        }
+    }
+
+    private async Task Commit()
+    {
+        if (_preview is null || _working) return;
+        _working = true;
+
+        try
+        {
+            var created = _preview.Rows
+                .Where(r => r.Outcome == ImportOutcome.Create)
+                .Select(r => (r.Email, r.FullName))
+                .ToList();
+
+            var result = Import.Commit(_preview);
+            if (result.Error is not null)
+            {
+                _error = result.Error;
+                _preview = null;
+                return;
+            }
+
+            var sent = 0;
+            var failures = new List<string>();
+
+            if (_sendClaimEmails)
+            {
+                // Sequentially, each guarded on its own: one address the provider
+                // rejects must not abandon the rest of the batch.
+                foreach (var (email, name) in created)
+                {
+                    try
+                    {
+                        var token = Import.CreateClaimToken(email);
+                        if (token is null) { failures.Add(email); continue; }
+
+                        var link = CustomerImportService.BuildClaimLink(
+                            Config["App:BaseUrl"], Nav.BaseUri, token);
+                        await EmailSender.SendAccountClaimAsync(email, name, link);
+                        sent++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Could not send the account claim email to {Email}", email);
+                        failures.Add(email);
+                    }
+                }
+            }
+
+            _result = result with { ClaimEmailsSent = sent, EmailFailures = failures };
+            _preview = null;
+            await OnImported.InvokeAsync();
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+
+    private void Reset()
+    {
+        _preview = null;
+        _result = null;
+        _error = null;
+    }
+}

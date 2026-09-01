@@ -2211,6 +2211,97 @@ a.action-btn { text-decoration: none; }
     .customer-card:hover { border-color: var(--green); }
 }
 
+/* ── Bulk customer import ────────────────────────────────────────────────────
+   Three states in one panel — pick a file, review what it will do, see what it did.
+   The review step is the point of the whole thing, so it gets the room. */
+.import-panel { max-width: 46rem; }
+
+.import-panel__title { margin-bottom: var(--space-3); font-size: var(--fs-h3-compact); color: var(--white); }
+
+.import-panel__intro {
+    margin-bottom: var(--space-6);
+    color: rgba(255,255,255,0.65);
+    font-size: var(--fs-sm);
+    line-height: 1.6;
+}
+
+.import-panel__intro code {
+    padding: 0 var(--space-1);
+    background: var(--dark-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-xs);
+}
+
+.import-panel__note {
+    margin-top: var(--space-2);
+    color: rgba(255,255,255,0.45);
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+}
+
+.import-panel__error {
+    margin: var(--space-4) 0;
+    padding: var(--space-3) var(--space-4);
+    background: rgba(220,38,38,0.1);
+    border: 1px solid rgba(220,38,38,0.3);
+    border-radius: var(--radius-sm);
+    color: #f87171;
+    font-size: var(--fs-sm);
+}
+
+.import-summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: var(--space-6) 0;
+    padding: var(--space-5);
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+}
+
+.import-summary__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    color: rgba(255,255,255,0.7);
+    font-size: var(--fs-sm);
+}
+
+/* Tabular figures so the counts line up in a column rather than jittering. */
+.import-summary__count {
+    min-width: 3ch;
+    color: var(--white);
+    font-size: var(--fs-h3-compact);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.import-summary__count--create { color: var(--green); }
+.import-summary__count--bad { color: #f87171; }
+
+.import-problems { margin-top: var(--space-6); margin-bottom: var(--space-6); }
+.import-problems h4 { margin-bottom: var(--space-3); font-size: var(--fs-sm); color: var(--white); }
+
+.import-panel__opt {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+    color: rgba(255,255,255,0.8);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+.import-panel__actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-top: var(--space-6);
+}
+
 /* ---------- Detail ---------- */
 .customer-detail__back { margin-bottom: var(--space-5); }
 

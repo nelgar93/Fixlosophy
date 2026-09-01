@@ -707,7 +707,11 @@
             <!-- ── CUSTOMERS TAB ─────────────────────────────────────────── -->
             @if (activeTab == "customers" && CanSeeCustomerDetails)
             {
-                @if (_selectedCustomer is null)
+                @if (_importingCustomers)
+                {
+                    <CustomerImportPanel OnBack="CloseImport" OnImported="LoadCustomers" />
+                }
+                else if (_selectedCustomer is null)
                 {
                     <div class="admin-filters">
                         <div class="admin-search admin-search--wide">
@@ -716,6 +720,13 @@
                                    value="@customerSearch" @oninput="OnCustomerSearch"
                                    placeholder="Search name, email or phone…" />
                         </div>
+                        @* Bulk-importing personal data is an owner's job, not a
+                           mechanic's — IsAdmin rather than the tab's own
+                           CanSeeCustomerDetails. *@
+                        @if (IsAdmin)
+                        {
+                            <button class="btn btn-outline" @onclick="OpenImport">Import customers</button>
+                        }
                     </div>
 
                     @* Same as the bookings list: the table being searched stays on the
@@ -1012,6 +1023,7 @@
     // Customers tab
     private List<CustomerSummary> _customers = [];
     private CustomerDetail? _selectedCustomer;
+    private bool _importingCustomers;
     private string customerSearch = "";
     private int _customerPage;
     private int _customerTotal;
@@ -1705,11 +1717,25 @@
 
     // ── Customers tab ────────────────────────────────────────────────────────
 
+    private void OpenImport()
+    {
+        if (!IsAdmin) return;   // server-side guard; don't rely on a hidden button
+        _selectedCustomer = null;
+        _importingCustomers = true;
+    }
+
+    private void CloseImport()
+    {
+        _importingCustomers = false;
+        LoadCustomers();
+    }
+
     private void OpenCustomersTab()
     {
         if (!CanSeeCustomerDetails) return;  // server-side guard, not just a hidden tab
         activeTab = "customers";
         _selectedCustomer = null;
+        _importingCustomers = false;   // re-entering the tab starts on the list
         LoadCustomers();
     }
 

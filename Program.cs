@@ -68,6 +68,7 @@ builder.Services.AddScoped<BikeService>();
 builder.Services.AddScoped<EnquiryService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<CustomerService>();
+builder.Services.AddScoped<CustomerImportService>();
 // Singleton: the in-process fan-out that lets an open dashboard hear about a new
 // notification without polling. See NotificationHub for why a plain event suffices.
 builder.Services.AddSingleton<NotificationHub>();

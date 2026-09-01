@@ -133,6 +133,38 @@ public static class EmailTemplates
         return (html, text);
     }
 
+    // ── Account claim (to an imported customer) ──────────────────────────────
+    /// <summary>
+    /// Sent once to a customer whose record was brought over from the shop's previous
+    /// system. Deliberately not the password-reset template: they never had a password
+    /// here, and "reset your password" to someone who has never signed in reads as a
+    /// phishing attempt.
+    /// </summary>
+    public static (string html, string text) AccountClaim(string toName, string claimLink)
+    {
+        var greeting = string.IsNullOrWhiteSpace(toName) ? "Hello," : $"Hi {toName},";
+
+        var html = Shell($"Your {SiteContent.ShopName} account is ready",
+            Para(greeting) +
+            Para($"We've moved {SiteContent.ShopName}'s booking system over to a new site, and brought your details with us. " +
+                 "Set a password and you'll be able to book online and see your past visits.") +
+            Button(claimLink, "Set my password") +
+            Para("If you'd rather not have an account, you can ignore this — you can still book by phone " +
+                 $"on {SiteContent.PhoneDisplay} or by dropping in.") +
+            Para("This link is valid for a week."));
+
+        var text =
+            $"{greeting}\n\n" +
+            $"We've moved {SiteContent.ShopName}'s booking system over to a new site, and brought your\n" +
+            "details with us. Set a password and you'll be able to book online and see your\n" +
+            "past visits.\n\n" +
+            $"Set my password: {claimLink}\n\n" +
+            "This link is valid for a week. If you'd rather not have an account, you can\n" +
+            $"ignore this — you can still book on {SiteContent.PhoneDisplay} or by dropping in.\n";
+
+        return (html, text);
+    }
+
     // ── Status changed by the shop (to the customer) ─────────────────────────
     /// <summary>
     /// What the customer hears when staff move a booking on. Only two statuses get an

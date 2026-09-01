@@ -4179,6 +4179,97 @@ a.action-btn { text-decoration: none; }
     .customer-card:hover { border-color: var(--green); }
 }
 
+/* ── Bulk customer import ────────────────────────────────────────────────────
+   Three states in one panel — pick a file, review what it will do, see what it did.
+   The review step is the point of the whole thing, so it gets the room. */
+.import-panel { max-width: 46rem; }
+
+.import-panel__title { margin-bottom: var(--space-3); font-size: var(--fs-h3-compact); color: var(--white); }
+
+.import-panel__intro {
+    margin-bottom: var(--space-6);
+    color: rgba(255,255,255,0.65);
+    font-size: var(--fs-sm);
+    line-height: 1.6;
+}
+
+.import-panel__intro code {
+    padding: 0 var(--space-1);
+    background: var(--dark-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-xs);
+}
+
+.import-panel__note {
+    margin-top: var(--space-2);
+    color: rgba(255,255,255,0.45);
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+}
+
+.import-panel__error {
+    margin: var(--space-4) 0;
+    padding: var(--space-3) var(--space-4);
+    background: rgba(220,38,38,0.1);
+    border: 1px solid rgba(220,38,38,0.3);
+    border-radius: var(--radius-sm);
+    color: #f87171;
+    font-size: var(--fs-sm);
+}
+
+.import-summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: var(--space-6) 0;
+    padding: var(--space-5);
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+}
+
+.import-summary__row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    color: rgba(255,255,255,0.7);
+    font-size: var(--fs-sm);
+}
+
+/* Tabular figures so the counts line up in a column rather than jittering. */
+.import-summary__count {
+    min-width: 3ch;
+    color: var(--white);
+    font-size: var(--fs-h3-compact);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.import-summary__count--create { color: var(--green); }
+.import-summary__count--bad { color: #f87171; }
+
+.import-problems { margin-top: var(--space-6); margin-bottom: var(--space-6); }
+.import-problems h4 { margin-bottom: var(--space-3); font-size: var(--fs-sm); color: var(--white); }
+
+.import-panel__opt {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+    color: rgba(255,255,255,0.8);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+.import-panel__actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-top: var(--space-6);
+}
+
 /* ---------- Detail ---------- */
 .customer-detail__back { margin-bottom: var(--space-5); }
 
@@ -6058,6 +6149,11 @@ function freshUiState() {
             deleteConfirmId: null,
             cancelConfirmId: null,
             openMenuId: null,
+            importing: false,
+            importPreview: null,
+            importResult: null,
+            importError: null,
+            importSendClaims: true,
             completeNoteBookingId: null,
             completeNoteBody: '',
             completeNoteVisible: false,
@@ -7871,6 +7967,12 @@ function adminTabBar(tab) {
    menu and the completion note are separate two-step flows on the same row; opening
    any one closes the others. Leaving two open at once was how a single booking could
    end up showing twelve controls. */
+function resetImportState() {
+    state.admin.importPreview = null;
+    state.admin.importResult = null;
+    state.admin.importError = null;
+}
+
 function closeTransientPanels() {
     state.admin.deleteConfirmId = null;
     state.admin.cancelConfirmId = null;
@@ -8262,10 +8364,157 @@ function adminCalendarTab() {
     '</div>';
 }
 
+/* ── Bulk customer import (CsvReader + CustomerImportService) ── */
+
+// RFC 4180: quoted fields, commas and newlines inside quotes, "" as an escape, a BOM,
+// and either line ending. Port of Services/CsvReader.cs.
+function parseCsv(text) {
+    const rows = [];
+    if (!text) return rows;
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+    let row = [], field = '', inQuotes = false, quoted = false;
+    const finish = () => { const v = quoted ? field : field.trim(); field = ''; quoted = false; return v; };
+
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+            if (c !== '"') { field += c; continue; }
+            if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false;
+            continue;
+        }
+        if (c === '"') { inQuotes = true; quoted = true; }
+        else if (c === ',') row.push(finish());
+        else if (c === '\r' || c === '\n') {
+            if (c === '\r' && text[i + 1] === '\n') i++;
+            row.push(finish());
+            rows.push(row); row = [];
+        } else field += c;
+    }
+    if (field.length || quoted || row.length) { row.push(finish()); rows.push(row); }
+    while (rows.length && rows[rows.length - 1].every((f) => !f.trim())) rows.pop();
+    return rows;
+}
+
+const IMPORT_MAX_ROWS = 5000;
+const EMAIL_HEADERS = ['email', 'email address', 'e-mail'];
+const NAME_HEADERS  = ['name', 'full name', 'fullname', 'customer name', 'customer'];
+const PHONE_HEADERS = ['phone', 'phone number', 'mobile', 'telephone', 'tel'];
+const IMPORT_TEMPLATE = 'email,name,phone\njane@example.com,Jane Smith,07700 900000\n';
+
+const headerIndex = (header, names) =>
+    header.findIndex((h) => names.includes(h.trim().toLowerCase()));
+
+// CustomerImportService.Preview — classifies every row, writes nothing.
+function importPreview(csv) {
+    const rows = parseCsv(csv);
+    if (!rows.length) return { rows: [], unknownHeaders: [], fatalError: 'That file is empty.' };
+
+    const header = rows[0];
+    const emailCol = headerIndex(header, EMAIL_HEADERS);
+    if (emailCol < 0) {
+        return { rows: [], unknownHeaders: [], fatalError:
+            "No 'email' column found. The first row must be a header — download the template to see the expected columns." };
+    }
+    const nameCol = headerIndex(header, NAME_HEADERS);
+    const phoneCol = headerIndex(header, PHONE_HEADERS);
+    const known = [emailCol, nameCol, phoneCol];
+    const unknownHeaders = header
+        .map((h, i) => ({ h, i }))
+        .filter((x) => !known.includes(x.i) && x.h.trim())
+        .map((x) => x.h.trim());
+
+    const body = rows.slice(1);
+    if (body.length > IMPORT_MAX_ROWS) {
+        return { rows: [], unknownHeaders, fatalError:
+            'That file has ' + body.length.toLocaleString() + ' rows. The importer takes up to ' +
+            IMPORT_MAX_ROWS.toLocaleString() + ' at a time.' };
+    }
+
+    const at = (r, i) => (i >= 0 && i < r.length ? r[i] : '');
+    const seen = new Set();
+    const out = [];
+
+    body.forEach((raw, i) => {
+        const line = i + 2;
+        if (raw.every((f) => !f.trim())) return;   // blank line, not a row
+
+        const email = at(raw, emailCol), name = at(raw, nameCol), phone = at(raw, phoneCol);
+
+        if (!isValidEmail(email)) {
+            out.push({ line, email, name, phone, outcome: 'Invalid', fills: [],
+                problem: email.trim() ? "That email address isn't usable." : 'No email address.' });
+            return;
+        }
+        // Phone is optional on import — unlike registration, where the shop needs a way
+        // to reach someone about a booking they just made.
+        if (phone.trim() && !isValidPhone(phone)) {
+            out.push({ line, email, name, phone, outcome: 'Invalid', fills: [],
+                problem: "That phone number isn't usable." });
+            return;
+        }
+
+        const norm = email.trim().toLowerCase();
+        if (seen.has(norm)) {
+            out.push({ line, email: norm, name, phone, outcome: 'DuplicateInFile', fills: [],
+                problem: 'Already appears earlier in this file.' });
+            return;
+        }
+        seen.add(norm);
+
+        const current = DB.customers.find((c) => c.email.toLowerCase() === norm);
+        if (!current) {
+            out.push({ line, email: norm, name: name.trim(), phone: phone.trim(), outcome: 'Create', fills: [] });
+            return;
+        }
+        // Fill blanks only: the live record is more current than an old export.
+        const fills = [];
+        if (!current.fullName.trim() && name.trim()) fills.push('name');
+        if (!current.phone.trim() && phone.trim()) fills.push('phone');
+        out.push({ line, email: norm, name: name.trim(), phone: phone.trim(),
+            outcome: fills.length ? 'Update' : 'Unchanged', fills });
+    });
+
+    return { rows: out, unknownHeaders, fatalError: null };
+}
+
+const importCountOf = (preview, outcome) => preview.rows.filter((r) => r.outcome === outcome).length;
+const importActionable = (preview) => preview.rows.filter((r) => r.outcome === 'Create' || r.outcome === 'Update');
+
+// CustomerImportService.Commit.
+function importCommit(preview) {
+    let created = 0, updated = 0, adopted = 0;
+
+    importActionable(preview).forEach((row) => {
+        if (row.outcome === 'Create') {
+            const customer = {
+                id: uid('cust'), email: row.email, fullName: row.name, phone: row.phone,
+                // No password until they claim it, and explicitly unconfirmed.
+                createdAt: now(), emailConfirmed: false
+            };
+            DB.customers.push(customer);
+            created++;
+            // Adopts their guest bookings, as AuthService.LinkGuestBookings does.
+            DB.bookings.filter((b) => !b.customerId && b.customerEmail.toLowerCase() === row.email)
+                .forEach((b) => { b.customerId = customer.id; adopted++; });
+            return;
+        }
+        const existing = DB.customers.find((c) => c.email.toLowerCase() === row.email);
+        if (!existing) return;
+        if (row.fills.includes('name')) existing.fullName = row.name;
+        if (row.fills.includes('phone')) existing.phone = row.phone;
+        updated++;
+    });
+
+    persist();
+    return { created, updated, adopted };
+}
+
 /* ── Customers tab ─────────────────────────────────────────── */
 
 function adminCustomersTab() {
     const a = state.admin;
+    if (a.importing) return customerImportPanel();
     if (a.selectedCustomerId) return customerDetailPanel(customerDetail(a.selectedCustomerId));
 
     const result = customerSummaries(a.customerSearch, a.customerPage);
@@ -8276,7 +8525,10 @@ function adminCustomersTab() {
           '<label class="sr-only" for="customer-search">Search customers</label>' +
           '<input id="customer-search" class="form-control" type="text" placeholder="Search name, email or phone…" ' +
           'data-model="admin.customerSearch" data-live value="' + esc(a.customerSearch) + '" />' +
-        '</div></div>';
+        '</div>' +
+        // Bulk-importing personal data is an owner's job, not a mechanic's.
+        (isAdmin() ? '<button class="btn btn-outline" data-act="admin-import-open">Import customers</button>' : '') +
+        '</div>';
 
     // Same as the bookings list: the table being searched stays on the page and
     // reports the empty result itself.
@@ -8315,6 +8567,98 @@ function adminCustomersTab() {
 }
 
 // CustomerDetailPanel.razor
+// CustomerImportPanel.razor. Three states: pick a file, review what it will do, see
+// what it did. Nothing is written until the review has been seen.
+function customerImportPanel() {
+    const a = state.admin;
+    let out = '<div class="import-panel">' +
+        '<button class="btn btn-outline customer-detail__back" data-act="admin-import-close">' +
+          icon('arrow-left') + ' Back to customers</button>' +
+        '<h3 class="import-panel__title">Import customers</h3>';
+
+    if (!a.importResult) {
+        out += '<p class="import-panel__intro">A CSV with an <code>email</code> column, plus ' +
+            '<code>name</code> and <code>phone</code> if you have them. Existing customers are ' +
+            'matched on their email address and left alone, except to fill in details you have ' +
+            'and we don\'t. <a href="data:text/csv;charset=utf-8,' + encodeURIComponent(IMPORT_TEMPLATE) +
+            '" download="fixlosophy-customer-import-template.csv">Download a template</a>.</p>' +
+            '<div class="form-group"><label for="import-file">Choose a CSV file</label>' +
+            '<input id="import-file" class="form-control" type="file" accept=".csv,text/csv" ' +
+            'data-act="admin-import-file" /></div>';
+    }
+
+    if (a.importError) out += '<div class="import-panel__error" role="alert">' + esc(a.importError) + '</div>';
+
+    const summaryRow = (count, label, mod) =>
+        '<div class="import-summary__row"><span class="import-summary__count' +
+        (mod ? ' import-summary__count--' + mod : '') + '">' + count + '</span> <span>' + label + '</span></div>';
+
+    if (a.importPreview && !a.importResult) {
+        const p = a.importPreview;
+        const invalid = importCountOf(p, 'Invalid');
+        out += '<div class="import-summary">' +
+            summaryRow(importCountOf(p, 'Create'), 'to create', 'create') +
+            summaryRow(importCountOf(p, 'Update'), 'existing, with blanks to fill in') +
+            summaryRow(importCountOf(p, 'Unchanged'), 'already up to date — nothing to do') +
+            summaryRow(importCountOf(p, 'DuplicateInFile'), 'repeated in the file — the first one wins') +
+            summaryRow(invalid, "can't be used", invalid > 0 ? 'bad' : '') +
+        '</div>';
+
+        if (p.unknownHeaders.length) {
+            out += '<p class="import-panel__note">Ignoring ' + esc(p.unknownHeaders.join(', ')) +
+                ' — only email, name and phone are imported. If one of those is a mis-named ' +
+                'column, rename it and upload again.</p>';
+        }
+
+        const problems = p.rows.filter((r) => r.outcome === 'Invalid' || r.outcome === 'DuplicateInFile');
+        if (problems.length) {
+            out += '<div class="import-problems"><h4>Rows that won\'t be imported</h4>' +
+                '<div class="admin-table-wrapper"><table class="admin-table">' +
+                '<thead><tr><th>Line</th><th>Email</th><th>Reason</th></tr></thead><tbody>' +
+                problems.slice(0, 20).map((r) =>
+                    '<tr><td>' + r.line + '</td><td class="text-muted-sm">' +
+                    (r.email.trim() ? esc(r.email) : '—') + '</td>' +
+                    '<td class="text-muted-sm">' + esc(r.problem) + '</td></tr>').join('') +
+                '</tbody></table></div>' +
+                (problems.length > 20
+                    ? '<p class="import-panel__note">…and ' + (problems.length - 20) + ' more.</p>' : '') +
+            '</div>';
+        }
+
+        if (importActionable(p).length) {
+            out += '<label class="import-panel__opt"><input type="checkbox" data-act="admin-import-claims" ' +
+                (a.importSendClaims ? 'checked' : '') + ' /><span>Email the ' +
+                importCountOf(p, 'Create') + ' new customer' + (importCountOf(p, 'Create') === 1 ? '' : 's') +
+                ' a link to set a password</span></label>' +
+                '<p class="import-panel__note">Only people created by this import are emailed, so ' +
+                'running it again won\'t send twice. Existing customers are never emailed.</p>' +
+                '<div class="import-panel__actions">' +
+                  '<button class="action-btn action-btn--primary" data-act="admin-import-commit">Import these customers</button>' +
+                  '<button class="action-btn action-btn--keep" data-act="admin-import-reset">Choose another file</button>' +
+                '</div>';
+        } else {
+            out += '<p class="import-panel__note">Nothing in this file needs importing.</p>' +
+                '<button class="action-btn action-btn--keep" data-act="admin-import-reset">Choose another file</button>';
+        }
+    }
+
+    if (a.importResult) {
+        const r = a.importResult;
+        out += '<div class="import-summary">' +
+            summaryRow(r.created, 'customers created', 'create') +
+            summaryRow(r.updated, 'existing records filled in') +
+            summaryRow(r.adopted, 'past bookings attached to their new accounts') +
+            (a.importSendClaims ? summaryRow(r.created, 'claim emails sent') : '') +
+        '</div>' +
+        '<div class="import-panel__actions">' +
+          '<button class="action-btn action-btn--primary" data-act="admin-import-close">Done</button>' +
+          '<button class="action-btn action-btn--keep" data-act="admin-import-reset">Import another file</button>' +
+        '</div>';
+    }
+
+    return out + '</div>';
+}
+
 function customerDetailPanel(detail) {
     if (!detail) { state.admin.selectedCustomerId = null; return adminCustomersTab(); }
     const a = state.admin;
@@ -8799,6 +9143,33 @@ document.addEventListener('click', (e) => {
         break;
     }
     case 'admin-menu-close': state.admin.openMenuId = null; render(); break;
+    case 'admin-import-open':
+        if (!isAdmin()) break;   // guard, not just a hidden button
+        state.admin.selectedCustomerId = null;
+        state.admin.importing = true;
+        resetImportState();
+        render();
+        break;
+    case 'admin-import-close':
+        state.admin.importing = false;
+        resetImportState();
+        render();
+        break;
+    case 'admin-import-reset': resetImportState(); render(); break;
+    case 'admin-import-commit': {
+        const p = state.admin.importPreview;
+        if (!p) break;
+        const result = importCommit(p);
+        state.admin.importResult = result;
+        state.admin.importPreview = null;
+        render();
+        // The real site emails the new customers a claim link here. Nothing leaves the
+        // browser in the demo, so it says so instead.
+        toast(state.admin.importSendClaims && result.created
+            ? result.created + ' imported. They would each be emailed a link to set a password.'
+            : result.created + ' customers imported.');
+        break;
+    }
     case 'admin-cancel-start':
         closeTransientPanels();
         state.admin.cancelConfirmId = id;
@@ -9011,6 +9382,27 @@ document.addEventListener('change', (e) => {
     if (act === 'admin-assign') {
         assignStaff(el.dataset.id, el.value);
         render();
+        return;
+    }
+    if (act === 'admin-import-claims') { state.admin.importSendClaims = el.checked; return; }
+    if (act === 'admin-import-file') {
+        const file = el.files && el.files[0];
+        if (!file) return;
+        resetImportState();
+        if (file.size > 2 * 1024 * 1024) {
+            state.admin.importError = 'That file is larger than 2 MB.';
+            render();
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const preview = importPreview(String(reader.result || ''));
+            state.admin.importError = preview.fatalError;
+            state.admin.importPreview = preview.fatalError ? null : preview;
+            render();
+        };
+        reader.onerror = () => { state.admin.importError = "That file couldn't be read."; render(); };
+        reader.readAsText(file);
         return;
     }
     if (act === 'admin-sort') {

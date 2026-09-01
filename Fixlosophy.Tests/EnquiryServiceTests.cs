@@ -27,6 +27,7 @@ public class EnquiryServiceTests
         public Task SendBookingConfirmationAsync(Booking booking, string manageLink) => Task.CompletedTask;
         public Task SendBookingNotificationAsync(Booking booking, bool isCancellation) => Task.CompletedTask;
         public Task SendBookingStatusChangedAsync(Booking booking, bool isCancellation) => Task.CompletedTask;
+        public Task SendAccountClaimAsync(string toEmail, string toName, string claimLink) => Task.CompletedTask;
     }
 
     private static AppDbContext NewDb() =>
