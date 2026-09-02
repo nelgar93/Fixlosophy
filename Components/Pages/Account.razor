@@ -81,6 +81,7 @@
                                         </button>
                                     }
                                 </div>
+                                @JobNotes(b)
                             </div>
                         }
                     </div>
@@ -100,25 +101,45 @@
                                 <div class="account-booking-row__info">
                                     <strong>@b.ServiceName</strong>
                                     <span>@b.SlotDate.ToString("d MMM yyyy") &middot; @b.SlotTime</span>
-                                    @* Notes the mechanic chose to share — the written
-                                       report the Gold Service advertises. Internal
-                                       notes never reach here. *@
-                                    @if (_sharedNotes.TryGetValue(b.Id, out var notes))
-                                    {
-                                        @foreach (var note in notes)
-                                        {
-                                            <span class="account-booking-row__note">
-                                                <Icon Name="wrench" /> @note
-                                            </span>
-                                        }
-                                    }
                                 </div>
                                 <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                                @JobNotes(b)
                             </div>
                         }
                     </div>
                 </div>
             }
+
+            <!-- Your Bikes -->
+            <div class="booking-card">
+                <h2 class="booking-card__title">Your Bikes</h2>
+                <p class="booking-card__subtitle">Saved bikes appear as quick-select shortcuts when booking a repair.</p>
+                @if (bikeError != null)
+                {
+                    <div class="booking-error">@bikeError</div>
+                }
+                @if (loggedInCustomer.Bikes.Count > 0)
+                {
+                    <ul class="photo-picker-list">
+                        @foreach (var bike in loggedInCustomer.Bikes)
+                        {
+                            <li>
+                                <span>@bike.MakeModel</span>
+                                <button type="button" class="photo-picker-remove" @onclick="() => RemoveBike(bike.Id)">&times;</button>
+                            </li>
+                        }
+                    </ul>
+                }
+                @* Input and button in their own row rather than .form-row's two-column
+                   grid, which stretched the button to the row height and left it
+                   misaligned against the field's bottom margin. *@
+                <div class="inline-add-row">
+                    <label class="sr-only" for="new-bike">Bike make &amp; model</label>
+                    <input id="new-bike" class="form-control" type="text" @bind="newBikeName"
+                           placeholder="e.g. Trek Marlin 7, 2022" />
+                    <button class="btn btn-outline" @onclick="AddBike">Add Bike</button>
+                </div>
+            </div>
 
             <!-- Your Details -->
             <div class="booking-card">
@@ -176,37 +197,6 @@
                     </div>
                 </div>
                 <button class="btn btn-primary" @onclick="SavePassword">Update Password</button>
-            </div>
-
-            <!-- Your Bikes -->
-            <div class="booking-card">
-                <h2 class="booking-card__title">Your Bikes</h2>
-                <p class="booking-card__subtitle">Saved bikes appear as quick-select shortcuts when booking a repair.</p>
-                @if (bikeError != null)
-                {
-                    <div class="booking-error">@bikeError</div>
-                }
-                @if (loggedInCustomer.Bikes.Count > 0)
-                {
-                    <ul class="photo-picker-list">
-                        @foreach (var bike in loggedInCustomer.Bikes)
-                        {
-                            <li>
-                                <span>@bike.MakeModel</span>
-                                <button type="button" class="photo-picker-remove" @onclick="() => RemoveBike(bike.Id)">&times;</button>
-                            </li>
-                        }
-                    </ul>
-                }
-                @* Input and button in their own row rather than .form-row's two-column
-                   grid, which stretched the button to the row height and left it
-                   misaligned against the field's bottom margin. *@
-                <div class="inline-add-row">
-                    <label class="sr-only" for="new-bike">Bike make &amp; model</label>
-                    <input id="new-bike" class="form-control" type="text" @bind="newBikeName"
-                           placeholder="e.g. Trek Marlin 7, 2022" />
-                    <button class="btn btn-outline" @onclick="AddBike">Add Bike</button>
-                </div>
             </div>
 
             <!-- Your Data (UK GDPR) -->
@@ -274,7 +264,34 @@
 
     // BookingId -> notes staff chose to share on that job. Internal notes are
     // filtered out by the query, not here.
-    private Dictionary<string, List<string>> _sharedNotes = [];
+    private Dictionary<string, List<SharedNote>> _sharedNotes = [];
+
+    /// <summary>
+    /// The mechanic's written report on one job — the thing the Gold Service
+    /// advertises — shown inside that booking's own row rather than as a list of
+    /// notes elsewhere on the page. Internal notes never reach here.
+    ///
+    /// Rendered by both lists. A job can be finished on or before its appointment
+    /// date, and the report must not have to wait for the calendar to catch up
+    /// before the customer can read it.
+    /// </summary>
+    private RenderFragment<Booking> JobNotes => booking => @<text>
+        @if (_sharedNotes.TryGetValue(booking.Id, out var notes))
+        {
+            <div class="account-booking-row__notes">
+            @foreach (var note in notes)
+            {
+                <span class="account-booking-row__note">
+                    <span class="account-booking-row__note-head">
+                        <Icon Name="wrench" /> Mechanic's report
+                        &middot; @note.CreatedAt.ToString("d MMM yyyy")
+                    </span>
+                    <span class="account-booking-row__note-body">@note.Body</span>
+                </span>
+            }
+            </div>
+        }
+    </text>;
 
     private string profileName = "";
     private string profilePhone = "";
@@ -299,11 +316,11 @@
     private string? cancelMessage;
 
     private List<Booking> UpcomingBookings =>
-        _bookings.Where(b => b.SlotDate.Date >= ShopClock.Today && b.Status != BookingStatus.Cancelled)
+        _bookings.Where(BookingService.IsUpcoming)
                  .OrderBy(b => b.SlotDate).ThenBy(b => b.SlotTime).ToList();
 
     private List<Booking> BookingHistory =>
-        _bookings.Where(b => !(b.SlotDate.Date >= ShopClock.Today && b.Status != BookingStatus.Cancelled))
+        _bookings.Where(b => !BookingService.IsUpcoming(b))
                  .OrderByDescending(b => b.SlotDate).ThenByDescending(b => b.SlotTime).ToList();
 
     protected override async Task OnInitializedAsync()

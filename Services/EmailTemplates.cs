@@ -258,11 +258,14 @@ public static class EmailTemplates
     {
         var rows = new List<string>
         {
-            Row("From",    e.Name),
-            Row("Email",   e.Email),
-            Row("Service", e.Service)
+            Row("From",  e.Name),
+            Row("Email", e.Email)
         };
         if (!string.IsNullOrWhiteSpace(e.Phone))           rows.Add(Row("Phone", e.Phone));
+        // Service and the preferred date came off the form when it stopped being a
+        // second booking flow. Still rendered when present, so the enquiries already
+        // stored keep reading the way they were sent.
+        if (!string.IsNullOrWhiteSpace(e.Service))         rows.Add(Row("Service", e.Service));
         if (!string.IsNullOrWhiteSpace(e.BikeDescription)) rows.Add(Row("Bike", e.BikeDescription));
         if (e.PreferredDate is { } pref)
             rows.Add(Row("Preferred date", pref.ToString("dddd d MMMM yyyy", CultureInfo.GetCultureInfo("en-GB"))));
@@ -273,7 +276,7 @@ public static class EmailTemplates
 
         var text = $"New website enquiry\n\nFrom: {e.Name}\nEmail: {e.Email}\n" +
                    (string.IsNullOrWhiteSpace(e.Phone) ? "" : $"Phone: {e.Phone}\n") +
-                   $"Service: {e.Service}\n" +
+                   (string.IsNullOrWhiteSpace(e.Service) ? "" : $"Service: {e.Service}\n") +
                    (string.IsNullOrWhiteSpace(e.BikeDescription) ? "" : $"Bike: {e.BikeDescription}\n") +
                    (e.PreferredDate is { } p ? $"Preferred date: {p:dddd d MMMM yyyy}\n" : "") +
                    $"\n{e.Message}\n";

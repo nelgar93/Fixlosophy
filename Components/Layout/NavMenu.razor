@@ -20,25 +20,19 @@
         <div class="nav-links @(menuOpen ? "nav-links--open" : "")">
             <NavLink href="/" Match="NavLinkMatch.All" @onclick="CloseMenu">Home</NavLink>
             <NavLink href="/services" @onclick="CloseMenu">Services</NavLink>
-            <NavLink href="/about" @onclick="CloseMenu">About</NavLink>
             <NavLink href="/gallery" @onclick="CloseMenu">Gallery</NavLink>
-            <NavLink href="/contact" @onclick="CloseMenu">Contact</NavLink>
+            <NavLink href="/about" @onclick="CloseMenu">About Us</NavLink>
 
+            @* One slot, two states. "Hi, name" and Sign out used to live here too, which
+               made eight rows in the phone menu — taller than a handset in landscape.
+               Both /account and /admin carry their own Sign Out button in the page
+               header, so nothing was lost by taking them out of the bar. *@
             <AuthorizeView>
                 <Authorized>
-                    @if (context.User.IsInRole("Admin") || context.User.IsInRole("Worker"))
-                    {
-                        <NavLink href="/admin" @onclick="CloseMenu">Dashboard</NavLink>
-                    }
-                    @if (context.User.FindFirst(AuthClaims.UserType)?.Value == AuthClaims.CustomerType)
-                    {
-                        <NavLink href="/account" @onclick="CloseMenu">My Account</NavLink>
-                    }
-                    <span class="nav-user">Hi, @context.User.Identity?.Name</span>
-                    <a class="nav-auth-link" href="/auth/logout" data-enhance-nav="false">Sign out</a>
+                    <NavLink class="btn-nav" href="@DashboardHref(context.User)" @onclick="CloseMenu">Dashboard</NavLink>
                 </Authorized>
                 <NotAuthorized>
-                    <a class="nav-auth-link" href="/account/login" data-enhance-nav="false" @onclick="CloseMenu">Sign in</a>
+                    <a class="btn-nav" href="/account/login" data-enhance-nav="false" @onclick="CloseMenu">Sign in</a>
                 </NotAuthorized>
             </AuthorizeView>
 
@@ -49,6 +43,11 @@
 
 @code {
     private bool menuOpen = false;
+
+    /// Staff land on the shop's dashboard, customers on their own. Same claims the
+    /// two separate nav entries used to be gated on, now behind one label.
+    private static string DashboardHref(System.Security.Claims.ClaimsPrincipal user) =>
+        user.IsInRole("Admin") || user.IsInRole("Worker") ? "/admin" : "/account";
 
     protected override void OnInitialized()
     {

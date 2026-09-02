@@ -706,7 +706,7 @@
     // the shop still hears about the booking when the customer's address bounces.
     private async Task SendBookingEmailsAsync(Booking booking)
     {
-        var manageLink = Nav.ToAbsoluteUri(booking.CustomerId is null ? "/contact" : "/account").ToString();
+        var manageLink = Nav.ToAbsoluteUri(booking.CustomerId is null ? "/about#contact" : "/account").ToString();
 
         // Lights up the bell on any open dashboard. Independent of the emails below,
         // so a mail outage still tells whoever is on the shop floor.

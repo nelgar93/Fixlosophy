@@ -330,6 +330,36 @@ public class BookingServiceTests
         Assert.Equal(BookingStatus.Pending, db.Bookings.Single().Status);
     }
 
+    // ── Upcoming vs history ──────────────────────────────────────────────────
+    // The account page splits its two lists on this, and only the history list used
+    // to render the mechanic's report. Splitting on the date alone meant a job
+    // completed on its own appointment day stayed under "Upcoming Bookings", with the
+    // report on it invisible until the date rolled over.
+
+    [Theory]
+    [InlineData(BookingStatus.Completed, 0)]    // finished on the day
+    [InlineData(BookingStatus.Completed, 3)]    // finished early
+    [InlineData(BookingStatus.Cancelled, 0)]
+    [InlineData(BookingStatus.Cancelled, 3)]
+    public void IsUpcoming_IsFalse_OnceTheJobIsFinishedOrCalledOff(BookingStatus status, int dayOffset) =>
+        Assert.False(BookingService.IsUpcoming(
+            new Booking { Status = status, SlotDate = ShopClock.Today.AddDays(dayOffset) }));
+
+    [Theory]
+    [InlineData(BookingStatus.Pending)]
+    [InlineData(BookingStatus.Confirmed)]
+    [InlineData(BookingStatus.InProgress)]
+    public void IsUpcoming_IsTrue_ForAnOpenJobTodayOrLater(BookingStatus status)
+    {
+        Assert.True(BookingService.IsUpcoming(new Booking { Status = status, SlotDate = ShopClock.Today }));
+        Assert.True(BookingService.IsUpcoming(new Booking { Status = status, SlotDate = ShopClock.Today.AddDays(5) }));
+    }
+
+    [Fact]
+    public void IsUpcoming_IsFalse_ForAnOpenJobWhoseDateHasPassed() =>
+        Assert.False(BookingService.IsUpcoming(
+            new Booking { Status = BookingStatus.Confirmed, SlotDate = ShopClock.Today.AddDays(-1) }));
+
     // ── Transitions ──────────────────────────────────────────────────────────
     // UpdateStatus used to be an unconditional setter: the only thing stopping a
     // booking going from Completed straight back to Pending was which buttons the

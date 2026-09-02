@@ -339,6 +339,21 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
     public static bool CanTransition(BookingStatus from, BookingStatus to) =>
         AllowedTransitions.TryGetValue(from, out var allowed) && allowed.Contains(to);
 
+    /// <summary>
+    /// Whether a booking still lies ahead of the customer, for the account page's split
+    /// between "Upcoming" and history.
+    ///
+    /// Status comes first, and the date only decides the states that are still open.
+    /// Splitting on the date alone — which is what this replaced — left a job completed
+    /// on its own appointment day sitting under "Upcoming Bookings", where the
+    /// mechanic's report on it is not rendered at all. The report stayed invisible
+    /// until the date rolled over, which is precisely when the customer is most likely
+    /// to go looking for it.
+    /// </summary>
+    public static bool IsUpcoming(Booking booking) =>
+        booking.Status is not (BookingStatus.Completed or BookingStatus.Cancelled)
+        && booking.SlotDate.Date >= ShopClock.Today;
+
     /// The next step forward in the job, or null when there isn't one. Drives the
     /// dashboard's single primary action.
     public static BookingStatus? NextStage(BookingStatus from) => from switch

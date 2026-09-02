@@ -107,11 +107,19 @@
 .account-section { padding-top: var(--space-8); }
 .account-section .booking-card { margin-bottom: var(--space-6); }
 
+/* The saved-bike list sits directly above the add-a-bike field. .photo-picker-list
+   carries no bottom margin of its own because the booking wizard's copy of it takes
+   its spacing from the .form-group around it — which this row isn't in, so without
+   this the last bike sat flush against the input. Scoped to the account page for the
+   same reason: unscoped it would double the wizard's spacing. */
+.account-section .photo-picker-list { margin-bottom: var(--space-5); }
+
 .account-booking-list { display: flex; flex-direction: column; gap: var(--space-3); }
 
 .account-booking-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--space-4);
     padding: var(--space-3) var(--space-4);
     background: var(--dark-3);
@@ -1290,6 +1298,13 @@
 
 .admin-card__chevron.open { transform: rotate(90deg); color: var(--green); }
 
+/* An enquiry card has nothing to expand — everything it holds is already on it —
+   so it doesn't offer the pointer the bookings cards do. */
+.admin-card--static { cursor: default; }
+
+/* Handled ones stay readable but stop competing with the ones still outstanding. */
+.admin-card--handled { opacity: 0.6; }
+
 .admin-card__name {
     padding: 0 var(--space-4) var(--space-1);
     font-weight: 700;
@@ -2192,19 +2207,41 @@ a.action-btn { text-decoration: none; }
     flex-wrap: wrap;
 }
 
-/* A note the mechanic chose to share, shown on the customer's own booking. Tinted
-   green to read as something from the shop rather than more booking metadata. */
+/* The mechanic's report on this job. Its own full-width line rather than another
+   entry in the info column, so the reference and status badges stay level with the
+   service name — the same shape .customer-booking__notes takes in the dashboard.
+   order puts it last on a phone too, where the row reorders its other children. */
+.account-booking-row__notes {
+    flex: 1 1 100%;
+    order: 4;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+/* Tinted green to read as something from the shop rather than more booking
+   metadata, and headed so it is unmistakably the report on *this* job. */
 .account-booking-row__note {
     display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    margin-top: var(--space-1);
+    flex-direction: column;
+    gap: var(--space-1);
     padding: var(--space-3);
     background: rgba(61,187,72,0.07);
     border-left: var(--rule-accent) solid var(--green);
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    color: rgba(255,255,255,0.75) !important;
+    color: rgba(255,255,255,0.75);
     line-height: 1.5;
+}
+
+.account-booking-row__note-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--green);
 }
 
 /* ============================================================
@@ -2353,6 +2390,36 @@ a.action-btn { text-decoration: none; }
 .customer-detail__empty { margin-bottom: var(--space-5); }
 .customer-detail__add-note { margin-bottom: var(--space-5); }
 
+/* ---------- Enquiries tab ---------- */
+/* The message as it was typed, newlines and all. Capped so one long message can't
+   push the actions on every other row off the bottom of the screen. */
+.enquiry-message {
+    margin: 0;
+    font-size: var(--fs-sm);
+    line-height: 1.6;
+    color: rgba(255,255,255,0.8);
+    white-space: pre-wrap;
+    max-height: 12rem;
+    overflow-y: auto;
+}
+
+.admin-table__row--handled { opacity: 0.6; }
+
+/* The outstanding count, on the tab itself — the reason to open it. */
+.filter-tab__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    margin-left: var(--space-2);
+    padding: 0 var(--space-1);
+    border-radius: 50px;
+    background: var(--green);
+    color: var(--dark);
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+}
+
 /* ---------- Notes ---------- */
 .customer-notes,
 .customer-bookings,
@@ -2408,6 +2475,17 @@ a.action-btn { text-decoration: none; }
 /* Never linked to the account — shown so a guest booking doesn't make a returning
    customer look like a stranger. */
 .customer-booking--unlinked { opacity: 0.75; border-style: dashed; }
+
+/* A job's notes, on the job. Full width so they wrap onto their own line under the
+   row rather than squeezing the service name, and one step lighter than the row that
+   holds them — the same relationship .account-booking-row has with its card. */
+.customer-booking__notes {
+    flex: 1 1 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+.customer-booking__notes .customer-note { background: var(--dark-3); }
 
 .customer-booking__main {
     display: flex;
