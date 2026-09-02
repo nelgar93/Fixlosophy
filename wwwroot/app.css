@@ -354,11 +354,33 @@ h1[tabindex="-1"]:focus-visible {
     }
 }
 
-.nav-user {
-    color: rgba(255,255,255,0.5);
-    font-size: var(--fs-body-sm);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-    white-space: nowrap;
+/* The secondary nav pill — Dashboard signed in, Sign in signed out. Same shape as
+   .btn-book but outlined, so booking stays the one filled call to action. The
+   !important flags are here for the same reason .btn-book's are: both have to beat
+   `.nav-links a` above, which sets colour and padding on every link in the bar. */
+.btn-nav {
+    border: 1.5px solid var(--green);
+    color: var(--green) !important;
+    padding: var(--space-2) var(--space-5) !important;
+    border-radius: 50px !important;
+    font-weight: 600 !important;
+    margin-left: var(--space-2);
+}
+
+/* `.nav-links a.active` paints a translucent panel behind the current page's link.
+   Inside the pill that reads as a smudge against the border, so the active state
+   fills it instead. Outside the pointer guard, like the rule it overrides: the
+   current page is state, not hover feedback. */
+.nav-links a.btn-nav.active {
+    background: var(--green);
+    color: var(--white) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .btn-nav:hover {
+        background: var(--green);
+        color: var(--white) !important;
+    }
 }
 
 .btn-book {
@@ -1035,7 +1057,25 @@ h1[tabindex="-1"]:focus-visible {
     gap: var(--space-10);
 }
 
-.contact-form-wrapper h2 { margin-bottom: var(--space-6); }
+/* h3 since this became a section of /about rather than a page of its own — the
+   page's own h2 is the section header above it. */
+.contact-form-wrapper h2,
+.contact-form-wrapper h3 { margin-bottom: var(--space-3); }
+
+/* Points repair requests at the wizard. The form used to ask for a service and a
+   preferred date, which made it a second, worse booking flow; this says plainly
+   which one you want. */
+.contact-form-note {
+    color: rgba(255,255,255,0.55);
+    font-size: var(--fs-sm);
+    line-height: 1.6;
+    margin-bottom: var(--space-6);
+}
+.contact-form-note a { color: var(--green); text-decoration: underline; }
+
+/* The contact block sits between the values grid and the CTA banner, both of which
+   bring their own top padding — without this the three run together. */
+.contact-section { border-top: 1px solid var(--dark-3); }
 
 .form-group {
     margin-bottom: var(--space-5);
@@ -1754,11 +1794,18 @@ textarea.form-control { resize: vertical; min-height: 130px; }
         align-items: center;
     }
 
-    .btn-book {
+    .btn-book,
+    .btn-nav {
         margin-left: 0 !important;
         margin-top: var(--space-1);
         text-align: center;
     }
+    /* .nav-links a above makes every row a flex box, so text-align does nothing —
+       the pill labels sat hard against the left edge while the desktop bar centres
+       them. Both pills, not just the new one: .btn-book has had this since the flex
+       row landed. */
+    .btn-book,
+    .btn-nav { justify-content: center; }
 
     .navbar-wrapper { position: sticky; }
 }

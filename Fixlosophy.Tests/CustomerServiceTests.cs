@@ -152,6 +152,43 @@ public class CustomerServiceTests
         Assert.Empty(detail.UnlinkedGuestBookings);
     }
 
+    // The panel shows each job's notes on the job. A note written when completing a
+    // booking has to arrive keyed by that booking, not in the general pile.
+    [Fact]
+    public void GetCustomerDetail_FilesNotesUnderTheBookingTheyWereWrittenOn()
+    {
+        using var db = NewDb();
+        var c = SeedCustomer(db);
+        var b = SeedBooking(db, c.Id, c.Email, 70m, BookingStatus.Completed);
+        var svc = new CustomerService(db);
+
+        svc.AddNote(c.Id, b.Id, "staff-1", "Rebuilt the rear wheel.", visibleToCustomer: true);
+        svc.AddNote(c.Id, null, "staff-1", "Prefers a call, not a text.", visibleToCustomer: false);
+
+        var detail = svc.GetCustomerDetail(c.Id)!;
+
+        Assert.Equal("Rebuilt the rear wheel.", Assert.Single(detail.BookingNotes[b.Id]).Body);
+        Assert.Equal("Prefers a call, not a text.", Assert.Single(detail.GeneralNotes).Body);
+    }
+
+    // A note on a guest booking has no CustomerId — it is reachable only through the
+    // booking, and was stored and then invisible in this panel.
+    [Fact]
+    public void GetCustomerDetail_FindsNotesOnUnlinkedGuestBookings()
+    {
+        using var db = NewDb();
+        var c = SeedCustomer(db);
+        var guest = SeedBooking(db, null, "JANE@Example.com", 70m, BookingStatus.Completed, reference: "guest");
+        var svc = new CustomerService(db);
+
+        svc.AddNote(customerId: null, bookingId: guest.Id, authorStaffId: "staff-1",
+                    body: "Bottom bracket was seized.", visibleToCustomer: false);
+
+        var detail = svc.GetCustomerDetail(c.Id)!;
+
+        Assert.Equal("Bottom bracket was seized.", Assert.Single(detail.BookingNotes[guest.Id]).Body);
+    }
+
     [Fact]
     public void GetCustomerDetail_ReturnsNull_ForAnUnknownId() =>
         Assert.Null(new CustomerService(NewDb()).GetCustomerDetail("no-such-customer"));
@@ -212,7 +249,7 @@ public class CustomerServiceTests
 
         var shared = svc.GetCustomerVisibleNotesByBooking(c.Id);
 
-        Assert.Equal("Replaced the chain and cables.", Assert.Single(shared[b.Id]));
+        Assert.Equal("Replaced the chain and cables.", Assert.Single(shared[b.Id]).Body);
     }
 
     [Fact]

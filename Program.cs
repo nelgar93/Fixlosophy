@@ -279,7 +279,12 @@ app.MapRazorComponents<App>()
 
 // Public, indexable routes. Anything touching an account or the dashboard is
 // deliberately absent and disallowed below.
-string[] publicRoutes = ["/", "/services", "/about", "/gallery", "/contact", "/book"];
+string[] publicRoutes = ["/", "/services", "/about", "/gallery", "/book"];
+
+// /contact was folded into /about, which now carries the shop's details and the
+// enquiry form. Permanent rather than a deleted route: the address is on printed
+// cards and in Google's index, and a literal route beats the Blazor fallback.
+app.MapGet("/contact", () => Results.Redirect("/about#contact", permanent: true));
 
 app.MapGet("/robots.txt", (HttpContext http, IConfiguration config) =>
 {
@@ -868,7 +873,13 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
             DO $$ BEGIN
                 IF NOT EXISTS (SELECT 1 FROM pg_sequences WHERE schemaname = 'public' AND sequencename = 'BookingReferenceSeq') THEN
                     CREATE SEQUENCE ""BookingReferenceSeq"";
-                    PERFORM setval('""BookingReferenceSeq""', (SELECT COUNT(*) FROM ""Bookings""));
+                    -- setval's floor is 1, so a count of 0 threw and took the whole
+                    -- CREATE down with it: on a brand-new database the sequence was
+                    -- never created and startup then failed on the missing relation.
+                    -- is_called=false makes the first nextval return 1 rather than 2.
+                    PERFORM setval('""BookingReferenceSeq""',
+                                   GREATEST((SELECT COUNT(*) FROM ""Bookings""), 1),
+                                   (SELECT COUNT(*) FROM ""Bookings"") > 0);
                 END IF;
             END $$;");
     }

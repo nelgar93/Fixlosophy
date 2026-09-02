@@ -96,7 +96,25 @@ public class CustomerService(AppDbContext db)
             .ToList();
 #pragma warning restore CA1304, CA1311, CA1862
 
-        var notes = GetNotesForCustomer(customerId);
+        // Notes are split by what they are about, because the detail panel shows each
+        // job's notes on the job itself rather than as one undifferentiated list.
+        //
+        // Keyed across the unlinked guest bookings as well as the linked ones: a note
+        // written against a guest booking has no CustomerId, so GetNotesForCustomer
+        // never sees it and it was stored and then invisible here.
+        var bookingIds = linked.Select(b => b.Id).Concat(unlinked.Select(b => b.Id)).ToList();
+        var bookingNotes = db.CustomerNotes
+            .Where(n => n.BookingId != null && bookingIds.Contains(n.BookingId))
+            .AsNoTracking()
+            .OrderByDescending(n => n.CreatedAt)
+            // In memory for the same reason as GetCustomerVisibleNotesByBooking below:
+            // a GroupBy projecting to a collection per key has no SQL translation.
+            .ToList()
+            .GroupBy(n => n.BookingId!)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // What's left is about the customer rather than any one job.
+        var generalNotes = GetNotesForCustomer(customerId).Where(n => n.BookingId is null).ToList();
 
         // Lifetime spend counts completed work only: a pending or cancelled booking
         // isn't money, and the price on a booking is an estimate until the job is done.
@@ -106,7 +124,8 @@ public class CustomerService(AppDbContext db)
             Customer: customer,
             Bookings: linked,
             UnlinkedGuestBookings: unlinked,
-            Notes: notes,
+            GeneralNotes: generalNotes,
+            BookingNotes: bookingNotes,
             CompletedCount: completed.Count,
             LifetimeSpend: completed.Sum(b => b.ServicePrice),
             FirstVisit: linked.Count > 0 ? linked.Min(b => b.SlotDate) : null,
@@ -131,9 +150,13 @@ public class CustomerService(AppDbContext db)
           .OrderByDescending(n => n.CreatedAt)
           .ToList();
 
-    /// Notes on a customer's bookings that they're allowed to see. Used by the
-    /// account page and the GDPR export.
-    public Dictionary<string, List<string>> GetCustomerVisibleNotesByBooking(string customerId) =>
+    /// Notes on a customer's bookings that they're allowed to see, keyed by booking.
+    /// Used by the account page, which shows each one on the job it came out of.
+    ///
+    /// Carries CreatedAt as well as the body: the account page heads the note with the
+    /// date it was written, which is not the booking's own date — a job finished a day
+    /// late would otherwise read as having been reported on the appointment.
+    public Dictionary<string, List<SharedNote>> GetCustomerVisibleNotesByBooking(string customerId) =>
         db.CustomerNotes
           .Where(n => n.CustomerId == customerId && n.VisibleToCustomer && n.BookingId != null)
           .AsNoTracking()
@@ -143,7 +166,7 @@ public class CustomerService(AppDbContext db)
           // handful of notes per customer, so the round trip is the same either way.
           .ToList()
           .GroupBy(n => n.BookingId!)
-          .ToDictionary(g => g.Key, g => g.Select(n => n.Body).ToList());
+          .ToDictionary(g => g.Key, g => g.Select(n => new SharedNote(n.Body, n.CreatedAt)).ToList());
 
     /// <summary>
     /// Records a note. Returns null when there's nothing to record — an empty note is
@@ -180,6 +203,9 @@ public class CustomerService(AppDbContext db)
     }
 }
 
+/// One note the customer is allowed to see, as their account page needs it.
+public sealed record SharedNote(string Body, DateTime CreatedAt);
+
 /// A row in the admin's customer list.
 public sealed record CustomerSummary(
     string Id,
@@ -195,7 +221,11 @@ public sealed record CustomerDetail(
     Customer Customer,
     List<Booking> Bookings,
     List<Booking> UnlinkedGuestBookings,
-    List<CustomerNote> Notes,
+    /// Notes about the customer rather than any one job.
+    List<CustomerNote> GeneralNotes,
+    /// BookingId -> the notes written on that job, newest first. Covers the unlinked
+    /// guest bookings too.
+    Dictionary<string, List<CustomerNote>> BookingNotes,
     int CompletedCount,
     decimal LifetimeSpend,
     DateTime? FirstVisit,

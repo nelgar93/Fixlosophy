@@ -85,7 +85,7 @@ Responsive sweep — every route at every breakpoint, reporting only failures:
 
 ```bash
 {
-for p in / /services /about /gallery /contact /book /privacy /terms \
+for p in / /services /about /gallery /book /privacy /terms \
          /account/login /account/register /admin/login /not-found; do
   for w in 320 360 390 414 480 640 768 1024 1440; do
     echo "size ${w}x900"; echo "goto http://localhost:5127$p"
@@ -117,7 +117,7 @@ viewport on focus and never zoom back:
 
 ```bash
 {
-  echo 'size 390x900'; echo 'goto http://localhost:5127/contact'
+  echo 'size 390x900'; echo 'goto http://localhost:5127/about'
   echo 'eval () => [...new Set([...document.querySelectorAll("input,select,textarea")].map(e=>parseFloat(getComputedStyle(e).fontSize)))]'
   echo 'quit'
 } | dotnet bin/Release/net10.0/pwdriver.dll
@@ -249,10 +249,11 @@ EF Core InMemory — no database or secrets needed.
   selector — re-run before going hunting.
 - **`goto` on the same URL you're already on may not fully reload.** Interleave a
   different route, or change viewport between measurements.
-- **A residual ~948px overflow reading on `/about` and `/contact`.** The driver settles
+- **A residual ~948px overflow reading on `/about`.** The driver settles
   layout across animation frames before measuring, but a long sweep still occasionally
-  reports content at exactly 948px on the two pages carrying the portrait Supabase
-  photo. It is not reproducible in isolation (18 attempts), and
+  reports content at exactly 948px on the page carrying the portrait Supabase
+  photo. (`/contact` used to show it too, before it folded into `/about`.)
+  It is not reproducible in isolation (18 attempts), and
   `PerformanceObserver('layout-shift')` reports **CLS 0** on those pages — so it is a
   measurement artifact between `goto` resolving and first paint, not a page defect.
   Re-check in isolation before believing a hit.

@@ -27,6 +27,8 @@ const FILE = path.join(__dirname, 'dist', 'fixlosophy-demo.html');
 const SERVED = urlArg !== -1 ? process.argv[urlArg + 1].replace(/\/$/, '') + '/' : null;
 const URL_BASE = SERVED || 'file://' + FILE;
 
+// #/contact is retired — the real app 301s it to /about#contact, and the demo's
+// router renders About there. Still swept, so the old address never dead-ends.
 const ROUTES = ['#/', '#/services', '#/about', '#/gallery', '#/contact', '#/book',
                 '#/privacy', '#/terms', '#/account/login', '#/account/register',
                 '#/account/forgot', '#/admin/login', '#/nowhere'];
@@ -108,8 +110,8 @@ const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
 
     console.log('\nPersonas');
     const personas = [
-        ['guest', 'Book a Repair'],
-        ['customer', 'My Account'],
+        ['guest', 'Sign in'],
+        ['customer', 'Dashboard'],
         ['admin', 'Dashboard'],
         ['worker', 'Dashboard'],
         ['worker-restricted', 'Dashboard']
@@ -137,6 +139,46 @@ const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
     const account = await page.locator('#app').innerText();
     check(/Upcoming/i.test(account), 'account page lists upcoming bookings');
     check(/Specialized Allez/.test(account), 'saved bikes show');
+    check(account.indexOf('Your Bikes') < account.indexOf('Your Details'),
+        'Your Bikes sits above Your Details');
+
+    // The shared completion note belongs to the job it came out of, not to a list of
+    // its own — and a job finished on its appointment day must not hide in Upcoming.
+    const report = await page.evaluate(() => {
+        const note = document.querySelector('.account-booking-row__note');
+        const upcoming = [...document.querySelectorAll('.booking-card')]
+            .find((c) => /Upcoming/.test(c.querySelector('.booking-card__title')?.textContent || ''));
+        return {
+            onARow: !!note?.closest('.account-booking-row'),
+            headed: /Mechanic's report/.test(
+                document.querySelector('.account-booking-row__note-head')?.textContent || ''),
+            completedStuckInUpcoming: !!upcoming?.querySelector('.status-badge--completed')
+        };
+    });
+    check(report.onARow, "the mechanic's report renders inside its booking row");
+    check(report.headed, 'it is headed as the report on that job');
+    check(!report.completedStuckInUpcoming, 'a completed booking is out of Upcoming');
+
+    console.log('\nAdmin customer panel');
+    await page.evaluate(() => {
+        applyPersona('admin');
+        state.admin.tab = 'customers';
+        state.admin.selectedCustomerId = 'cust-aisha';
+        render();
+    });
+    await page.waitForTimeout(200);
+    const panel = await page.evaluate(() => {
+        const headings = [...document.querySelectorAll('.admin-subheading')].map((h) => h.textContent.trim());
+        return {
+            nested: document.querySelectorAll('.customer-booking .customer-booking__notes .customer-note').length,
+            bookingsFirst: headings.findIndex((h) => h.startsWith('Bookings'))
+                         < headings.findIndex((h) => h.startsWith('General')),
+            keepsShareBox: !!document.querySelector('.customer-detail__add-note .complete-note__share')
+        };
+    });
+    check(panel.nested > 0, 'job notes render under the booking they came from');
+    check(panel.bookingsFirst, 'bookings come before the general notes');
+    check(panel.keepsShareBox, 'the share-with-customer box is still there');
 
     console.log('\nData export');
     await page.evaluate(() => applyPersona('customer'));

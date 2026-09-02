@@ -358,11 +358,33 @@ h1[tabindex="-1"]:focus-visible {
     }
 }
 
-.nav-user {
-    color: rgba(255,255,255,0.5);
-    font-size: var(--fs-body-sm);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-    white-space: nowrap;
+/* The secondary nav pill — Dashboard signed in, Sign in signed out. Same shape as
+   .btn-book but outlined, so booking stays the one filled call to action. The
+   !important flags are here for the same reason .btn-book's are: both have to beat
+   `.nav-links a` above, which sets colour and padding on every link in the bar. */
+.btn-nav {
+    border: 1.5px solid var(--green);
+    color: var(--green) !important;
+    padding: var(--space-2) var(--space-5) !important;
+    border-radius: 50px !important;
+    font-weight: 600 !important;
+    margin-left: var(--space-2);
+}
+
+/* `.nav-links a.active` paints a translucent panel behind the current page's link.
+   Inside the pill that reads as a smudge against the border, so the active state
+   fills it instead. Outside the pointer guard, like the rule it overrides: the
+   current page is state, not hover feedback. */
+.nav-links a.btn-nav.active {
+    background: var(--green);
+    color: var(--white) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .btn-nav:hover {
+        background: var(--green);
+        color: var(--white) !important;
+    }
 }
 
 .btn-book {
@@ -1039,7 +1061,25 @@ h1[tabindex="-1"]:focus-visible {
     gap: var(--space-10);
 }
 
-.contact-form-wrapper h2 { margin-bottom: var(--space-6); }
+/* h3 since this became a section of /about rather than a page of its own — the
+   page's own h2 is the section header above it. */
+.contact-form-wrapper h2,
+.contact-form-wrapper h3 { margin-bottom: var(--space-3); }
+
+/* Points repair requests at the wizard. The form used to ask for a service and a
+   preferred date, which made it a second, worse booking flow; this says plainly
+   which one you want. */
+.contact-form-note {
+    color: rgba(255,255,255,0.55);
+    font-size: var(--fs-sm);
+    line-height: 1.6;
+    margin-bottom: var(--space-6);
+}
+.contact-form-note a { color: var(--green); text-decoration: underline; }
+
+/* The contact block sits between the values grid and the CTA banner, both of which
+   bring their own top padding — without this the three run together. */
+.contact-section { border-top: 1px solid var(--dark-3); }
 
 .form-group {
     margin-bottom: var(--space-5);
@@ -1758,11 +1798,18 @@ textarea.form-control { resize: vertical; min-height: 130px; }
         align-items: center;
     }
 
-    .btn-book {
+    .btn-book,
+    .btn-nav {
         margin-left: 0 !important;
         margin-top: var(--space-1);
         text-align: center;
     }
+    /* .nav-links a above makes every row a flex box, so text-align does nothing —
+       the pill labels sat hard against the left edge while the desktop bar centres
+       them. Both pills, not just the new one: .btn-book has had this since the flex
+       row landed. */
+    .btn-book,
+    .btn-nav { justify-content: center; }
 
     .navbar-wrapper { position: sticky; }
 }
@@ -2075,11 +2122,19 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 .account-section { padding-top: var(--space-8); }
 .account-section .booking-card { margin-bottom: var(--space-6); }
 
+/* The saved-bike list sits directly above the add-a-bike field. .photo-picker-list
+   carries no bottom margin of its own because the booking wizard's copy of it takes
+   its spacing from the .form-group around it — which this row isn't in, so without
+   this the last bike sat flush against the input. Scoped to the account page for the
+   same reason: unscoped it would double the wizard's spacing. */
+.account-section .photo-picker-list { margin-bottom: var(--space-5); }
+
 .account-booking-list { display: flex; flex-direction: column; gap: var(--space-3); }
 
 .account-booking-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--space-4);
     padding: var(--space-3) var(--space-4);
     background: var(--dark-3);
@@ -3258,6 +3313,13 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
 .admin-card__chevron.open { transform: rotate(90deg); color: var(--green); }
 
+/* An enquiry card has nothing to expand — everything it holds is already on it —
+   so it doesn't offer the pointer the bookings cards do. */
+.admin-card--static { cursor: default; }
+
+/* Handled ones stay readable but stop competing with the ones still outstanding. */
+.admin-card--handled { opacity: 0.6; }
+
 .admin-card__name {
     padding: 0 var(--space-4) var(--space-1);
     font-weight: 700;
@@ -4160,19 +4222,41 @@ a.action-btn { text-decoration: none; }
     flex-wrap: wrap;
 }
 
-/* A note the mechanic chose to share, shown on the customer's own booking. Tinted
-   green to read as something from the shop rather than more booking metadata. */
+/* The mechanic's report on this job. Its own full-width line rather than another
+   entry in the info column, so the reference and status badges stay level with the
+   service name — the same shape .customer-booking__notes takes in the dashboard.
+   order puts it last on a phone too, where the row reorders its other children. */
+.account-booking-row__notes {
+    flex: 1 1 100%;
+    order: 4;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+/* Tinted green to read as something from the shop rather than more booking
+   metadata, and headed so it is unmistakably the report on *this* job. */
 .account-booking-row__note {
     display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    margin-top: var(--space-1);
+    flex-direction: column;
+    gap: var(--space-1);
     padding: var(--space-3);
     background: rgba(61,187,72,0.07);
     border-left: var(--rule-accent) solid var(--green);
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    color: rgba(255,255,255,0.75) !important;
+    color: rgba(255,255,255,0.75);
     line-height: 1.5;
+}
+
+.account-booking-row__note-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--green);
 }
 
 /* ============================================================
@@ -4321,6 +4405,36 @@ a.action-btn { text-decoration: none; }
 .customer-detail__empty { margin-bottom: var(--space-5); }
 .customer-detail__add-note { margin-bottom: var(--space-5); }
 
+/* ---------- Enquiries tab ---------- */
+/* The message as it was typed, newlines and all. Capped so one long message can't
+   push the actions on every other row off the bottom of the screen. */
+.enquiry-message {
+    margin: 0;
+    font-size: var(--fs-sm);
+    line-height: 1.6;
+    color: rgba(255,255,255,0.8);
+    white-space: pre-wrap;
+    max-height: 12rem;
+    overflow-y: auto;
+}
+
+.admin-table__row--handled { opacity: 0.6; }
+
+/* The outstanding count, on the tab itself — the reason to open it. */
+.filter-tab__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    margin-left: var(--space-2);
+    padding: 0 var(--space-1);
+    border-radius: 50px;
+    background: var(--green);
+    color: var(--dark);
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+}
+
 /* ---------- Notes ---------- */
 .customer-notes,
 .customer-bookings,
@@ -4377,6 +4491,17 @@ a.action-btn { text-decoration: none; }
    customer look like a stranger. */
 .customer-booking--unlinked { opacity: 0.75; border-style: dashed; }
 
+/* A job's notes, on the job. Full width so they wrap onto their own line under the
+   row rather than squeezing the service name, and one step lighter than the row that
+   holds them — the same relationship .account-booking-row has with its card. */
+.customer-booking__notes {
+    flex: 1 1 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+.customer-booking__notes .customer-note { background: var(--dark-3); }
+
 .customer-booking__main {
     display: flex;
     flex-direction: column;
@@ -4416,7 +4541,6 @@ a.action-btn { text-decoration: none; }
 /* Green edge = the customer can see this one, matching how it looks on their own
    booking. */
 .booking-note--shared { border-left-color: var(--green); }
-
 /* ============================================================
    DEMO HARNESS — not part of the real site
    Everything above this point is wwwroot/app.css + booking.css
@@ -4691,14 +4815,6 @@ a.action-btn { text-decoration: none; }
     .demo-export__actions .btn { flex: 1; justify-content: center; }
 }
 
-/* The nav's sign-out is an <a href="/auth/logout"> in the real app; here it has to
-   be a button, so it borrows the link's own styling rather than a button's. */
-button.nav-auth-link {
-    background: none;
-    border: 0;
-    cursor: pointer;
-    font: inherit;
-}
 </style>
 <div id="app"></div>
 <div id="demo-bar" class="demo-bar"></div>
@@ -5405,7 +5521,7 @@ function seedNotifications() {
     DB.enquiries.filter((e) => !e.handledAt).forEach((e) => {
         DB.notifications.push({
             id: uid('notif'), type: 'NewEnquiry', createdAt: e.createdAt,
-            title: 'New enquiry — ' + e.service,
+            title: 'New enquiry — ' + e.name,
             body: e.name + ': ' + e.message.slice(0, 70) + (e.message.length > 70 ? '…' : ''),
             linkUrl: '#/admin', targetStaffId: null
         });
@@ -5540,9 +5656,9 @@ const notesForBooking = (bookingId) => DB.notes
 function sharedNotesByBooking(customerId) {
     const map = {};
     DB.notes
-        .filter((n) => n.customerId === customerId && n.visibleToCustomer)
+        .filter((n) => n.customerId === customerId && n.visibleToCustomer && n.bookingId)
         .forEach((n) => {
-            (map[n.bookingId] = map[n.bookingId] || []).push(n.body);
+            (map[n.bookingId] = map[n.bookingId] || []).push({ body: n.body, createdAt: n.createdAt });
         });
     return map;
 }
@@ -5574,6 +5690,17 @@ function customerSummaries(search, page) {
 }
 
 // CustomerService.GetDetail
+// BookingId -> its notes, newest first, for the customer detail panel.
+function notesByBooking(bookings) {
+    const ids = new Set(bookings.map((b) => b.id));
+    const map = {};
+    DB.notes
+        .filter((n) => n.bookingId && ids.has(n.bookingId))
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .forEach((n) => { (map[n.bookingId] = map[n.bookingId] || []).push(n); });
+    return map;
+}
+
 function customerDetail(id) {
     const c = customerById(id);
     if (!c) return null;
@@ -5587,7 +5714,14 @@ function customerDetail(id) {
         unlinkedGuestBookings: DB.bookings
             .filter((b) => !b.customerId && b.customerEmail.toLowerCase() === c.email.toLowerCase())
             .sort((a, b) => b.slotDate - a.slotDate),
-        notes: DB.notes.filter((n) => n.customerId === id).sort((a, b) => b.createdAt - a.createdAt),
+        // Split by what each note is about. bookingNotes covers the unlinked guest
+        // bookings too: a note on one has no customerId, so filtering by customer
+        // alone left it stored and invisible here.
+        generalNotes: DB.notes
+            .filter((n) => n.customerId === id && !n.bookingId)
+            .sort((a, b) => b.createdAt - a.createdAt),
+        bookingNotes: notesByBooking(bookings.concat(
+            DB.bookings.filter((b) => !b.customerId && b.customerEmail.toLowerCase() === c.email.toLowerCase()))),
         completedCount: completed.length,
         // Completed jobs only — a pending or cancelled booking isn't money.
         lifetimeSpend: completed.reduce((sum, b) => sum + b.servicePrice, 0),
@@ -5819,7 +5953,7 @@ function markAllRead(staffId) {
 function submitEnquiry(model) {
     const enquiry = {
         id: uid('enq'), createdAt: now(), name: model.name, email: model.email,
-        phone: model.phone || '', service: model.service,
+        phone: model.phone || '', service: model.service || '',
         bikeDescription: model.bikeDescription || '', message: model.message,
         preferredDate: model.preferredDate ? parseIsoDate(model.preferredDate) : null,
         handledAt: null
@@ -5827,7 +5961,7 @@ function submitEnquiry(model) {
     DB.enquiries.unshift(enquiry);
     raiseNotification({
         type: 'NewEnquiry',
-        title: 'New enquiry — ' + enquiry.service,
+        title: 'New enquiry — ' + enquiry.name,
         body: enquiry.name + ': ' + enquiry.message.slice(0, 70) + (enquiry.message.length > 70 ? '…' : ''),
         linkUrl: '#/admin'
     });
@@ -5909,7 +6043,9 @@ function exportCustomerData(id) {
             notes: b.notes,
             status: b.status,
             photoCount: b.photos.length,
-            serviceNotes: shared[b.id] || []
+            // Bodies only — the export has always been the text, and the date the
+            // note was written is the account page's business.
+            serviceNotes: (shared[b.id] || []).map((n) => n.body)
         }))
     };
 }
@@ -6200,6 +6336,7 @@ function freshUiState() {
             selectedCustomerId: null,
             customerNoteBody: '',
             customerNoteVisible: false,
+            showHandledEnquiries: false,
             editPrices: {},
             priceSaveMessage: null,
             staffForm: { fullName: '', email: '', role: 'Worker', password: '' },
@@ -6246,20 +6383,15 @@ function navMenu(route) {
     const link = (href, label) =>
         '<a href="' + href + '" class="' + (route === href ? 'active' : '') + '" data-nav>' + label + '</a>';
 
-    let authLinks = '';
-    if (staff) {
-        authLinks =
-            link('#/admin', 'Dashboard') +
-            '<span class="nav-user">Hi, ' + esc(staff.fullName.split(' ')[0]) + '</span>' +
-            '<button class="nav-auth-link" data-act="signout">Sign out</button>';
-    } else if (customer) {
-        authLinks =
-            link('#/account', 'My Account') +
-            '<span class="nav-user">Hi, ' + esc(customer.fullName.split(' ')[0]) + '</span>' +
-            '<button class="nav-auth-link" data-act="signout">Sign out</button>';
-    } else {
-        authLinks = '<a class="nav-auth-link" href="#/account/login" data-nav>Sign in</a>';
-    }
+    // One slot, two states — Dashboard signed in, Sign in signed out, both the
+    // outlined pill. "Hi, name" and Sign out came out of the bar: /account and
+    // /admin each carry their own Sign Out button in the page header.
+    const pill = (href, label) =>
+        '<a href="' + href + '" class="btn-nav ' + (route === href ? 'active' : '') + '" data-nav>' + label + '</a>';
+
+    const authLinks = staff    ? pill('#/admin', 'Dashboard')
+                    : customer ? pill('#/account', 'Dashboard')
+                    :            pill('#/account/login', 'Sign in');
 
     return '' +
     '<header class="navbar-wrapper">' +
@@ -6271,9 +6403,8 @@ function navMenu(route) {
         '<div class="nav-links ' + (state.navOpen ? 'nav-links--open' : '') + '">' +
           link('#/', 'Home') +
           link('#/services', 'Services') +
-          link('#/about', 'About') +
           link('#/gallery', 'Gallery') +
-          link('#/contact', 'Contact') +
+          link('#/about', 'About Us') +
           authLinks +
           '<a class="btn-book" href="#/book" data-nav>Book a Repair</a>' +
         '</div>' +
@@ -6292,9 +6423,8 @@ function siteFooter() {
         '<div class="footer-links"><h6>Navigate</h6><ul>' +
           '<li><a href="#/" data-nav>Home</a></li>' +
           '<li><a href="#/services" data-nav>Services</a></li>' +
-          '<li><a href="#/about" data-nav>About</a></li>' +
           '<li><a href="#/gallery" data-nav>Gallery</a></li>' +
-          '<li><a href="#/contact" data-nav>Contact</a></li>' +
+          '<li><a href="#/about" data-nav>About Us</a></li>' +
           '<li><a href="#/privacy" data-nav>Privacy</a></li>' +
           '<li><a href="#/terms" data-nav>Terms</a></li>' +
         '</ul></div>' +
@@ -6570,9 +6700,11 @@ function viewAbout() {
       '</div>' +
     '</div></section>' +
 
+    contactSection() +
+
     ctaBanner('Come and meet the team',
               'Drop in during opening hours or book your repair online. We\'d love to see your bike.',
-              '<a href="#/contact" class="btn btn-primary btn-lg" data-nav>Get in Touch</a>' +
+              '<a href="#/book" class="btn btn-primary btn-lg" data-nav>Book a Repair</a>' +
               '<a href="#/services" class="btn btn-ghost btn-lg" data-nav>View Services</a>');
 }
 
@@ -6606,7 +6738,7 @@ function viewGallery() {
     ctaBanner('Roll in and say hello',
               'Walk-ins are welcome for quick fixes, or book a slot online and we\'ll have the stand ready.',
               '<a href="#/book" class="btn btn-primary btn-lg" data-nav>Book a Repair</a>' +
-              '<a href="#/contact" class="btn btn-ghost btn-lg" data-nav>Get in Touch</a>');
+              '<a href="#/about" class="btn btn-ghost btn-lg" data-nav>Get in Touch</a>');
 }
 
 function lightbox() {
@@ -6627,7 +6759,9 @@ function lightbox() {
     '</div>';
 }
 
-function viewContact() {
+// Folded into /about. Not a page of its own any more: two pages said who we are and
+// where we are, and the form competed with the booking wizard for the same job.
+function contactSection() {
     const m = state.contact;
     const err = state.contactErrors;
     const field = (name) => err[name] ? '<div class="validation-message">' + esc(err[name]) + '</div>' : '';
@@ -6652,21 +6786,12 @@ function viewContact() {
                 '<input id="phone" class="form-control" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" pattern="[0-9 ()+.\\-]{7,20}" data-phone-input ' +
                 'placeholder="07700 900000" data-model="contact.phone" value="' + esc(m.phone) + '" /></div>' +
             '</div>' +
-            '<div class="form-group"><label for="service">Service Required *</label>' +
-              '<select id="service" class="form-control" data-model="contact.service">' +
-                ['', 'Flat Tyre Repair', 'Brake Adjustment', 'Gear Indexing', 'Basic Tune-Up', 'Full Service',
-                 'E-Bike Service', 'Safety Check', 'Suspension Service', 'Custom Build', 'Other / Not Sure']
-                  .map((o) => '<option value="' + esc(o) + '"' + (m.service === o ? ' selected' : '') + '>' +
-                              (o === '' ? '— Select a service —' : esc(o)) + '</option>').join('') +
-              '</select>' + field('service') + '</div>' +
             '<div class="form-group"><label for="bike">Bike Type &amp; Brand (optional)</label>' +
               '<input id="bike" class="form-control" placeholder="e.g. Trek Marlin 7 MTB, 2021" ' +
               'data-model="contact.bike" value="' + esc(m.bike) + '" /></div>' +
-            '<div class="form-group"><label for="message">Describe the Issue *</label>' +
+            '<div class="form-group"><label for="message">Your Message *</label>' +
               '<textarea id="message" class="form-control" rows="5" data-model="contact.message" ' +
-              'placeholder="Tell us what\'s happening with your bike...">' + esc(m.message) + '</textarea>' + field('message') + '</div>' +
-            '<div class="form-group"><label for="preferred">Preferred Date (optional)</label>' +
-              '<input id="preferred" class="form-control" type="date" data-model="contact.preferred" value="' + esc(m.preferred) + '" /></div>' +
+              'placeholder="What would you like to know?">' + esc(m.message) + '</textarea>' + field('message') + '</div>' +
             (err.form ? '<div class="booking-error">' + esc(err.form) + '</div>' : '') +
             '<p class="form-consent">We\'ll use these details only to answer your enquiry — see our ' +
               '<a href="#/privacy" data-nav>privacy policy</a>.</p>' +
@@ -6678,11 +6803,19 @@ function viewContact() {
         '<strong>' + title + '</strong>' + body + '</div></div>';
 
     return '' +
-    pageHero('Get In Touch', 'Contact Us',
-             'Send us a message, call the shop, or just roll in — we\'re open seven days.') +
-    '<section class="section"><div class="container"><div class="contact-grid">' +
+    '<section class="section contact-section" id="contact"><div class="container">' +
+      '<div class="section-header">' +
+        '<p class="section-eyebrow">Get In Touch</p>' +
+        '<h2>Find Us &amp; Say Hello</h2>' +
+        '<p class="section-subtitle">Call the shop, send a message, or just roll in — ' +
+          'we\'re open seven days.</p>' +
+      '</div>' +
+      '<div class="contact-grid">' +
 
-      '<div class="contact-form-wrapper"><h2>Send Us a Message</h2>' + form + '</div>' +
+      '<div class="contact-form-wrapper"><h3>Ask Us Something</h3>' +
+        '<p class="contact-form-note">Booking a repair? <a href="#/book" data-nav>Book a repair</a> ' +
+          'is quicker — it shows you the prices and the free slots. This form is for everything else.</p>' +
+        form + '</div>' +
 
       '<div class="contact-info">' +
         '<figure class="contact-photo">' +
@@ -6724,16 +6857,17 @@ function submitContact() {
     if (!m.name.trim()) errors.name = 'Please enter your name.';
     if (!m.email.trim()) errors.email = 'Please enter your email.';
     else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m.email)) errors.email = 'Please enter a valid email.';
-    if (!m.service) errors.service = 'Please select a service.';
-    if (!m.message.trim()) errors.message = 'Please describe the issue.';
+    if (!m.message.trim()) errors.message = 'Please tell us what you\'d like to know.';
     else if (m.message.trim().length < 10) errors.message = 'Please give us a bit more detail.';
 
     state.contactErrors = errors;
     if (Object.keys(errors).length) { render(); return; }
 
+    // service/preferredDate stay unset — they came off the form when it stopped being
+    // a second booking flow. The fields remain on Enquiry so stored ones keep theirs.
     submitEnquiry({
-        name: m.name, email: m.email, phone: m.phone, service: m.service,
-        bikeDescription: m.bike, message: m.message, preferredDate: m.preferred
+        name: m.name, email: m.email, phone: m.phone,
+        bikeDescription: m.bike, message: m.message
     });
     state.contactSubmittedName = m.name;
     state.contactSubmitted = true;
@@ -7625,10 +7759,10 @@ function viewAccount() {
 
     const bookings = bookingsForCustomer(customer.id);
     const upcoming = bookings
-        .filter((b) => dateOnly(b.slotDate) >= today() && b.status !== STATUS.Cancelled)
+        .filter(isUpcoming)
         .sort((x, y) => (x.slotDate - y.slotDate) || x.slotTime.localeCompare(y.slotTime));
     const history = bookings
-        .filter((b) => !(dateOnly(b.slotDate) >= today() && b.status !== STATUS.Cancelled))
+        .filter((b) => !isUpcoming(b))
         .sort((x, y) => (y.slotDate - x.slotDate) || y.slotTime.localeCompare(x.slotTime));
     const shared = sharedNotesByBooking(customer.id);
 
@@ -7642,17 +7776,38 @@ function viewAccount() {
 
     '<section class="section account-section"><div class="container">' +
 
-      accountUpcoming(upcoming, a) +
+      accountUpcoming(upcoming, a, shared) +
       (history.length ? accountHistory(history, shared) : '') +
+      accountBikes(customer, a) +
       accountDetails(customer, a) +
       accountPassword(a) +
-      accountBikes(customer, a) +
       accountData(a, upcoming.length) +
 
     '</div></section>';
 }
 
-function accountUpcoming(upcoming, a) {
+// BookingService.IsUpcoming — status first, and the date only decides the jobs still
+// open. On the date alone a job completed on its own appointment day stayed under
+// "Upcoming Bookings", where the mechanic's report on it was never rendered.
+function isUpcoming(b) {
+    return b.status !== STATUS.Completed && b.status !== STATUS.Cancelled
+        && dateOnly(b.slotDate) >= today();
+}
+
+// The report on one job, on the job it came out of. Rendered by both lists.
+function jobNotes(bookingId, shared) {
+    const notes = shared[bookingId] || [];
+    if (!notes.length) return '';
+    return '<div class="account-booking-row__notes">' + notes.map((note) =>
+        '<span class="account-booking-row__note">' +
+          '<span class="account-booking-row__note-head">' + icon('wrench') +
+            " Mechanic's report &middot; " + fmt.dMMMyyyy(note.createdAt) +
+          '</span>' +
+          '<span class="account-booking-row__note-body">' + esc(note.body) + '</span>' +
+        '</span>').join('') + '</div>';
+}
+
+function accountUpcoming(upcoming, a, shared) {
     if (upcoming.length === 0) {
         return '<div class="booking-card"><h2 class="booking-card__title">Upcoming Bookings</h2>' +
             '<p class="booking-card__subtitle">No upcoming bookings. <a href="#/book" data-nav>Book a repair</a></p></div>';
@@ -7670,6 +7825,7 @@ function accountUpcoming(upcoming, a) {
               (b.bikeDescription ? '<span>' + esc(b.bikeDescription) + '</span>' : '') +
             '</div>' +
             '<div class="account-booking-row__actions">' + statusBadge(b.status) + actions + '</div>' +
+            jobNotes(b.id, shared) +
         '</div>';
     }).join('');
 
@@ -7686,11 +7842,7 @@ function accountHistory(history, shared) {
         '<div class="account-booking-row">' + refBadge(b.reference) +
           '<div class="account-booking-row__info"><strong>' + esc(b.serviceName) + '</strong>' +
             '<span>' + fmt.dMMMyyyy(b.slotDate) + ' &middot; ' + b.slotTime + '</span>' +
-            // Notes the mechanic chose to share — the written report the Gold Service
-            // advertises. Internal notes never reach here.
-            (shared[b.id] || []).map((note) =>
-              '<span class="account-booking-row__note">' + icon('wrench') + ' ' + esc(note) + '</span>').join('') +
-          '</div>' + statusBadge(b.status) +
+          '</div>' + statusBadge(b.status) + jobNotes(b.id, shared) +
         '</div>').join('');
 
     return '<div class="booking-card"><h2 class="booking-card__title">Booking History</h2>' +
@@ -7916,13 +8068,14 @@ function viewAdmin() {
     const a = state.admin;
     let tab = a.tab;
     // Permission changes can strand you on a tab you can no longer open.
-    if (tab === 'customers' && !canSeeCustomerDetails()) tab = a.tab = 'calendar';
+    if ((tab === 'customers' || tab === 'enquiries') && !canSeeCustomerDetails()) tab = a.tab = 'calendar';
     if ((tab === 'pricing' || tab === 'staff') && !isAdmin()) tab = a.tab = 'calendar';
 
     let body = '';
     if (tab === 'bookings') body = adminBookingsTab();
     else if (tab === 'calendar') body = adminCalendarTab();
     else if (tab === 'customers') body = adminCustomersTab();
+    else if (tab === 'enquiries') body = adminEnquiriesTab();
     else if (tab === 'pricing') body = adminPricingTab();
     else if (tab === 'staff') body = adminStaffTab();
 
@@ -7993,7 +8146,11 @@ function adminTabBar(tab) {
     return '<div class="admin-filter-scroll tab-bar-wrapper"><div class="admin-filter-tabs">' +
         button('calendar', 'Calendar') +
         button('bookings', 'Bookings') +
-        (canSeeCustomerDetails() ? button('customers', 'Customers') : '') +
+        (canSeeCustomerDetails()
+            ? button('customers', 'Customers') +
+              button('enquiries', 'Enquiries' + (unhandledEnquiries().length
+                  ? '<span class="filter-tab__count">' + unhandledEnquiries().length + '</span>' : ''))
+            : '') +
         (isAdmin() ? button('pricing', 'Pricing') + button('staff', 'Staff Management') : '') +
     '</div></div>';
 }
@@ -8734,21 +8891,32 @@ function customerDetailPanel(detail) {
           '</div>'
         : '';
 
-    const notes = detail.notes.length === 0
-        ? '<p class="text-muted-sm customer-detail__empty">No notes yet.</p>'
-        : '<ul class="customer-notes">' + detail.notes.map((n) =>
-            '<li class="customer-note ' + (n.visibleToCustomer ? 'customer-note--shared' : '') + '">' +
-              '<div class="customer-note__head">' +
-                '<span class="status-badge ' + (n.visibleToCustomer ? 'status-badge--confirmed' : 'status-badge--completed') + '">' +
-                  (n.visibleToCustomer ? 'Shared' : 'Internal') + '</span>' +
-                '<span class="text-faint-sm">' + fmt.dMMMyyyyHHmm(n.createdAt) + '</span>' +
-                (canManage()
-                    ? '<button class="action-btn action-btn--delete customer-note__delete" ' +
-                      'data-act="admin-customer-note-delete" data-id="' + n.id + '">Delete</button>'
-                    : '') +
-              '</div>' +
-              '<p class="customer-note__body">' + esc(n.body) + '</p>' +
-            '</li>').join('') + '</ul>';
+    const noteBody = (n, tag) =>
+        '<' + tag + ' class="customer-note ' + (n.visibleToCustomer ? 'customer-note--shared' : '') + '">' +
+          '<div class="customer-note__head">' +
+            '<span class="status-badge ' + (n.visibleToCustomer ? 'status-badge--confirmed' : 'status-badge--completed') + '">' +
+              (n.visibleToCustomer ? 'Shared' : 'Internal') + '</span>' +
+            '<span class="text-faint-sm">' + fmt.dMMMyyyyHHmm(n.createdAt) + '</span>' +
+            (canManage()
+                ? '<button class="action-btn action-btn--delete customer-note__delete" ' +
+                  'data-act="admin-customer-note-delete" data-id="' + n.id + '">Delete</button>'
+                : '') +
+          '</div>' +
+          '<p class="customer-note__body">' + esc(n.body) + '</p>' +
+        '</' + tag + '>';
+
+    const generalNotes = detail.generalNotes.length === 0
+        ? '<p class="text-muted-sm customer-detail__empty">No general notes yet.</p>'
+        : '<ul class="customer-notes">' + detail.generalNotes.map((n) => noteBody(n, 'li')).join('') + '</ul>';
+
+    // A job's notes, on the job — they used to sit in one flat list above the
+    // bookings, which left a completion note floating free of the job it came from.
+    const jobNotesFor = (bookingId) => {
+        const notes = detail.bookingNotes[bookingId] || [];
+        return notes.length
+            ? '<div class="customer-booking__notes">' + notes.map((n) => noteBody(n, 'div')).join('') + '</div>'
+            : '';
+    };
 
     const bookingList = (list, extraClass) =>
         '<ul class="customer-bookings">' + list.map((b) =>
@@ -8756,7 +8924,7 @@ function customerDetailPanel(detail) {
               '<span class="customer-booking__main"><strong>' + esc(b.serviceName) + '</strong>' +
                 '<span class="text-muted-sm">' + fmt.dMMMyyyy(b.slotDate) + ' &middot; ' + b.slotTime +
                   (b.bikeDescription ? ' &middot; ' + esc(b.bikeDescription) : '') + '</span>' +
-              '</span>' + statusBadge(b.status) +
+              '</span>' + statusBadge(b.status) + jobNotesFor(b.id) +
             '</li>').join('') + '</ul>';
 
     return '<div class="customer-detail">' +
@@ -8768,7 +8936,6 @@ function customerDetailPanel(detail) {
             (c.emailConfirmed ? '' : ' <span class="status-badge status-badge--pending">Email unverified</span>') + '</p>' +
           contact +
         '</div>' + stats +
-        '<h4 class="admin-subheading">Notes</h4>' + addNote + notes +
         '<h4 class="admin-subheading">Bookings</h4>' +
         (detail.bookings.length === 0
             ? '<p class="text-muted-sm customer-detail__empty">No bookings on this account.</p>'
@@ -8778,11 +8945,84 @@ function customerDetailPanel(detail) {
               '<span class="text-faint-sm">(made before they had an account)</span></h4>' +
               bookingList(detail.unlinkedGuestBookings, 'customer-booking--unlinked')
             : '') +
+        '<h4 class="admin-subheading">General notes</h4>' +
+        '<p class="text-muted-sm">Things worth remembering about the customer rather than ' +
+          'any one job. A note written when completing a booking shows on that booking above.</p>' +
+        addNote + generalNotes +
         (c.bikes.length
             ? '<h4 class="admin-subheading">Bikes</h4><ul class="customer-bikes">' +
               c.bikes.map((b) => '<li>' + esc(b.makeModel) + '</li>').join('') + '</ul>'
             : '') +
     '</div>';
+}
+
+/* ── Enquiries tab ─────────────────────────────────────────── */
+/* Messages from the form on About Us. They were stored, they raised a bell and they
+   emailed the shop — and then no screen in here could read one back. */
+
+const unhandledEnquiries = () => DB.enquiries.filter((e) => !e.handledAt);
+
+function enquiryActions(e) {
+    return '<div class="booking-actions__row">' +
+        '<a class="action-btn action-btn--call" href="mailto:' + esc(e.email) + '">' + esc(e.email) + '</a>' +
+        (isValidPhone(e.phone)
+            ? '<a class="action-btn action-btn--call" href="tel:' + telHref(e.phone) + '">' + esc(e.phone) + '</a>' +
+              '<a class="action-btn action-btn--whatsapp" href="' + whatsAppHref(e.phone) + '" ' +
+                'target="_blank" rel="noopener">WhatsApp</a>'
+            : '') +
+        (canManage()
+            ? '<button class="action-btn ' + (e.handledAt ? 'action-btn--keep' : 'action-btn--primary') + '" ' +
+              'data-act="admin-enquiry-handled" data-id="' + e.id + '">' +
+              (e.handledAt ? 'Reopen' : 'Mark handled') + '</button>'
+            : '') +
+    '</div>';
+}
+
+function adminEnquiriesTab() {
+    const a = state.admin;
+    const list = a.showHandledEnquiries ? DB.enquiries : unhandledEnquiries();
+    const empty = a.showHandledEnquiries
+        ? 'No messages yet. They arrive from the form on the About Us page.'
+        : 'Nothing outstanding — every message has been marked handled.';
+    const badge = (e) => '<span class="status-badge ' +
+        (e.handledAt ? 'status-badge--completed' : 'status-badge--pending') + '">' +
+        (e.handledAt ? 'Handled' : 'New') + '</span>';
+
+    const cards = list.length === 0
+        ? '<div class="admin-empty"><p>' + empty + '</p></div>'
+        : list.map((e) =>
+            '<div class="admin-card admin-card--static ' + (e.handledAt ? 'admin-card--handled' : '') + '">' +
+              '<div class="admin-card__header">' +
+                '<span class="text-muted-sm">' + fmt.dMMMyyyyHHmm(e.createdAt) + '</span>' + badge(e) +
+              '</div>' +
+              '<div class="admin-card__name">' + esc(e.name) + '</div>' +
+              '<div class="admin-card__meta"><span>' + esc(e.email) + '</span>' +
+                '<span>' + esc(e.bikeDescription || '') + '</span></div>' +
+              '<div class="admin-card__detail">' +
+                '<p class="enquiry-message">' + esc(e.message) + '</p>' + enquiryActions(e) +
+              '</div>' +
+            '</div>').join('');
+
+    const rows = list.length === 0
+        ? '<tr class="admin-table__empty-row"><td colspan="5">' + empty + '</td></tr>'
+        : list.map((e) =>
+            '<tr class="' + (e.handledAt ? 'admin-table__row--handled' : '') + '">' +
+              '<td class="text-muted-sm">' + fmt.dMMMyyyyHHmm(e.createdAt) + '</td>' +
+              '<td><strong>' + esc(e.name) + '</strong> ' + badge(e) + '</td>' +
+              '<td class="text-muted-sm">' + esc(e.bikeDescription || '—') + '</td>' +
+              '<td><p class="enquiry-message">' + esc(e.message) + '</p></td>' +
+              '<td>' + enquiryActions(e) + '</td>' +
+            '</tr>').join('');
+
+    return '<div class="admin-filters">' +
+          '<button class="btn btn-outline" data-act="admin-toggle-handled-enquiries">' +
+            (a.showHandledEnquiries ? 'Hide handled' : 'Show handled too') + '</button>' +
+        '</div>' +
+        '<div class="admin-mobile-cards">' + cards + '</div>' +
+        '<div class="admin-table-wrapper admin-table-wrapper--desktop-only"><table class="admin-table">' +
+          '<thead><tr><th>Received</th><th>From</th><th>Bike</th><th>Message</th><th>Actions</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table></div>';
 }
 
 /* ── Pricing tab ───────────────────────────────────────────── */
@@ -8947,7 +9187,9 @@ const ROUTES = {
     '#/services': viewServices,
     '#/about': viewAbout,
     '#/gallery': viewGallery,
-    '#/contact': viewContact,
+    // Retired. The real app answers /contact with a 301 to /about#contact; the demo's
+    // router has no status codes, so it renders About and jumps to the anchor.
+    '#/contact': viewAbout,
     '#/book': viewBook,
     '#/privacy': viewPrivacy,
     '#/terms': viewTerms,
@@ -9284,6 +9526,21 @@ document.addEventListener('click', (e) => {
         render();
         break;
     case 'admin-customer-note-delete': deleteNote(id); render(); break;
+
+    case 'admin-toggle-handled-enquiries':
+        state.admin.showHandledEnquiries = !state.admin.showHandledEnquiries;
+        render();
+        break;
+
+    case 'admin-enquiry-handled': {
+        // EnquiryService.MarkHandled. With "show handled" off this takes the row off
+        // the list, which is the point — the tab is the outstanding queue.
+        if (!canManage()) break;
+        const enquiry = DB.enquiries.find((x) => x.id === id);
+        if (enquiry) { enquiry.handledAt = enquiry.handledAt ? null : now(); persist(); }
+        render();
+        break;
+    }
     case 'admin-customer-page':
         state.admin.customerPage = parseInt(actEl.dataset.page, 10);
         render();
@@ -9603,7 +9860,7 @@ function renderDemoBar() {
           '<span class="demo-bar__label">Jump to</span>' +
           '<div class="demo-links">' +
             quickLink('#/', 'Home') + quickLink('#/services', 'Services') + quickLink('#/gallery', 'Gallery') +
-            quickLink('#/contact', 'Contact') + quickLink('#/book', 'Book') + quickLink('#/account', 'Account') +
+            quickLink('#/about', 'About') + quickLink('#/book', 'Book') + quickLink('#/account', 'Account') +
             quickLink('#/admin', 'Admin') + quickLink('#/account/register', 'Register') +
             quickLink('#/privacy', 'Privacy') + quickLink('#/terms', 'Terms') + quickLink('#/nowhere', '404') +
           '</div>' +

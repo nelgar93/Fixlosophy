@@ -57,56 +57,9 @@
         </div>
     </div>
 
-    <!-- Notes -->
-    <h4 class="admin-subheading">Notes</h4>
-
-    @if (CanManage)
-    {
-        <div class="complete-note customer-detail__add-note">
-            <label class="complete-note__label" for="customer-note-body">Add a note</label>
-            <textarea id="customer-note-body" class="form-control" rows="3"
-                      placeholder="Anything worth remembering about this customer or their bike"
-                      @bind="noteBody" @bind:event="oninput"></textarea>
-            <label class="complete-note__share">
-                <input type="checkbox" @bind="noteVisible" />
-                <span>Share this with the customer</span>
-            </label>
-            <div class="complete-note__actions">
-                <button class="action-btn action-btn--primary"
-                        disabled="@string.IsNullOrWhiteSpace(noteBody)"
-                        @onclick="SaveNote">Save note</button>
-            </div>
-        </div>
-    }
-
-    @if (Detail.Notes.Count == 0)
-    {
-        <p class="text-muted-sm customer-detail__empty">No notes yet.</p>
-    }
-    else
-    {
-        <ul class="customer-notes">
-            @foreach (var note in Detail.Notes)
-            {
-                var n = note;
-                <li class="customer-note @(n.VisibleToCustomer ? "customer-note--shared" : "")">
-                    <div class="customer-note__head">
-                        <span class="status-badge @(n.VisibleToCustomer ? "status-badge--confirmed" : "status-badge--completed")">
-                            @(n.VisibleToCustomer ? "Shared" : "Internal")
-                        </span>
-                        <span class="text-faint-sm">@n.CreatedAt.ToString("d MMM yyyy, HH:mm", Uk)</span>
-                        @if (CanManage)
-                        {
-                            <button class="action-btn action-btn--delete customer-note__delete"
-                                    @onclick="() => OnDeleteNote.InvokeAsync(n.Id)">Delete</button>
-                        }
-                    </div>
-                    <p class="customer-note__body">@n.Body</p>
-                </li>
-            }
-        </ul>
-    }
-
+    @* Bookings first, and each job's own notes with it. Notes used to be one flat
+       list above this, which left a note written when completing a booking floating
+       free of the booking it came out of — unreadable as the report on that job. *@
     <!-- Bookings -->
     <h4 class="admin-subheading">Bookings</h4>
     @if (Detail.Bookings.Count == 0)
@@ -131,14 +84,15 @@
                         </span>
                     </span>
                     <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                    @JobNotes(b.Id)
                 </li>
             }
         </ul>
     }
 
     @* Bookings made under this email before they had an account. They exist in the
-       database today and appear nowhere in the admin — someone who booked as a guest
-       and registered afterwards looks like a first-time customer without this. *@
+       database today and appear nowhere else in the admin — someone who booked as a
+       guest and registered afterwards looks like a first-time customer without this. *@
     @if (Detail.UnlinkedGuestBookings.Count > 0)
     {
         <h4 class="admin-subheading">
@@ -155,6 +109,61 @@
                         <span class="text-muted-sm">@b.SlotDate.ToString("d MMM yyyy", Uk) &middot; @b.SlotTime</span>
                     </span>
                     <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                    @JobNotes(b.Id)
+                </li>
+            }
+        </ul>
+    }
+
+    <!-- General notes -->
+    <h4 class="admin-subheading">General notes</h4>
+    <p class="text-muted-sm">
+        Things worth remembering about the customer rather than any one job. A note
+        written when completing a booking shows on that booking above.
+    </p>
+
+    @if (CanManage)
+    {
+        <div class="complete-note customer-detail__add-note">
+            <label class="complete-note__label" for="customer-note-body">Add a note</label>
+            <textarea id="customer-note-body" class="form-control" rows="3"
+                      placeholder="Anything worth remembering about this customer or their bike"
+                      @bind="noteBody" @bind:event="oninput"></textarea>
+            <label class="complete-note__share">
+                <input type="checkbox" @bind="noteVisible" />
+                <span>Share this with the customer</span>
+            </label>
+            <div class="complete-note__actions">
+                <button class="action-btn action-btn--primary"
+                        disabled="@string.IsNullOrWhiteSpace(noteBody)"
+                        @onclick="SaveNote">Save note</button>
+            </div>
+        </div>
+    }
+
+    @if (Detail.GeneralNotes.Count == 0)
+    {
+        <p class="text-muted-sm customer-detail__empty">No general notes yet.</p>
+    }
+    else
+    {
+        <ul class="customer-notes">
+            @foreach (var note in Detail.GeneralNotes)
+            {
+                var n = note;
+                <li class="customer-note @(n.VisibleToCustomer ? "customer-note--shared" : "")">
+                    <div class="customer-note__head">
+                        <span class="status-badge @(n.VisibleToCustomer ? "status-badge--confirmed" : "status-badge--completed")">
+                            @(n.VisibleToCustomer ? "Shared" : "Internal")
+                        </span>
+                        <span class="text-faint-sm">@n.CreatedAt.ToString("d MMM yyyy, HH:mm", Uk)</span>
+                        @if (CanManage)
+                        {
+                            <button class="action-btn action-btn--delete customer-note__delete"
+                                    @onclick="() => OnDeleteNote.InvokeAsync(n.Id)">Delete</button>
+                        }
+                    </div>
+                    <p class="customer-note__body">@n.Body</p>
                 </li>
             }
         </ul>
@@ -183,6 +192,37 @@
     [Parameter] public EventCallback<string> OnDeleteNote { get; set; }
 
     private static readonly CultureInfo Uk = CultureInfo.GetCultureInfo("en-GB");
+
+    /// <summary>
+    /// The notes written on one job, rendered inside that job's own row. Shared and
+    /// internal ones both appear — this is the staff view; the green edge marks the
+    /// ones the customer is also reading on their account page.
+    /// </summary>
+    private RenderFragment<string> JobNotes => bookingId => @<text>
+        @if (Detail.BookingNotes.TryGetValue(bookingId, out var notes))
+        {
+            <div class="customer-booking__notes">
+                @foreach (var note in notes)
+                {
+                    var n = note;
+                    <div class="customer-note @(n.VisibleToCustomer ? "customer-note--shared" : "")">
+                        <div class="customer-note__head">
+                            <span class="status-badge @(n.VisibleToCustomer ? "status-badge--confirmed" : "status-badge--completed")">
+                                @(n.VisibleToCustomer ? "Shared" : "Internal")
+                            </span>
+                            <span class="text-faint-sm">@n.CreatedAt.ToString("d MMM yyyy, HH:mm", Uk)</span>
+                            @if (CanManage)
+                            {
+                                <button class="action-btn action-btn--delete customer-note__delete"
+                                        @onclick="() => OnDeleteNote.InvokeAsync(n.Id)">Delete</button>
+                            }
+                        </div>
+                        <p class="customer-note__body">@n.Body</p>
+                    </div>
+                }
+            </div>
+        }
+    </text>;
 
     private string noteBody = "";
     private bool noteVisible;

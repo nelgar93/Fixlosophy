@@ -9,6 +9,7 @@
 @inject NotificationService Notifications
 @inject NotificationHub NotificationHub
 @inject CustomerService Customers
+@inject EnquiryService Enquiries
 @inject IEmailSender EmailSender
 @inject ILogger<Admin> Logger
 
@@ -111,6 +112,16 @@
                     {
                         <button class="filter-tab @(activeTab == "customers" ? "active" : "")"
                                 @onclick="OpenCustomersTab">Customers</button>
+                        @* Same gate: an enquiry is a name, an email and a phone number
+                           typed in by a member of the public. *@
+                        <button class="filter-tab @(activeTab == "enquiries" ? "active" : "")"
+                                @onclick="OpenEnquiriesTab">
+                            Enquiries
+                            @if (UnhandledEnquiryCount > 0)
+                            {
+                                <span class="filter-tab__count">@UnhandledEnquiryCount</span>
+                            }
+                        </button>
                     }
                     @if (IsAdmin)
                     {
@@ -813,6 +824,86 @@
                 }
             }
 
+            <!-- ── ENQUIRIES TAB ────────────────────────────────────────── -->
+            @* Messages from the form on /about. They were stored, they raised a bell
+               and they emailed the shop — and then there was no screen in here that
+               could read one back. GetEnquiries and MarkHandled had existed since the
+               form was written, with only the test suite calling them. *@
+            @if (activeTab == "enquiries" && CanSeeCustomerDetails)
+            {
+                <div class="admin-filters">
+                    <button class="btn btn-outline" @onclick="ToggleHandledEnquiries">
+                        @(showHandledEnquiries ? "Hide handled" : "Show handled too")
+                    </button>
+                </div>
+
+                <div class="admin-mobile-cards">
+                    @if (_enquiries.Count == 0)
+                    {
+                        <div class="admin-empty"><p>@EnquiriesEmptyMessage</p></div>
+                    }
+                    @foreach (var enquiry in _enquiries)
+                    {
+                        var e = enquiry;
+                        <div class="admin-card admin-card--static @(e.HandledAt is null ? "" : "admin-card--handled")">
+                            <div class="admin-card__header">
+                                <span class="text-muted-sm">@e.CreatedAt.ToString("d MMM yyyy, HH:mm")</span>
+                                <span class="status-badge @(e.HandledAt is null ? "status-badge--pending" : "status-badge--completed")">
+                                    @(e.HandledAt is null ? "New" : "Handled")
+                                </span>
+                            </div>
+                            <div class="admin-card__name">@e.Name</div>
+                            <div class="admin-card__meta">
+                                <span>@e.Email</span>
+                                <span>@(string.IsNullOrWhiteSpace(e.BikeDescription) ? "" : e.BikeDescription)</span>
+                            </div>
+                            <div class="admin-card__detail">
+                                <p class="enquiry-message">@e.Message</p>
+                                @EnquiryActions(e)
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Received</th>
+                                <th>From</th>
+                                <th>Bike</th>
+                                <th>Message</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_enquiries.Count == 0)
+                            {
+                                <tr class="admin-table__empty-row">
+                                    <td colspan="5">@EnquiriesEmptyMessage</td>
+                                </tr>
+                            }
+                            @foreach (var enquiry in _enquiries)
+                            {
+                                var e = enquiry;
+                                <tr class="@(e.HandledAt is null ? "" : "admin-table__row--handled")">
+                                    <td class="text-muted-sm">@e.CreatedAt.ToString("d MMM yyyy, HH:mm")</td>
+                                    <td>
+                                        <strong>@e.Name</strong>
+                                        <span class="status-badge @(e.HandledAt is null ? "status-badge--pending" : "status-badge--completed")">
+                                            @(e.HandledAt is null ? "New" : "Handled")
+                                        </span>
+                                    </td>
+                                    <td class="text-muted-sm">@(string.IsNullOrWhiteSpace(e.BikeDescription) ? "—" : e.BikeDescription)</td>
+                                    <td><p class="enquiry-message">@e.Message</p></td>
+                                    <td>@EnquiryActions(e)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
             @if (activeTab == "staff" && IsAdmin)
             {
                 <div class="staff-mgmt">
@@ -1150,6 +1241,33 @@
         }
     </text>;
 
+    /// <summary>
+    /// Reaching the person who wrote in, and marking the message dealt with.
+    ///
+    /// There is no compose box: the enquiry already lands in the shop's own inbox with
+    /// reply-to set to the sender, so replying happens there. These are the two things
+    /// this screen can do that the inbox can't — dial the number, and record that the
+    /// message is done so the next person doesn't answer it twice.
+    /// </summary>
+    private RenderFragment<Enquiry> EnquiryActions => enquiry => @<text>
+        <div class="booking-actions__row">
+            <a class="action-btn action-btn--call" href="mailto:@enquiry.Email">@enquiry.Email</a>
+            @if (AuthService.IsValidPhone(enquiry.Phone))
+            {
+                <a class="action-btn action-btn--call" href="@TelHref(enquiry.Phone)">@enquiry.Phone</a>
+                <a class="action-btn action-btn--whatsapp" href="https://wa.me/@WhatsAppNumber(enquiry.Phone)"
+                   target="_blank" rel="noopener">WhatsApp</a>
+            }
+            @if (CanManage)
+            {
+                <button class="action-btn @(enquiry.HandledAt is null ? "action-btn--primary" : "action-btn--keep")"
+                        @onclick="() => SetEnquiryHandled(enquiry.Id, enquiry.HandledAt is null)">
+                    @(enquiry.HandledAt is null ? "Mark handled" : "Reopen")
+                </button>
+            }
+        </div>
+    </text>;
+
     private RenderFragment<Booking> ActionButtons => booking => @<text>
         <div class="booking-actions">
             @* ── Tier 1: the one thing you came here to do ────────────────────
@@ -1294,6 +1412,9 @@
         LoadBookings();
         RefreshStats();
         LoadCalDay();  // Calendar is the default tab, so it needs data on first render.
+        // Not for the tab — for the count on it. Loading only on open meant the badge
+        // read zero until you went looking, which is the wrong way round.
+        if (CanSeeCustomerDetails) LoadEnquiries();
         if (IsAdmin) _allStaff = AuthService.GetAllStaff();
 
         LoadNotifications();
@@ -1610,6 +1731,11 @@
 
         CancelCompleteNote();
         UpdateStatus(booking.Id, BookingStatus.Completed);
+
+        // Re-read this job's notes. UpdateStatus reloads the bookings but not the note
+        // cache, which is otherwise only filled by ToggleExpand — so on an already-open
+        // row the note just written stayed invisible until it was collapsed and reopened.
+        _bookingNotes[booking.Id] = Customers.GetNotesForBooking(booking.Id);
     }
 
     private void AssignBooking(string bookingId, string? staffId)
@@ -1775,6 +1901,42 @@
     {
         _customerPage = Math.Clamp(page, 0, CustomerTotalPages - 1);
         LoadCustomers();
+    }
+
+    // ── Enquiries ────────────────────────────────────────────────────────────
+
+    private List<Enquiry> _enquiries = [];
+    private bool showHandledEnquiries;
+
+    private int UnhandledEnquiryCount => _enquiries.Count(e => e.HandledAt is null);
+
+    private string EnquiriesEmptyMessage => showHandledEnquiries
+        ? "No messages yet. They arrive from the form on the About Us page."
+        : "Nothing outstanding — every message has been marked handled.";
+
+    private void OpenEnquiriesTab()
+    {
+        if (!CanSeeCustomerDetails) return;  // server-side guard
+        activeTab = "enquiries";
+        LoadEnquiries();
+    }
+
+    private void LoadEnquiries() =>
+        _enquiries = Enquiries.GetEnquiries(includeHandled: showHandledEnquiries);
+
+    private void ToggleHandledEnquiries()
+    {
+        showHandledEnquiries = !showHandledEnquiries;
+        LoadEnquiries();
+    }
+
+    private void SetEnquiryHandled(string id, bool handled)
+    {
+        if (!CanManage) return;  // server-side guard
+        Enquiries.MarkHandled(id, handled);
+        // Re-read rather than patching the row: with "show handled" off, marking one
+        // handled should take it off the list, which only a reload gets right.
+        LoadEnquiries();
     }
 
     private void OpenCustomer(string customerId)
