@@ -10,15 +10,6 @@ namespace Fixlosophy.Tests;
 // it must never on its own be enough to claim someone's booking history.
 public class GuestBookingLinkingTests
 {
-    private sealed class NoopTokenStore : IVerificationTokenStore
-    {
-        public Dictionary<string, string> Tokens { get; } = [];
-        public void SetToken(string key, string hash, TimeSpan ttl) => Tokens[key] = hash;
-        public bool TrySetTokenIfAbsent(string key, string value, TimeSpan ttl) => Tokens.TryAdd(key, value);
-        public string? GetTokenHash(string key) => Tokens.GetValueOrDefault(key);
-        public void RemoveToken(string key) => Tokens.Remove(key);
-    }
-
     private static AppDbContext NewDb() =>
         new(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -66,7 +57,7 @@ public class GuestBookingLinkingTests
         var customer = SeedCustomer(db, "jane@example.com");
         SeedGuestBooking(db, "jane@example.com");
 
-        var linked = new AuthService(db, new NoopTokenStore()).LinkGuestBookings(customer);
+        var linked = new AuthService(db).LinkGuestBookings(customer);
 
         Assert.Equal(1, linked);
         Assert.Equal(customer.Id, db.Bookings.Single().CustomerId);
@@ -79,7 +70,7 @@ public class GuestBookingLinkingTests
         var customer = SeedCustomer(db, "jane@example.com");
         SeedGuestBooking(db, "JANE@Example.COM");
 
-        Assert.Equal(1, new AuthService(db, new NoopTokenStore()).LinkGuestBookings(customer));
+        Assert.Equal(1, new AuthService(db).LinkGuestBookings(customer));
     }
 
     // The important one: a booking already belonging to someone else must be
@@ -95,7 +86,7 @@ public class GuestBookingLinkingTests
         booking.CustomerId = owner.Id;
         db.SaveChanges();
 
-        var linked = new AuthService(db, new NoopTokenStore()).LinkGuestBookings(other);
+        var linked = new AuthService(db).LinkGuestBookings(other);
 
         Assert.Equal(0, linked);
         Assert.Equal(owner.Id, db.Bookings.Single().CustomerId);
@@ -108,7 +99,7 @@ public class GuestBookingLinkingTests
         var customer = SeedCustomer(db, "jane@example.com");
         SeedGuestBooking(db, "someone.else@example.com", "FIX-260830-002");
 
-        Assert.Equal(0, new AuthService(db, new NoopTokenStore()).LinkGuestBookings(customer));
+        Assert.Equal(0, new AuthService(db).LinkGuestBookings(customer));
         Assert.Null(db.Bookings.Single().CustomerId);
     }
 
@@ -120,7 +111,7 @@ public class GuestBookingLinkingTests
         SeedCustomer(db, "jane@example.com");
         SeedGuestBooking(db, "jane@example.com");
 
-        var auth = new AuthService(db, new NoopTokenStore());
+        var auth = new AuthService(db);
         var signedIn = auth.AuthenticateCustomer("jane@example.com", Password);
 
         Assert.NotNull(signedIn);
@@ -136,7 +127,7 @@ public class GuestBookingLinkingTests
         SeedCustomer(db, "jane@example.com");
         SeedGuestBooking(db, "jane@example.com");
 
-        var auth = new AuthService(db, new NoopTokenStore());
+        var auth = new AuthService(db);
         var signedIn = auth.AuthenticateCustomer("jane@example.com", "not-the-password");
 
         Assert.Null(signedIn);
@@ -150,7 +141,7 @@ public class GuestBookingLinkingTests
         using var db = NewDb();
         SeedGuestBooking(db, "jane@example.com");
 
-        var auth = new AuthService(db, new NoopTokenStore());
+        var auth = new AuthService(db);
         var (customer, error) = auth.RegisterCustomer(
             "jane@example.com", "Jane Doe", "07700900000", Password);
 
@@ -163,8 +154,7 @@ public class GuestBookingLinkingTests
     public void ConfirmEmail_AdoptsGuestBookings_WhenTheLinkIsRedeemed()
     {
         using var db = NewDb();
-        var store = new NoopTokenStore();
-        var auth = new AuthService(db, store);
+        var auth = new AuthService(db);
 
         var (customer, _) = auth.RegisterCustomer("jane@example.com", "Jane Doe", "07700900000", Password);
         SeedGuestBooking(db, "jane@example.com");
@@ -179,8 +169,7 @@ public class GuestBookingLinkingTests
     public void ConfirmEmail_AdoptsNothing_WhenTheTokenIsWrong()
     {
         using var db = NewDb();
-        var store = new NoopTokenStore();
-        var auth = new AuthService(db, store);
+        var auth = new AuthService(db);
 
         var (customer, _) = auth.RegisterCustomer("jane@example.com", "Jane Doe", "07700900000", Password);
         SeedGuestBooking(db, "jane@example.com");
@@ -215,7 +204,7 @@ public class GuestBookingLinkingTests
         db.Customers.Add(customer);
         db.SaveChanges();
 
-        var adopted = new AuthService(db, new NoopTokenStore()).LinkGuestBookings(customer);
+        var adopted = new AuthService(db).LinkGuestBookings(customer);
 
         Assert.Equal(0, adopted);
         Assert.Null(db.Bookings.Single().CustomerId);

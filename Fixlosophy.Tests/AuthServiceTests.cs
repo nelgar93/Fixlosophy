@@ -11,8 +11,7 @@ public class AuthServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    // In-memory token store keeps these tests fast and fully offline — no real Redis.
-    private static AuthService NewSvc(AppDbContext db) => new(db, new InMemoryVerificationTokenStore());
+    private static AuthService NewSvc(AppDbContext db) => new(db);
 
     private static StaffMember SeedStaff(
         AppDbContext db, string email, string password,
@@ -207,14 +206,14 @@ public class AuthServiceTests
     public void ConfirmEmail_FailsWithExpiredToken()
     {
         using var db = NewDb();
-        var store = new InMemoryVerificationTokenStore();
-        var svc = new AuthService(db, store);
+        var svc = new AuthService(db);
         var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         var token = svc.GenerateEmailVerificationToken(customer!);
 
-        // Overwrite with a negative TTL to simulate the 24h window having already
-        // passed, without waiting for it — the store treats it as already expired.
-        store.SetToken($"verify:{customer!.Email}", "irrelevant-hash", TimeSpan.FromSeconds(-1));
+        // Backdate the expiry to simulate the 24h window having already passed,
+        // without waiting for it.
+        customer!.VerificationTokenExpiresAt = ShopClock.Now.AddSeconds(-1);
+        db.SaveChanges();
 
         Assert.False(svc.ConfirmEmail(customer.Email, token));
     }
@@ -234,13 +233,13 @@ public class AuthServiceTests
     public void RegenerateEmailVerificationTokenIfNeeded_SucceedsAfterCooldownEvenThoughTokenStillValid()
     {
         using var db = NewDb();
-        var store = new InMemoryVerificationTokenStore();
-        var svc = new AuthService(db, store);
+        var svc = new AuthService(db);
         var (customer, _) = svc.RegisterCustomer("jane@example.com", "Jane Doe", "07700 900000", "hunter2pass");
         var firstToken = svc.GenerateEmailVerificationToken(customer!);
 
         // Cooldown already elapsed, but the 24h verification token is still live.
-        store.SetToken($"verify-cooldown:{customer!.Email}", "1", TimeSpan.FromSeconds(-1));
+        customer!.VerificationCooldownUntil = ShopClock.Now.AddSeconds(-1);
+        db.SaveChanges();
 
         var secondToken = svc.RegenerateEmailVerificationTokenIfNeeded(customer);
         Assert.NotNull(secondToken);

@@ -9,20 +9,12 @@ namespace Fixlosophy.Tests;
 // bookings while leaving the name, email and phone sitting on them in plain text.
 public class AccountDeletionTests
 {
-    private sealed class NoopTokenStore : IVerificationTokenStore
-    {
-        public void SetToken(string key, string hash, TimeSpan ttl) { }
-        public bool TrySetTokenIfAbsent(string key, string value, TimeSpan ttl) => true;
-        public string? GetTokenHash(string key) => null;
-        public void RemoveToken(string key) { }
-    }
-
     private static AppDbContext NewDb() =>
         new(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static AuthService NewService(AppDbContext db) => new(db, new NoopTokenStore());
+    private static AuthService NewService(AppDbContext db) => new(db);
 
     private static Customer SeedCustomer(AppDbContext db)
     {
