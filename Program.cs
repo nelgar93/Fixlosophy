@@ -10,7 +10,6 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using StackExchange.Redis;
 
 // Lets the DateTime values the app writes (see ShopClock — everything goes through it)
 // be stored as Postgres "timestamp without time zone".
@@ -156,26 +155,6 @@ if (!builder.Environment.IsDevelopment() &&
         "AllowedHosts is \"*\". Set it to the site's real hostname(s), semicolon-separated " +
         "(e.g. \"booking.fixlosophy.com;www.booking.fixlosophy.com\"), in appsettings.Local.json " +
         "or the ALLOWEDHOSTS environment variable.");
-}
-
-// Verification-token expiry is backed by Redis (TTL-based) rather than a Postgres
-// column. Falls back to an in-memory store in Development when no Redis connection
-// string is configured; fails fast everywhere else, since silently falling back
-// there would quietly defeat the point of the migration (tokens wouldn't survive an
-// app restart) with no visible symptom until someone can't verify after a deploy.
-var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
-if (string.IsNullOrEmpty(redisConnectionString))
-{
-    if (!builder.Environment.IsDevelopment())
-        throw new InvalidOperationException(
-            "ConnectionStrings:Redis is not configured. Set it in appsettings.Local.json or environment.");
-    builder.Services.AddSingleton<IVerificationTokenStore, InMemoryVerificationTokenStore>();
-}
-else
-{
-    builder.Services.AddSingleton<IConnectionMultiplexer>(
-        _ => ConnectionMultiplexer.Connect(BuildRedisOptions(redisConnectionString)));
-    builder.Services.AddSingleton<IVerificationTokenStore, RedisVerificationTokenStore>();
 }
 
 var app = builder.Build();
@@ -511,39 +490,11 @@ static string BuildAbsoluteUrl(HttpContext http, IConfiguration config, string p
         : $"{baseUrl.TrimEnd('/')}{path}";
 }
 
-// The verification token is keyed by email in the token store (Redis can't
-// efficiently reverse-lookup "which key has this value"), so the link carries both.
+// Only the token's hash is stored, so the link carries the email too — that's what
+// identifies which Customer row to check the hash against.
 static string BuildVerifyEmailLink(HttpContext http, IConfiguration config, string email, string token) =>
     BuildAbsoluteUrl(http, config,
         $"/auth/verify-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}");
-
-// StackExchange.Redis doesn't natively parse redis://rediss:// URI-scheme connection
-// strings (only its own host:port,key=value token format), so this parses the URI by
-// hand. AbortOnConnectFail=false + KeepAlive so a transient blip or Upstash's idle-
-// connection kill self-heal instead of throwing/staying dead.
-static ConfigurationOptions BuildRedisOptions(string connectionString)
-{
-    var uri = new Uri(connectionString);
-    var options = new ConfigurationOptions
-    {
-        EndPoints          = { { uri.Host, uri.Port == -1 ? 6379 : uri.Port } },
-        Ssl                = uri.Scheme.Equals("rediss", StringComparison.OrdinalIgnoreCase),
-        AbortOnConnectFail = false,
-        ConnectRetry       = 3,
-        ConnectTimeout     = 10_000,
-        KeepAlive          = 30,
-    };
-    if (!string.IsNullOrEmpty(uri.UserInfo))
-    {
-        var parts = uri.UserInfo.Split(':', 2);
-        if (parts.Length == 2)
-        {
-            options.User     = Uri.UnescapeDataString(parts[0]);
-            options.Password = Uri.UnescapeDataString(parts[1]);
-        }
-    }
-    return options;
-}
 
 static void EnsureSchema(AppDbContext db, ILogger logger)
 {
@@ -581,10 +532,11 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
         ALTER TABLE ""Customers"" ADD COLUMN IF NOT EXISTS ""ResetTokenExpiresAt""          timestamp NULL;
         ALTER TABLE ""Customers"" ADD COLUMN IF NOT EXISTS ""ResetCooldownUntil""           timestamp NULL;
 
-        -- Verification tokens moved to Redis (TTL-based expiry, see
-        -- IVerificationTokenStore) — these columns are no longer used.
-        ALTER TABLE ""Customers"" DROP COLUMN IF EXISTS ""VerificationTokenHash"";
-        ALTER TABLE ""Customers"" DROP COLUMN IF EXISTS ""VerificationTokenExpiresAt"";
+        -- Verification tokens live here alongside the reset-token columns above.
+        -- (They briefly lived in Redis; that dependency is gone — see AuthService.)
+        ALTER TABLE ""Customers"" ADD COLUMN IF NOT EXISTS ""VerificationTokenHash""      text      NULL;
+        ALTER TABLE ""Customers"" ADD COLUMN IF NOT EXISTS ""VerificationTokenExpiresAt"" timestamp NULL;
+        ALTER TABLE ""Customers"" ADD COLUMN IF NOT EXISTS ""VerificationCooldownUntil""  timestamp NULL;
         ALTER TABLE ""Staff""     ADD COLUMN IF NOT EXISTS ""ResetTokenHash""               text      NULL;
         ALTER TABLE ""Staff""     ADD COLUMN IF NOT EXISTS ""ResetTokenExpiresAt""          timestamp NULL;
         ALTER TABLE ""Staff""     ADD COLUMN IF NOT EXISTS ""ResetCooldownUntil""           timestamp NULL;

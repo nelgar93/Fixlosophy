@@ -13,7 +13,6 @@
   <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.*" />
     <PackageReference Include="MailKit" Version="4.*" />
-    <PackageReference Include="StackExchange.Redis" Version="3.*" />
   </ItemGroup>
 
   <!-- Fixlosophy.Tests lives in a subdirectory of this project; exclude it from the

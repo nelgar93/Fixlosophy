@@ -16,7 +16,7 @@ public class CustomerImportTests
             .Options);
 
     private static AuthService NewAuth(AppDbContext db) =>
-        new(db, new InMemoryVerificationTokenStore());
+        new(db);
 
     private static CustomerImportService NewService(AppDbContext db) =>
         new(db, NewAuth(db), NullLogger<CustomerImportService>.Instance);

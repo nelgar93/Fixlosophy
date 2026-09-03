@@ -10,9 +10,15 @@ public class Customer
     public DateTime CreatedAt { get; set; } = ShopClock.Now;
 
     // Email verification — new accounts start unverified; pre-existing rows are
-    // grandfathered as verified via the DB column default (see EnsureSchema). The
-    // verification token itself lives in Redis (see IVerificationTokenStore), not here.
+    // grandfathered as verified via the DB column default (see EnsureSchema).
     public bool EmailConfirmed { get; set; }
+
+    // Verification link, stored the same way as the forgot-password trio below:
+    // VerificationTokenExpiresAt governs link validity (24h); the separate
+    // VerificationCooldownUntil governs how soon a NEW link can be requested (60s).
+    public string? VerificationTokenHash { get; set; }
+    public DateTime? VerificationTokenExpiresAt { get; set; }
+    public DateTime? VerificationCooldownUntil { get; set; }
 
     // Forgot-password. ResetTokenExpiresAt governs link validity (60 min); the
     // separate ResetCooldownUntil governs how soon a NEW link can be requested

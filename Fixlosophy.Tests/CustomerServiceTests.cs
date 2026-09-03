@@ -6,15 +6,6 @@ namespace Fixlosophy.Tests;
 
 public class CustomerServiceTests
 {
-    private sealed class NoopTokenStore : IVerificationTokenStore
-    {
-        public Dictionary<string, string> Tokens { get; } = [];
-        public void SetToken(string key, string hash, TimeSpan ttl) => Tokens[key] = hash;
-        public bool TrySetTokenIfAbsent(string key, string value, TimeSpan ttl) => Tokens.TryAdd(key, value);
-        public string? GetTokenHash(string key) => Tokens.GetValueOrDefault(key);
-        public void RemoveToken(string key) => Tokens.Remove(key);
-    }
-
     private static AppDbContext NewDb() =>
         new(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -278,7 +269,7 @@ public class CustomerServiceTests
         notes.AddNote(customerId: null, bookingId: guestBooking.Id, authorStaffId: "staff-1",
                       body: "Bottom bracket was seized.", visibleToCustomer: true);
 
-        new AuthService(db, new NoopTokenStore()).LinkGuestBookings(customer);
+        new AuthService(db).LinkGuestBookings(customer);
 
         var note = db.CustomerNotes.Single();
         Assert.Equal(customer.Id, note.CustomerId);
@@ -298,7 +289,7 @@ public class CustomerServiceTests
         notes.AddNote(c.Id, b.Id, "staff-1", "New cables fitted.", visibleToCustomer: true);
         notes.AddNote(c.Id, b.Id, "staff-1", "Chased for payment twice.", visibleToCustomer: false);
 
-        var export = new AuthService(db, new NoopTokenStore()).ExportCustomerData(c.Id)!;
+        var export = new AuthService(db).ExportCustomerData(c.Id)!;
         var json = System.Text.Json.JsonSerializer.Serialize(export);
 
         Assert.Equal("New cables fitted.", Assert.Single(export.Bookings.Single().ServiceNotes));

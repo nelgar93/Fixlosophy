@@ -21,7 +21,7 @@ public class StorageService(IHttpClientFactory httpFactory, IConfiguration confi
 
     private const string CustomerUploadsFolder = "Fixlosophy_Customers_Uploads";
 
-    // Storage isn't touched on every page load (unlike the DB/Redis checks in
+    // Storage isn't touched on every page load (unlike the DB checks in
     // Program.cs), so config is validated lazily here on first real use rather than
     // failing app startup — a dev working on unrelated pages without storage
     // configured shouldn't be blocked from running the app at all.

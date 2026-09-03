@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Fixlosophy.Services;
 
-public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
+public class AuthService(AppDbContext db)
 {
     public const int MinPasswordLength = 8;
 
@@ -343,8 +343,8 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
     }
 
     // ── Email verification ───────────────────────────────────────────────────
-    // Token expiry is backed by Redis (via tokenStore), keyed by email, using TTL
-    // instead of a manually-compared timestamp column — see IVerificationTokenStore.
+    // Stored on the Customer row, in the same shape as the forgot-password trio
+    // below: hash + expiry + a separate, shorter resend cooldown.
 
     // 256 bits of entropy, hex-encoded. Only the hash is persisted — the raw token
     // exists only in the emailed link and the request that redeems it — so a store
@@ -360,54 +360,54 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
         return (token, HashToken(token));
     }
 
-    private static string VerifyKey(string email) => $"verify:{NormalizeEmail(email)}";
-    private static string VerifyCooldownKey(string email) => $"verify-cooldown:{NormalizeEmail(email)}";
-
+    // Writes the token onto the entity; the caller's SaveChanges persists it (at
+    // registration that's the same save that inserts the row).
     public string GenerateEmailVerificationToken(Customer customer)
     {
         var (token, hash) = NewCandidate();
-        tokenStore.SetToken(VerifyKey(customer.Email), hash, TimeSpan.FromHours(VerificationTokenHours));
+        customer.VerificationTokenHash = hash;
+        customer.VerificationTokenExpiresAt = ShopClock.Now.AddHours(VerificationTokenHours);
         // Starts the resend cooldown right away too, not just on an explicit resend.
-        tokenStore.SetToken(VerifyCooldownKey(customer.Email), "1", TimeSpan.FromSeconds(ResendCooldownSeconds));
+        customer.VerificationCooldownUntil = ShopClock.Now.AddSeconds(ResendCooldownSeconds);
+        db.SaveChanges();
         return token;
     }
 
     // Resend: no-ops while still inside the cooldown window, so repeatedly hitting
     // "resend" can't be used to spam a victim's inbox. The cooldown is a separate
-    // key/TTL from the verification token itself, so it's deliberately shorter
-    // than the token's 24h validity — a genuinely lost email can be retried in a
-    // minute instead of being stuck for a day. TrySetTokenIfAbsent on the cooldown
-    // key is atomic, so the "still cooling down" check and claiming the next
-    // resend slot happen as one operation — no check-then-write race.
+    // column from the verification token's own expiry, so it's deliberately
+    // shorter than the token's 24h validity — a genuinely lost email can be
+    // retried in a minute instead of being stuck for a day.
     public string? RegenerateEmailVerificationTokenIfNeeded(Customer customer)
     {
         if (customer.EmailConfirmed) return null;
-        if (!tokenStore.TrySetTokenIfAbsent(VerifyCooldownKey(customer.Email), "1", TimeSpan.FromSeconds(ResendCooldownSeconds)))
-            return null;
+        if (customer.VerificationCooldownUntil is { } cooldown && cooldown > ShopClock.Now) return null;
 
         // Unconditionally overwrites the previous (still-valid) token — only the
         // newest link is ever live, same as before.
         var (token, hash) = NewCandidate();
-        tokenStore.SetToken(VerifyKey(customer.Email), hash, TimeSpan.FromHours(VerificationTokenHours));
+        customer.VerificationTokenHash = hash;
+        customer.VerificationTokenExpiresAt = ShopClock.Now.AddHours(VerificationTokenHours);
+        customer.VerificationCooldownUntil = ShopClock.Now.AddSeconds(ResendCooldownSeconds);
+        db.SaveChanges();
         return token;
     }
 
     public bool ConfirmEmail(string email, string token)
     {
-        var key = VerifyKey(email);
-        var storedHash = tokenStore.GetTokenHash(key);
-        if (storedHash is null ||
-            !CryptographicOperations.FixedTimeEquals(
+        var customer = GetCustomerByEmail(email);
+        if (customer is null) return false;
+        if (customer.VerificationTokenHash is not { } storedHash) return false;
+        if (customer.VerificationTokenExpiresAt is not { } expiresAt || expiresAt <= ShopClock.Now) return false;
+        if (!CryptographicOperations.FixedTimeEquals(
                 Convert.FromHexString(storedHash), Convert.FromHexString(HashToken(token))))
             return false;
 
-        var customer = GetCustomerByEmail(email);
-        if (customer is null) return false;
-
         customer.EmailConfirmed = true;
-        // Save first, then invalidate the token: if the process dies in between, a
-        // replayed link just redundantly re-confirms an already-confirmed row and
-        // retries the removal — never burns the only working link with no DB change.
+        // Confirming and burning the token are one save, so a replayed link can't
+        // find a still-live token against an already-confirmed row.
+        customer.VerificationTokenHash = null;
+        customer.VerificationTokenExpiresAt = null;
         db.SaveChanges();
 
         // Clicking the emailed link proves they control the mailbox, so any guest
@@ -415,7 +415,6 @@ public class AuthService(AppDbContext db, IVerificationTokenStore tokenStore)
         // registration so the account is already populated at first sign-in.
         LinkGuestBookings(customer);
 
-        tokenStore.RemoveToken(key);
         return true;
     }
 
