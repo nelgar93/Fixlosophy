@@ -1,0 +1,67 @@
+@inject BookingService BookingService
+
+@*
+    Permanent deletion, admin-only.
+
+    Delete used to sit in the action strip, one tap from Cancel and wearing the same
+    red. They are not peers: Cancel means "this isn't happening" and keeps the record,
+    Delete removes the row and its photos from Supabase Storage for good. It lives in
+    the expanded detail instead, so reaching it is a decision rather than a mis-tap.
+
+    Note that job notes SURVIVE this (CustomerNote.BookingId is SET NULL), so on a
+    guest booking a note becomes unreachable from any screen.
+*@
+
+@if (Context.IsAdmin)
+{
+    <div class="booking-danger" @onclick:stopPropagation="true">
+        @if (IsConfirming)
+        {
+            <p class="booking-danger__text">
+                Permanently delete <strong>@Booking.Reference</strong> and its photos?
+                This can't be undone — use Cancel if you just want to free the slot.
+            </p>
+            <div class="booking-danger__actions">
+                <button class="action-btn action-btn--danger"
+                        @onclick="Delete">Delete permanently</button>
+                <button class="action-btn action-btn--keep"
+                        @onclick="() => OpenPanel(null)">Keep</button>
+            </div>
+        }
+        else
+        {
+            <button class="action-btn action-btn--delete"
+                    @onclick="() => OpenPanel(PanelDelete)">
+                <Icon Name="trash" /> Delete booking
+            </button>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private AdminContext Context { get; set; } = default!;
+
+    [Parameter, EditorRequired] public Booking Booking { get; set; } = default!;
+
+    /// Shared with BookingActions through the parent, so opening this confirm closes
+    /// the cancel confirm and the completion note, and vice versa.
+    [Parameter] public string? OpenPanelKey { get; set; }
+    [Parameter] public EventCallback<string?> OpenPanelKeyChanged { get; set; }
+
+    [Parameter] public EventCallback<Booking> OnChanged { get; set; }
+
+    private const string PanelDelete = "delete";
+
+    private bool IsConfirming => OpenPanelKey == $"{PanelDelete}:{Booking.Id}";
+
+    private Task OpenPanel(string? kind) =>
+        OpenPanelKeyChanged.InvokeAsync(kind is null ? null : $"{kind}:{Booking.Id}");
+
+    private async Task Delete()
+    {
+        if (!Context.IsAdmin) return;  // server-side guard
+        await BookingService.DeleteBookingAsync(Booking.Id);
+        await OpenPanel(null);
+        await OnChanged.InvokeAsync(Booking);
+    }
+}

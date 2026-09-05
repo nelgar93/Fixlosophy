@@ -1,0 +1,203 @@
+@inject BookingService BookingService
+@inject AvailabilityService Availability
+
+@*
+    One day at a time, slot by slot — the view the shop floor works from.
+
+    Unlike the Bookings tab this is a schedule, not a list: every trading slot appears
+    whether or not anything is in it, because an empty 11am is information.
+*@
+
+<div class="day-cal">
+    @* Two explicit groups rather than one wrapping flex row. Previously
+       all five controls shared a row that wrapped wherever it ran out
+       of space, which on a phone put "previous day" on one line and
+       "next day" on the next — the two arrows split apart, which reads
+       as broken. Now the arrows always flank the date, and the jump
+       controls sit on their own row beneath. *@
+    <div class="day-cal__nav">
+        <div class="day-cal__nav-main">
+            <button class="cal-nav__btn" @onclick="() => ChangeDay(-1)" aria-label="Previous day"><Icon Name="chevron-left" /></button>
+            @* Two lengths of the same date, one shown per breakpoint.
+               The full form wraps to two lines on a phone and pushes
+               the arrows apart; the short form keeps the whole header
+               to a single line. The year is redundant on mobile —
+               the picker directly below it spells the date out in
+               full. `display: none` also drops the hidden one from
+               the accessibility tree, so it isn't announced twice. *@
+            <div class="day-cal__title">
+                <strong class="day-cal__date day-cal__date--full">@day.ToString("dddd, d MMMM yyyy")</strong>
+                <strong class="day-cal__date day-cal__date--short">@day.ToString("ddd d MMM")</strong>
+                @if (day.Date == ShopClock.Today)
+                {
+                    <span class="status-badge status-badge--confirmed">Today</span>
+                }
+            </div>
+            <button class="cal-nav__btn" @onclick="() => ChangeDay(1)" aria-label="Next day"><Icon Name="chevron-right" /></button>
+        </div>
+
+        <div class="day-cal__nav-tools">
+            <label class="sr-only" for="day-cal-date">Jump to date</label>
+            <input id="day-cal-date" type="date" class="form-control day-cal__picker"
+                   value="@day.ToString("yyyy-MM-dd")" @onchange="OnDatePicked" />
+            @if (day.Date != ShopClock.Today)
+            {
+                <button class="btn btn-outline" @onclick="() => SetDay(ShopClock.Today)">Today</button>
+            }
+        </div>
+    </div>
+
+    <div class="day-cal__summary">
+        <span><strong>@_bookings.Count</strong> booking@(_bookings.Count == 1 ? "" : "s")</span>
+        @if (_bookings.Exists(b => b.Status == BookingStatus.Pending))
+        {
+            <span class="status-badge status-badge--pending">@_bookings.Count(b => b.Status == BookingStatus.Pending) pending</span>
+        }
+        @if (day.DayOfWeek == DayOfWeek.Sunday)
+        {
+            <span class="day-cal__closed">Sunday hours — 11am to 5pm</span>
+        }
+    </div>
+
+    @* Why the day isn't taking bookings, stated once at the top rather than left to be
+       inferred from a column of empty slots. Existing bookings still show below: a
+       closure added after the fact doesn't make the day's work disappear, and those are
+       exactly the ones somebody needs to deal with. *@
+    @if (_state is DayState.Closed or DayState.NoMechanic)
+    {
+        <div class="day-cal__notice">
+            <Icon Name="alert" />
+            @if (_state == DayState.Closed)
+            {
+                <span>Shop closed@(string.IsNullOrWhiteSpace(_closureReason) ? "" : $" — {_closureReason}"). Not bookable.</span>
+            }
+            else
+            {
+                <span>No mechanic in. Not bookable.</span>
+            }
+            @if (_bookings.Exists(b => b.Status is BookingStatus.Pending or BookingStatus.Confirmed))
+            {
+                <strong>There are still bookings on this day.</strong>
+            }
+        </div>
+    }
+
+    <div class="day-cal__slots">
+        @foreach (var slot in BookingService.SlotsFor(day))
+        {
+            var slotBookings = _bookings.Where(b => b.SlotTime == slot).ToList();
+            var slotBlocked = _blockedSlots.Contains(slot);
+            <div class="day-cal-slot @(slotBookings.Count == 0 ? "day-cal-slot--free" : "")">
+                <div class="day-cal-slot__time">@slot</div>
+                <div class="day-cal-slot__content">
+                    @if (slotBookings.Count == 0)
+                    {
+                        <span class="day-cal-slot__free">@(slotBlocked ? "Closed" : "Free")</span>
+                    }
+                    else
+                    {
+                        @foreach (var booking in slotBookings)
+                        {
+                            var b = booking;
+                            <div class="day-cal-booking @(b.Status == BookingStatus.Cancelled ? "day-cal-booking--cancelled" : "")">
+                                <div class="day-cal-booking__info">
+                                    <div class="day-cal-booking__head">
+                                        <strong>@b.CustomerName</strong>
+                                        <span class="ref-badge">@b.Reference</span>
+                                        <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                                        @if (IsLate(b))
+                                        {
+                                            <span class="status-badge status-badge--late" title="Slot has passed and the bike isn't booked in">Not arrived</span>
+                                        }
+                                    </div>
+                                    <div class="day-cal-booking__meta">
+                                        <span>@b.ServiceName</span>
+                                        @if (!string.IsNullOrWhiteSpace(b.BikeDescription))
+                                        {
+                                            <span> &middot; @b.BikeDescription</span>
+                                        }
+                                        @if (Context.CanSeeCustomerDetails && !string.IsNullOrWhiteSpace(b.CustomerPhone))
+                                        {
+                                            <span> &middot; @b.CustomerPhone</span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(b.Notes))
+                                    {
+                                        <div class="day-cal-booking__notes">@b.Notes</div>
+                                    }
+                                </div>
+                                @if (BookingActions.HasActions(Context, b))
+                                {
+                                    <div class="day-cal-booking__actions">
+                                        <BookingActions Booking="b"
+                                                        OpenPanelKey="@openPanelKey"
+                                                        OpenPanelKeyChanged="k => openPanelKey = k"
+                                                        OnChanged="OnBookingChanged" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private AdminContext Context { get; set; } = default!;
+
+    /// Raised when a booking changes here, so the page can refresh anything derived
+    /// from bookings that lives outside this tab.
+    [Parameter] public EventCallback OnBookingsChanged { get; set; }
+
+    private DateTime day = ShopClock.Today;
+    private List<Booking> _bookings = [];
+    private DayState _state;
+    private string? _closureReason;
+    private HashSet<string> _blockedSlots = [];
+    private string? openPanelKey;
+
+    protected override void OnInitialized() => Reload();
+
+    private void SetDay(DateTime value)
+    {
+        day = value.Date;
+        openPanelKey = null;
+        Reload();
+    }
+
+    private void ChangeDay(int days) => SetDay(day.AddDays(days));
+
+    private void OnDatePicked(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var d)) SetDay(d);
+    }
+
+    private void Reload()
+    {
+        var dayBookings = BookingService.GetBookingsByDate(day);
+
+        // Workers without CanViewAllBookings only see what's assigned to them.
+        _bookings = Context.CanViewAllBookings
+            ? dayBookings
+            : dayBookings.Where(b => b.AssignedStaffId == Context.Staff.Id).ToList();
+
+        _state = Availability.StateOf(day);
+        _closureReason = _state == DayState.Closed ? Availability.AllDayClosureOn(day)?.Reason : null;
+        _blockedSlots = _state == DayState.Open ? Availability.BlockedSlotsOn(day) : [];
+    }
+
+    private async Task OnBookingChanged(Booking booking)
+    {
+        Reload();
+        await OnBookingsChanged.InvokeAsync();
+    }
+
+    /// The slot has come and gone with the bike not booked in. Derived rather than
+    /// stored, so it's right the moment the page renders — MaintenanceJobs raises the
+    /// bell for the same condition, but the badge shouldn't wait on a tick.
+    private static bool IsLate(Booking booking) =>
+        booking.Status is BookingStatus.Pending or BookingStatus.Confirmed &&
+        ShopClock.Now - BookingService.SlotStart(booking) >= MaintenanceJobs.LateAfter;
+}

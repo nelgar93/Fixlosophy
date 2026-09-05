@@ -29,8 +29,8 @@
             <a class="action-btn action-btn--call" href="mailto:@Detail.Customer.Email">@Detail.Customer.Email</a>
             @if (AuthService.IsValidPhone(Detail.Customer.Phone))
             {
-                <a class="action-btn action-btn--call" href="tel:@TelHref(Detail.Customer.Phone)">@Detail.Customer.Phone</a>
-                <a class="action-btn action-btn--whatsapp" href="@WhatsAppHref(Detail.Customer.Phone)"
+                <a class="action-btn action-btn--call" href="@ContactLinks.Tel(Detail.Customer.Phone)">@Detail.Customer.Phone</a>
+                <a class="action-btn action-btn--whatsapp" href="https://wa.me/@ContactLinks.WhatsAppNumber(Detail.Customer.Phone)"
                    target="_blank" rel="noopener">WhatsApp</a>
             }
         </div>
@@ -235,17 +235,7 @@
         noteVisible = false;
     }
 
-    // Same normalisation the booking actions use: wa.me wants international format
-    // with no '+' or leading zero, and a bare national number is assumed to be UK.
-    private static string WhatsAppHref(string phone)
-    {
-        var digits = new string(phone.Where(char.IsDigit).ToArray());
-        var international = digits.StartsWith("00", StringComparison.Ordinal) ? digits[2..]
-                          : digits.StartsWith('0') ? "44" + digits[1..]
-                          : digits;
-        return $"https://wa.me/{international}";
-    }
-
-    private static string TelHref(string phone) =>
-        new(phone.Where(c => char.IsDigit(c) || c == '+').ToArray());
+    // Phone-number normalisation lives in Services/ContactLinks — it had grown three
+    // separate copies (here, the booking actions and the enquiry actions), which is
+    // two more places for the UK-prefix rule to drift.
 }

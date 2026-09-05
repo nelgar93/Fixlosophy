@@ -1,0 +1,252 @@
+@inject AuthService AuthService
+
+@*
+    Staff accounts and their permissions. Admin-only — the tab isn't rendered for
+    anyone else, and every handler re-checks, because a hidden button is not a
+    permission.
+
+    Note the permission checkboxes bind straight to the loaded StaffMember objects and
+    are only persisted by Save. That's deliberate: ticking three boxes for one person
+    is one save, not three round trips.
+*@
+
+<div class="staff-mgmt">
+
+    <!-- Add new staff form -->
+    <div class="staff-add-card">
+        <h3>Add Staff Member</h3>
+        @if (formError != null)
+        {
+            <div class="booking-error admin-inline-error">@formError</div>
+        }
+        <div class="form-row">
+            <div class="form-group">
+                <label for="admin-full-name">Full Name</label>
+                <input id="admin-full-name" class="form-control" @bind="newStaff.FullName" placeholder="Jane Smith" />
+            </div>
+            <div class="form-group">
+                <label for="admin-email">Email</label>
+                <input id="admin-email" class="form-control" type="email"
+                       autocomplete="email" inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"
+                       @bind="newStaff.Email" placeholder="jane@fixlosophy.com" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="admin-password">Password</label>
+                <input id="admin-password" class="form-control" type="password" @bind="newStaffPassword" placeholder="Temporary password" />
+            </div>
+            <div class="form-group">
+                <label for="admin-role">Role</label>
+                <select id="admin-role" class="form-control" @bind="newStaff.Role">
+                    <option value="@StaffRole.Worker">Worker</option>
+                    <option value="@StaffRole.Admin">Admin</option>
+                </select>
+            </div>
+        </div>
+        <label class="admin-toggle">
+            <span>
+                Works on bikes
+                <span class="text-muted-sm">— counts towards whether a day can take bookings</span>
+            </span>
+            <input type="checkbox" @bind="newStaff.IsMechanic" />
+        </label>
+        <button class="btn btn-primary" @onclick="AddStaff">Add Staff Member</button>
+    </div>
+
+    <!-- Staff list -->
+    <h3 class="admin-subheading">Current Staff</h3>
+    @if (rowError != null)
+    {
+        <div class="booking-error admin-inline-error">@rowError</div>
+    }
+
+    @* Unticking the last mechanic doesn't shut the shop — the rule switches off
+       instead, which is the safe direction to fail in but silent unless said out
+       loud. See AvailabilityService.MechanicRuleApplies. *@
+    @if (!_allStaff.Exists(s => s.IsActive && s.IsMechanic))
+    {
+        <div class="admin-inline-warning">
+            Nobody is marked as working on bikes, so holidays won't close any days.
+            Tick <strong>Works on bikes</strong> for whoever is in the workshop.
+        </div>
+    }
+
+    <!-- MOBILE: one card per staff member. Permission checkboxes become
+         full-width toggle rows — at 13px in a table cell they were far
+         too small to hit on touch, and the table itself was hidden. -->
+    <div class="admin-mobile-cards">
+        @foreach (var member in _allStaff)
+        {
+            var m = member;
+            var isCurrentUser = m.Id == Context.Staff.Id;
+            <div class="admin-edit-card">
+                <div class="admin-edit-card__title">
+                    @m.FullName
+                    @if (isCurrentUser) { <span class="text-muted-sm">(you)</span> }
+                </div>
+                <div class="admin-edit-card__meta">@m.Email</div>
+                <div class="admin-edit-card__field">
+                    <span>Role</span>
+                    <span class="status-badge status-badge--@(m.Role == StaffRole.Admin ? "confirmed" : "pending")">@m.Role</span>
+                </div>
+
+                @if (m.Role == StaffRole.Admin)
+                {
+                    <div class="admin-edit-card__field">
+                        <span>Permissions</span>
+                        <span class="text-muted-sm">Full access</span>
+                    </div>
+                }
+                else
+                {
+                    <label class="admin-toggle">
+                        <span>View all bookings</span>
+                        <input type="checkbox" @bind="m.CanViewAllBookings" />
+                    </label>
+                    <label class="admin-toggle">
+                        <span>Manage bookings</span>
+                        <input type="checkbox" @bind="m.CanManageBookings" />
+                    </label>
+                    <label class="admin-toggle">
+                        <span>See customer details</span>
+                        <input type="checkbox" @bind="m.CanViewCustomerDetails" />
+                    </label>
+                }
+
+                @* Separate from the permissions above, and shown for admins too: this
+                   is about the workshop, not the dashboard. An owner who turns
+                   spanners is a mechanic; one who doesn't isn't. *@
+                <label class="admin-toggle">
+                    <span>Works on bikes</span>
+                    <input type="checkbox" @bind="m.IsMechanic" />
+                </label>
+
+                @if (!isCurrentUser)
+                {
+                    <label class="admin-toggle">
+                        <span>Active</span>
+                        <input type="checkbox" @bind="m.IsActive" />
+                    </label>
+                }
+
+                <div class="admin-edit-card__actions">
+                    <button class="btn btn-outline" @onclick="() => Save(m)">Save</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>View All Bookings</th>
+                    <th>Manage Bookings</th>
+                    <th>Customer Details</th>
+                    <th>Works on Bikes</th>
+                    <th>Status</th>
+                    <th>Save</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var member in _allStaff)
+                {
+                    var m = member;
+                    var isCurrentUser = m.Id == Context.Staff.Id;
+                    <tr>
+                        <td><strong>@m.FullName</strong> @if (isCurrentUser) { <span class="text-muted-sm">(you)</span> }</td>
+                        <td class="text-muted-sm">@m.Email</td>
+                        <td>
+                            <span class="status-badge status-badge--@(m.Role == StaffRole.Admin ? "confirmed" : "pending")">
+                                @m.Role
+                            </span>
+                        </td>
+                        @if (m.Role == StaffRole.Admin)
+                        {
+                            <td colspan="3" class="text-center text-muted-sm">Full access (Admin)</td>
+                        }
+                        else
+                        {
+                            <td class="text-center">
+                                <input type="checkbox" @bind="m.CanViewAllBookings" />
+                            </td>
+                            <td class="text-center">
+                                <input type="checkbox" @bind="m.CanManageBookings" />
+                            </td>
+                            <td class="text-center">
+                                <input type="checkbox" @bind="m.CanViewCustomerDetails" />
+                            </td>
+                        }
+                        <td class="text-center">
+                            <input type="checkbox" @bind="m.IsMechanic" title="Works on bikes" />
+                        </td>
+                        <td>
+                            @if (!isCurrentUser)
+                            {
+                                <input type="checkbox" @bind="m.IsActive" title="Active" />
+                                <span class="text-muted-sm admin-checkbox-label">Active</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted-sm">—</span>
+                            }
+                        </td>
+                        <td>
+                            <button class="action-btn action-btn--primary"
+                                    @onclick="() => Save(m)">Save</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private AdminContext Context { get; set; } = default!;
+
+    /// Raised when the staff list changes, so the page can re-read anything derived
+    /// from it — the mechanic warning above is local, but availability isn't.
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<StaffMember> _allStaff = [];
+    private StaffMember newStaff = new();
+    private string newStaffPassword = "";
+    private string? formError;
+    private string? rowError;
+
+    protected override void OnInitialized() => Reload();
+
+    private void Reload() => _allStaff = AuthService.GetAllStaff();
+
+    private async Task AddStaff()
+    {
+        if (!Context.IsAdmin) return;  // server-side guard; don't rely on a hidden tab
+        formError = null;
+        if (string.IsNullOrWhiteSpace(newStaff.FullName)) { formError = "Name is required."; return; }
+        if (!AuthService.IsValidEmail(newStaff.Email)) { formError = "Please enter a valid email."; return; }
+        if (AuthService.ValidatePassword(newStaffPassword) is { } pwError) { formError = pwError; return; }
+
+        newStaff.Email = AuthService.NormalizeEmail(newStaff.Email);
+        newStaff.PasswordHash = AuthService.HashPassword(newStaffPassword);
+        formError = AuthService.SaveStaff(newStaff);
+        if (formError != null) return;
+
+        Reload();
+        newStaff = new StaffMember();
+        newStaffPassword = "";
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task Save(StaffMember member)
+    {
+        if (!Context.IsAdmin) return;  // server-side guard
+        rowError = AuthService.SaveStaff(member);
+        Reload();
+        await OnChanged.InvokeAsync();
+    }
+}

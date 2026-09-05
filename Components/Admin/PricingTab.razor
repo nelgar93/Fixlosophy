@@ -1,0 +1,174 @@
+@inject BookingService BookingService
+
+@*
+    The service price list. Admin-only.
+
+    Prices are edited into a scratch dictionary and only written by Save, so a mistyped
+    digit isn't live the moment it's typed. The annual increase (MaintenanceJobs) writes
+    to the same rows, which is what the banner is about — it explains why a price may
+    have moved without anyone touching this screen.
+*@
+
+<div class="staff-mgmt">
+    <div class="pricing-tab-header">
+        <h3>Service Prices</h3>
+        <button class="btn btn-primary" @onclick="SaveAll">Save All</button>
+    </div>
+
+    @if (saveMessage != null)
+    {
+        <div class="admin-success"><Icon Name="check" /> @saveMessage</div>
+    }
+
+    @if (_adjustments.Count > 0)
+    {
+        var last = _adjustments[0];
+        <div class="pricing-info-banner">
+            Last automatic increase: <strong>@last.AppliedAt.ToString("d MMMM yyyy")</strong>
+            &nbsp;·&nbsp; Rate applied: <strong>@((last.Rate * 100).ToString("0.##"))%</strong>
+            &nbsp;·&nbsp; Next increase: <strong>1 April @(last.Year + 1)</strong>
+        </div>
+    }
+
+    <!-- MOBILE: one card per service. The table below is hidden under
+         768px, and without these this tab was blank on every phone.
+         The --sticky-actions modifier reserves room at the bottom for
+         the floating Save All bar, which otherwise sits permanently on
+         top of the last service's own Save button. -->
+    <div class="admin-mobile-cards admin-mobile-cards--sticky-actions">
+        @foreach (var sp in _servicePricings)
+        {
+            var sid = sp.Id;
+            <div class="admin-edit-card">
+                <div class="admin-edit-card__title">@sp.Name</div>
+                <div class="admin-edit-card__meta">@sp.Category &middot; @sp.Duration</div>
+
+                @if (sp.IsQuoteOnly)
+                {
+                    <div class="admin-edit-card__field">
+                        <span>Price</span>
+                        <span class="text-faint-sm">Quote only</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="admin-edit-card__field">
+                        <span>Current</span>
+                        <strong class="price-current">£@sp.CurrentPrice</strong>
+                    </div>
+                    <div class="admin-edit-card__field">
+                        <label for="price-m-@sid">New price (£)</label>
+                        <input id="price-m-@sid" class="form-control form-control--price"
+                               type="number" min="0" step="1" inputmode="decimal"
+                               value="@_editPrices[sid]"
+                               @oninput="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _editPrices[sid] = v; }" />
+                    </div>
+                    <div class="admin-edit-card__actions">
+                        <button class="btn btn-outline" @onclick="() => Save(sid)">Save</button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="pricing-sticky-actions">
+        <button class="btn btn-primary" @onclick="SaveAll">Save All Prices</button>
+    </div>
+
+    <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Category</th>
+                    <th>Duration</th>
+                    <th class="col-price">Current Price</th>
+                    <th class="col-price-input">New Price (£)</th>
+                    <th class="col-save">Save</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var sp in _servicePricings)
+                {
+                    var sid = sp.Id;
+                    <tr>
+                        <td><strong>@sp.Name</strong></td>
+                        <td class="text-muted-sm">@sp.Category</td>
+                        <td class="text-muted-sm">@sp.Duration</td>
+                        <td>
+                            @if (sp.IsQuoteOnly)
+                            {
+                                <span class="text-faint-sm">Quote only</span>
+                            }
+                            else
+                            {
+                                <span class="price-current">£@sp.CurrentPrice</span>
+                            }
+                        </td>
+                        <td>
+                            @if (sp.IsQuoteOnly)
+                            {
+                                <span class="text-faint-sm">—</span>
+                            }
+                            else
+                            {
+                                <input class="form-control form-control--price"
+                                       type="number" min="0" step="1"
+                                       value="@_editPrices[sid]"
+                                       @oninput="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _editPrices[sid] = v; }" />
+                            }
+                        </td>
+                        <td>
+                            @if (!sp.IsQuoteOnly)
+                            {
+                                <button class="action-btn action-btn--primary"
+                                        @onclick="() => Save(sid)">Save</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private AdminContext Context { get; set; } = default!;
+
+    private List<ServicePricing> _servicePricings = [];
+    private Dictionary<string, decimal> _editPrices = [];
+    private List<PriceAdjustment> _adjustments = [];
+    private string? saveMessage;
+
+    protected override void OnInitialized()
+    {
+        Reload();
+        _adjustments = BookingService.GetPriceAdjustments();
+    }
+
+    // Re-reads the list and resets the edit buffer to what was actually stored, so the
+    // inputs show the saved value rather than what was typed at them.
+    private void Reload()
+    {
+        _servicePricings = BookingService.GetServicePricings();
+        _editPrices = _servicePricings.ToDictionary(s => s.Id, s => s.CurrentPrice);
+    }
+
+    private void Save(string id)
+    {
+        if (!Context.IsAdmin) return;  // server-side guard; pricing is admin-only
+        if (!_editPrices.TryGetValue(id, out var price) || price < 0) return;
+        BookingService.UpdateServicePrice(id, Math.Round(price, 2));
+        saveMessage = "Price updated.";
+        Reload();
+    }
+
+    private void SaveAll()
+    {
+        if (!Context.IsAdmin) return;  // server-side guard
+        foreach (var (id, price) in _editPrices.Where(p => p.Value >= 0))
+            BookingService.UpdateServicePrice(id, Math.Round(price, 2));
+        saveMessage = "All prices saved.";
+        Reload();
+    }
+}

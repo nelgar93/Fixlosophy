@@ -2,35 +2,44 @@
 @rendermode InteractiveServer
 @attribute [Authorize(Roles = "Admin,Worker")]
 @implements IDisposable
-@inject BookingService BookingService
 @inject AuthService AuthService
-@inject NavigationManager Nav
-@inject IStorageService Storage
 @inject NotificationService Notifications
 @inject NotificationHub NotificationHub
-@inject CustomerService Customers
 @inject EnquiryService Enquiries
-@inject IEmailSender EmailSender
-@inject ILogger<Admin> Logger
+@inject NavigationManager Nav
+
+@*
+    The dashboard shell: who's signed in, the notification bell, the tab bar — and
+    nothing else. Each tab is its own component under Components/Admin.
+
+    This file was 2,013 lines with all six tabs sharing one @code block of about forty
+    fields, which is why a change to the pricing screen could break the calendar. The
+    tabs never shared state; they shared a file.
+
+    Switching tabs destroys the old component and creates the new one, so each tab
+    loads its own data on init and can't show something stale. That replaced a set of
+    hand-written cross-tab reloads — the bookings tab used to have to remember to
+    refresh the calendar after a status change.
+*@
 
 <PageTitle>Admin – Fixlosophy Bookings</PageTitle>
 <HeadContent>
     <meta name="robots" content="noindex, nofollow" />
 </HeadContent>
 
-@if (loggedInStaff != null)
+@if (_context is not null)
 {
     <div class="page-hero page-hero--sm page-hero--admin">
         <div class="container admin-hero-row">
             <div>
-                <p class="section-eyebrow">@(IsAdmin ? "Admin Dashboard" : "Staff Dashboard")</p>
+                <p class="section-eyebrow">@(_context.IsAdmin ? "Admin Dashboard" : "Staff Dashboard")</p>
                 <h1>Booking Management</h1>
             </div>
             <div class="admin-header-actions">
                 <span class="admin-header-actions__name">
-                    @loggedInStaff.FullName &nbsp;·&nbsp;
-                    <span class="status-badge status-badge--@(IsAdmin ? "confirmed" : "pending")">
-                        @loggedInStaff.Role
+                    @_context.Staff.FullName &nbsp;·&nbsp;
+                    <span class="status-badge status-badge--@(_context.IsAdmin ? "confirmed" : "pending")">
+                        @_context.Staff.Role
                     </span>
                 </span>
 
@@ -101,977 +110,75 @@
             <!-- Tab bar -->
             <div class="admin-filter-scroll tab-bar-wrapper">
                 <div class="admin-filter-tabs">
-                    <button class="filter-tab @(activeTab == "calendar" ? "active" : "")"
-                            @onclick="OpenCalendarTab">Calendar</button>
-                    <button class="filter-tab @(activeTab == "bookings" ? "active" : "")"
-                            @onclick="SetBookingsTab">Bookings</button>
+                    <button class="filter-tab @(activeTab == TabCalendar ? "active" : "")"
+                            @onclick="() => SetTab(TabCalendar)">Calendar</button>
+                    <button class="filter-tab @(activeTab == TabBookings ? "active" : "")"
+                            @onclick="() => SetTab(TabBookings)">Bookings</button>
                     @* Gated on the same permission that governs seeing contact details
                        on a booking — reaching them through a customer list instead
                        shouldn't be a way around it. *@
-                    @if (CanSeeCustomerDetails)
+                    @if (_context.CanSeeCustomerDetails)
                     {
-                        <button class="filter-tab @(activeTab == "customers" ? "active" : "")"
-                                @onclick="OpenCustomersTab">Customers</button>
+                        <button class="filter-tab @(activeTab == TabCustomers ? "active" : "")"
+                                @onclick="() => SetTab(TabCustomers)">Customers</button>
                         @* Same gate: an enquiry is a name, an email and a phone number
                            typed in by a member of the public. *@
-                        <button class="filter-tab @(activeTab == "enquiries" ? "active" : "")"
-                                @onclick="OpenEnquiriesTab">
+                        <button class="filter-tab @(activeTab == TabEnquiries ? "active" : "")"
+                                @onclick="() => SetTab(TabEnquiries)">
                             Enquiries
-                            @if (UnhandledEnquiryCount > 0)
+                            @if (unhandledEnquiries > 0)
                             {
-                                <span class="filter-tab__count">@UnhandledEnquiryCount</span>
+                                <span class="filter-tab__count">@unhandledEnquiries</span>
                             }
                         </button>
                     }
-                    @if (IsAdmin)
+                    @if (_context.IsAdmin)
                     {
-                        <button class="filter-tab @(activeTab == "pricing" ? "active" : "")"
-                                @onclick="OpenPricingTab">Pricing</button>
-                        <button class="filter-tab @(activeTab == "staff" ? "active" : "")"
-                                @onclick="OpenStaffTab">Staff Management</button>
+                        <button class="filter-tab @(activeTab == TabAvailability ? "active" : "")"
+                                @onclick="() => SetTab(TabAvailability)">Availability</button>
+                        <button class="filter-tab @(activeTab == TabPricing ? "active" : "")"
+                                @onclick="() => SetTab(TabPricing)">Pricing</button>
+                        <button class="filter-tab @(activeTab == TabStaff ? "active" : "")"
+                                @onclick="() => SetTab(TabStaff)">Staff Management</button>
                     }
                 </div>
             </div>
 
-            <!-- ── BOOKINGS TAB ─────────────────────────────────────────── -->
-            @if (activeTab == "bookings")
-            {
-                <!-- Stats -->
-                <div class="admin-stats">
-                    <div class="admin-stat">
-                        <div class="admin-stat__number">@stats.total</div>
-                        <div class="admin-stat__label">@(IsAdmin || loggedInStaff.CanViewAllBookings ? "Total" : "Assigned")</div>
-                    </div>
-                    <div class="admin-stat admin-stat--highlight">
-                        <div class="admin-stat__number">@stats.today</div>
-                        <div class="admin-stat__label">Today</div>
-                    </div>
-                    <div class="admin-stat">
-                        <div class="admin-stat__number">@stats.pending</div>
-                        <div class="admin-stat__label">Pending</div>
-                    </div>
-                    <div class="admin-stat">
-                        <div class="admin-stat__number">@stats.confirmed</div>
-                        <div class="admin-stat__label">Confirmed</div>
-                    </div>
-                </div>
-
-                <!-- Filters -->
-                <div class="admin-filters">
-                    <div class="admin-filter-scroll">
-                        <div class="admin-filter-tabs">
-                            @foreach (var f in Filters)
-                            {
-                                <button class="filter-tab @(activeFilter == f ? "active" : "")"
-                                        @onclick="() => SetFilter(f)">@f</button>
-                            }
-                        </div>
-                    </div>
-                    <div class="admin-search">
-                        <label class="sr-only" for="booking-search">Search bookings</label>
-                        <input id="booking-search" class="form-control" type="text"
-                               value="@searchTerm" @oninput="OnSearch"
-                               placeholder="Search name, ref, service…" />
-                    </div>
-                    <div class="admin-sort">
-                        <label class="sr-only" for="booking-sort">Sort bookings</label>
-                        <select id="booking-sort" class="form-control"
-                                value="@sortMode" @onchange="SetSort">
-                            @foreach (var opt in BookingService.SortOptions)
-                            {
-                                <option value="@opt">@BookingService.SortLabel(opt)</option>
-                            }
-                        </select>
-                    </div>
-                </div>
-
-                @if (TodayBookings.Any() && activeFilter == "All")
+            @* One cascading value rather than four parameters on every tab. The
+               permission checks inside each tab duplicate the guards here on purpose:
+               hiding a tab is not a permission check. *@
+            <CascadingValue Value="_context" IsFixed="true">
+                @switch (activeTab)
                 {
-                    <div class="today-schedule">
-                        <h3><Icon Name="clock" /> Today's Schedule</h3>
-                        <div class="today-slots">
-                            @foreach (var b in TodayBookings.OrderBy(x => x.SlotTime))
-                            {
-                                <div class="today-slot">
-                                    <span class="today-slot__time">@b.SlotTime</span>
-                                    <span class="today-slot__name">@b.CustomerName</span>
-                                    <span class="today-slot__service">@b.ServiceName</span>
-                                    <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
-                                </div>
-                            }
-                        </div>
-                    </div>
+                    case TabBookings:
+                        <BookingsTab OnBookingsChanged="RefreshBadges" />
+                        break;
+
+                    case TabCalendar:
+                        <CalendarTab OnBookingsChanged="RefreshBadges" />
+                        break;
+
+                    case TabCustomers when _context.CanSeeCustomerDetails:
+                        <CustomersTab />
+                        break;
+
+                    case TabEnquiries when _context.CanSeeCustomerDetails:
+                        <EnquiriesTab OnChanged="RefreshBadges" />
+                        break;
+
+                    case TabAvailability when _context.IsAdmin:
+                        <AvailabilityTab />
+                        break;
+
+                    case TabPricing when _context.IsAdmin:
+                        <PricingTab />
+                        break;
+
+                    case TabStaff when _context.IsAdmin:
+                        <StaffTab />
+                        break;
                 }
-
-                @* A search that matches nothing used to remove the cards, the pager AND
-                   the whole table, column headers included, leaving one line of text
-                   where the list had been. The table is the thing being searched, so it
-                   stays put and says it found nothing. *@
-                <!-- MOBILE: Card list -->
-                <div class="admin-cards">
-                    @if (!FilteredBookings.Any())
-                    {
-                        <div class="admin-empty"><p>@BookingsEmptyMessage</p></div>
-                    }
-                    @foreach (var booking in FilteredBookings)
-                    {
-                        var b = booking;
-                        var isOpen = expandedId == b.Id;
-                        <div class="admin-card @(isOpen ? "admin-card--open" : "")" @onclick="() => ToggleExpand(b.Id)">
-                            <div class="admin-card__header">
-                                <span class="ref-badge">@b.Reference</span>
-                                <div class="admin-card__header-right">
-                                    <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
-                                    <span class="admin-card__chevron @(isOpen ? "open" : "")"><Icon Name="chevron-right" /></span>
-                                </div>
-                            </div>
-                            <div class="admin-card__name">@b.CustomerName</div>
-                            <div class="admin-card__meta">
-                                <span>@b.ServiceName</span>
-                                <span>@b.SlotDate.ToString("d MMM") &middot; @b.SlotTime</span>
-                            </div>
-
-                            @if (isOpen)
-                            {
-                                <div class="admin-card__detail">
-                                    @if (CanSeeCustomerDetails)
-                                    {
-                                        <div class="admin-card__detail-row"><span>Email</span><span>@b.CustomerEmail</span></div>
-                                        @if (!string.IsNullOrWhiteSpace(b.CustomerPhone))
-                                        {
-                                            <div class="admin-card__detail-row"><span>Phone</span><span>@b.CustomerPhone</span></div>
-                                        }
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(b.BikeDescription))
-                                    {
-                                        <div class="admin-card__detail-row"><span>Bike</span><span>@b.BikeDescription</span></div>
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(b.Notes))
-                                    {
-                                        <div class="admin-card__detail-row"><span>Notes</span><span>@b.Notes</span></div>
-                                    }
-                                    @* Staff notes on this job. Shown here as well as on the
-                                       customer's page because a guest booking has no customer
-                                       record — without this, a note written against one would
-                                       be stored and then invisible. *@
-                                    @if (_bookingNotes.TryGetValue(b.Id, out var jobNotes) && jobNotes.Count > 0)
-                                    {
-                                        <div class="admin-card__detail-row">
-                                            <span>Job notes</span>
-                                            <span class="booking-notes">
-                                                @foreach (var note in jobNotes)
-                                                {
-                                                    <span class="booking-note @(note.VisibleToCustomer ? "booking-note--shared" : "")">
-                                                        @note.Body
-                                                        <span class="text-faint-sm">
-                                                            @(note.VisibleToCustomer ? "shared with customer" : "internal")
-                                                            &middot; @note.CreatedAt.ToString("d MMM")
-                                                        </span>
-                                                    </span>
-                                                }
-                                            </span>
-                                        </div>
-                                    }
-                                    @if (b.Photos.Count > 0)
-                                    {
-                                        <div class="admin-card__detail-row">
-                                            <span>Photos</span>
-                                            <div class="admin-photo-thumbs">
-                                                @foreach (var photo in b.Photos)
-                                                {
-                                                    @if (_photoUrls.TryGetValue(photo.Id, out var url))
-                                                    {
-                                                        <a href="@url" target="_blank" rel="noopener noreferrer" @onclick:stopPropagation="true">
-                                                            <img src="@url" class="admin-photo-thumb" alt="Issue photo" />
-                                                        </a>
-                                                    }
-                                                }
-                                            </div>
-                                        </div>
-                                    }
-                                    <div class="admin-card__detail-row">
-                                        <span>Price</span><span>@(b.ServicePrice > 0 ? $"From £{b.ServicePrice}" : "Quote")</span>
-                                    </div>
-                                    <div class="admin-card__detail-row">
-                                        <span>Booked</span><span>@b.CreatedAt.ToString("d MMM, HH:mm")</span>
-                                    </div>
-                                    @if (IsAdmin)
-                                    {
-                                        <div class="admin-card__detail-row">
-                                            <span>Assign to</span>
-                                            <select class="form-control form-control--compact"
-                                                    value="@b.AssignedStaffId"
-                                                    @onchange="e => AssignBooking(b.Id, e.Value?.ToString())"
-                                                    @onclick:stopPropagation="true">
-                                                <option value="">— Unassigned —</option>
-                                                @foreach (var s in _allStaff.Where(x => x.IsActive))
-                                                {
-                                                    <option value="@s.Id">@s.FullName</option>
-                                                }
-                                            </select>
-                                        </div>
-                                    }
-                                    @DangerZone(b)
-                                </div>
-                            }
-
-                            @if (RowHasActions(b))
-                            {
-                                <div class="admin-card__actions" @onclick:stopPropagation="true">
-                                    @ActionButtons(b)
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-
-                @* Explicit prev/next rather than infinite scroll: on a phone,
-                   infinite scroll makes anything below the list unreachable. *@
-                @if (TotalPages > 1)
-                {
-                    <nav class="pager" aria-label="Booking pages">
-                        <button class="btn btn-outline pager__btn"
-                                disabled="@(_page == 0)"
-                                @onclick="() => GoToPage(_page - 1)">
-                            <Icon Name="arrow-left" /> Previous
-                        </button>
-                        <span class="pager__status" aria-live="polite">
-                            Page @(_page + 1) of @TotalPages &middot; @_totalMatches booking@(_totalMatches == 1 ? "" : "s")
-                        </span>
-                        <button class="btn btn-outline pager__btn"
-                                disabled="@(_page >= TotalPages - 1)"
-                                @onclick="() => GoToPage(_page + 1)">
-                            Next <Icon Name="arrow-right" />
-                        </button>
-                    </nav>
-                }
-
-                <!-- DESKTOP: Table -->
-                <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Reference</th>
-                                <th>Customer</th>
-                                <th>Service</th>
-                                <th>Date &amp; Time</th>
-                                <th>Status</th>
-                                @if (IsAdmin) { <th>Assigned To</th> }
-                                @if (CanManage || CanSeeCustomerDetails) { <th class="col-actions">Actions</th> }
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if (!FilteredBookings.Any())
-                            {
-                                <tr class="admin-table__empty-row">
-                                    <td colspan="@BookingColumnCount">@BookingsEmptyMessage</td>
-                                </tr>
-                            }
-                            @foreach (var booking in FilteredBookings)
-                            {
-                                var b = booking;
-                                <tr class="@(expandedId == b.Id ? "row-expanded" : "")" @onclick="() => ToggleExpand(b.Id)">
-                                    <td><span class="ref-badge">@b.Reference</span></td>
-                                    <td>
-                                        <div class="customer-cell">
-                                            <strong>@b.CustomerName</strong>
-                                            @if (CanSeeCustomerDetails)
-                                            {
-                                                <span>@b.CustomerEmail</span>
-                                            }
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="service-cell">
-                                            <strong>@b.ServiceName</strong>
-                                            <span>@(b.ServicePrice > 0 ? $"£{b.ServicePrice}" : "Quote")</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="date-cell">
-                                            <strong>@b.SlotDate.ToString("d MMM yyyy")</strong>
-                                            <span>@b.SlotTime</span>
-                                        </div>
-                                    </td>
-                                    <td><span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span></td>
-                                    @if (IsAdmin)
-                                    {
-                                        <td @onclick:stopPropagation="true">
-                                            <select class="form-control form-control--compact form-control--assign"
-                                                    value="@b.AssignedStaffId"
-                                                    @onchange="e => AssignBooking(b.Id, e.Value?.ToString())">
-                                                <option value="">— Unassigned —</option>
-                                                @foreach (var s in _allStaff.Where(x => x.IsActive))
-                                                {
-                                                    <option value="@s.Id">@s.FullName</option>
-                                                }
-                                            </select>
-                                        </td>
-                                    }
-                                    @if (CanManage || CanSeeCustomerDetails)
-                                    {
-                                        <td @onclick:stopPropagation="true">
-                                            <div class="action-buttons">
-                                                @ActionButtons(b)
-                                            </div>
-                                        </td>
-                                    }
-                                </tr>
-                                @if (expandedId == b.Id && CanSeeCustomerDetails)
-                                {
-                                    <tr class="row-detail">
-                                        <td colspan="@BookingColumnCount">
-                                            <div class="booking-detail">
-                                                <div class="booking-detail__grid">
-                                                    <div><strong>Phone</strong><span>@(string.IsNullOrWhiteSpace(b.CustomerPhone) ? "—" : b.CustomerPhone)</span></div>
-                                                    <div><strong>Bike</strong><span>@(string.IsNullOrWhiteSpace(b.BikeDescription) ? "—" : b.BikeDescription)</span></div>
-                                                    <div><strong>Booked</strong><span>@b.CreatedAt.ToString("d MMM yyyy, HH:mm")</span></div>
-                                                    <div><strong>Notes</strong><span>@(string.IsNullOrWhiteSpace(b.Notes) ? "—" : b.Notes)</span></div>
-                                                    <div>
-                                                        <strong>Job notes</strong>
-                                                        @if (_bookingNotes.TryGetValue(b.Id, out var rowNotes) && rowNotes.Count > 0)
-                                                        {
-                                                            <span class="booking-notes">
-                                                                @foreach (var note in rowNotes)
-                                                                {
-                                                                    <span class="booking-note @(note.VisibleToCustomer ? "booking-note--shared" : "")">
-                                                                        @note.Body
-                                                                        <span class="text-faint-sm">
-                                                                            @(note.VisibleToCustomer ? "shared with customer" : "internal")
-                                                                            &middot; @note.CreatedAt.ToString("d MMM")
-                                                                        </span>
-                                                                    </span>
-                                                                }
-                                                            </span>
-                                                        }
-                                                        else
-                                                        {
-                                                            <span>—</span>
-                                                        }
-                                                    </div>
-                                                </div>
-                                                @if (b.Photos.Count > 0)
-                                                {
-                                                    <div class="booking-detail__photos">
-                                                        <strong>Photos</strong>
-                                                        <div class="admin-photo-thumbs">
-                                                            @foreach (var photo in b.Photos)
-                                                            {
-                                                                @if (_photoUrls.TryGetValue(photo.Id, out var url))
-                                                                {
-                                                                    <a href="@url" target="_blank" rel="noopener noreferrer">
-                                                                        <img src="@url" class="admin-photo-thumb" alt="Issue photo" />
-                                                                    </a>
-                                                                }
-                                                            }
-                                                        </div>
-                                                    </div>
-                                                }
-                                                @DangerZone(b)
-                                            </div>
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
-
-            <!-- ── CALENDAR TAB ──────────────────────────────────────────── -->
-            @if (activeTab == "calendar")
-            {
-                <div class="day-cal">
-                    @* Two explicit groups rather than one wrapping flex row. Previously
-                       all five controls shared a row that wrapped wherever it ran out
-                       of space, which on a phone put "previous day" on one line and
-                       "next day" on the next — the two arrows split apart, which reads
-                       as broken. Now the arrows always flank the date, and the jump
-                       controls sit on their own row beneath. *@
-                    <div class="day-cal__nav">
-                        <div class="day-cal__nav-main">
-                            <button class="cal-nav__btn" @onclick="() => ChangeCalDay(-1)" aria-label="Previous day"><Icon Name="chevron-left" /></button>
-                            @* Two lengths of the same date, one shown per breakpoint.
-                               The full form wraps to two lines on a phone and pushes
-                               the arrows apart; the short form keeps the whole header
-                               to a single line. The year is redundant on mobile —
-                               the picker directly below it spells the date out in
-                               full. `display: none` also drops the hidden one from
-                               the accessibility tree, so it isn't announced twice. *@
-                            <div class="day-cal__title">
-                                <strong class="day-cal__date day-cal__date--full">@calDay.ToString("dddd, d MMMM yyyy")</strong>
-                                <strong class="day-cal__date day-cal__date--short">@calDay.ToString("ddd d MMM")</strong>
-                                @if (calDay.Date == ShopClock.Today)
-                                {
-                                    <span class="status-badge status-badge--confirmed">Today</span>
-                                }
-                            </div>
-                            <button class="cal-nav__btn" @onclick="() => ChangeCalDay(1)" aria-label="Next day"><Icon Name="chevron-right" /></button>
-                        </div>
-
-                        <div class="day-cal__nav-tools">
-                            <label class="sr-only" for="day-cal-date">Jump to date</label>
-                            <input id="day-cal-date" type="date" class="form-control day-cal__picker"
-                                   value="@calDay.ToString("yyyy-MM-dd")" @onchange="OnCalDatePicked" />
-                            @if (calDay.Date != ShopClock.Today)
-                            {
-                                <button class="btn btn-outline" @onclick="() => SetCalDay(ShopClock.Today)">Today</button>
-                            }
-                        </div>
-                    </div>
-
-                    <div class="day-cal__summary">
-                        <span><strong>@_calDayBookings.Count</strong> booking@(_calDayBookings.Count == 1 ? "" : "s")</span>
-                        @if (_calDayBookings.Any(b => b.Status == BookingStatus.Pending))
-                        {
-                            <span class="status-badge status-badge--pending">@_calDayBookings.Count(b => b.Status == BookingStatus.Pending) pending</span>
-                        }
-                        @if (calDay.DayOfWeek == DayOfWeek.Sunday)
-                        {
-                            <span class="day-cal__closed">Sunday hours — 11am to 5pm</span>
-                        }
-                    </div>
-
-                    <div class="day-cal__slots">
-                        @foreach (var slot in BookingService.SlotsFor(calDay))
-                        {
-                            var slotBookings = _calDayBookings.Where(b => b.SlotTime == slot).ToList();
-                            <div class="day-cal-slot @(slotBookings.Count == 0 ? "day-cal-slot--free" : "")">
-                                <div class="day-cal-slot__time">@slot</div>
-                                <div class="day-cal-slot__content">
-                                    @if (slotBookings.Count == 0)
-                                    {
-                                        <span class="day-cal-slot__free">Free</span>
-                                    }
-                                    else
-                                    {
-                                        @foreach (var booking in slotBookings)
-                                        {
-                                            var b = booking;
-                                            <div class="day-cal-booking @(b.Status == BookingStatus.Cancelled ? "day-cal-booking--cancelled" : "")">
-                                                <div class="day-cal-booking__info">
-                                                    <div class="day-cal-booking__head">
-                                                        <strong>@b.CustomerName</strong>
-                                                        <span class="ref-badge">@b.Reference</span>
-                                                        <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
-                                                    </div>
-                                                    <div class="day-cal-booking__meta">
-                                                        <span>@b.ServiceName</span>
-                                                        @if (!string.IsNullOrWhiteSpace(b.BikeDescription))
-                                                        {
-                                                            <span> &middot; @b.BikeDescription</span>
-                                                        }
-                                                        @if (CanSeeCustomerDetails && !string.IsNullOrWhiteSpace(b.CustomerPhone))
-                                                        {
-                                                            <span> &middot; @b.CustomerPhone</span>
-                                                        }
-                                                    </div>
-                                                    @if (!string.IsNullOrWhiteSpace(b.Notes))
-                                                    {
-                                                        <div class="day-cal-booking__notes">@b.Notes</div>
-                                                    }
-                                                </div>
-                                                @if (RowHasActions(b))
-                                                {
-                                                    <div class="day-cal-booking__actions">
-                                                        @ActionButtons(b)
-                                                    </div>
-                                                }
-                                            </div>
-                                        }
-                                    }
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-
-            <!-- ── PRICING TAB ────────────────────────────────────────────── -->
-            @if (activeTab == "pricing" && IsAdmin)
-            {
-                <div class="staff-mgmt">
-                    <div class="pricing-tab-header">
-                        <h3>Service Prices</h3>
-                        <button class="btn btn-primary" @onclick="SaveAllPrices">Save All</button>
-                    </div>
-
-                    @if (_priceSaveMessage != null)
-                    {
-                        <div class="admin-success"><Icon Name="check" /> @_priceSaveMessage</div>
-                    }
-
-                    @if (_priceAdjustments.Any())
-                    {
-                        var last = _priceAdjustments.First();
-                        <div class="pricing-info-banner">
-                            Last automatic increase: <strong>@last.AppliedAt.ToString("d MMMM yyyy")</strong>
-                            &nbsp;·&nbsp; Rate applied: <strong>@((last.Rate * 100).ToString("0.##"))%</strong>
-                            &nbsp;·&nbsp; Next increase: <strong>1 April @(last.Year + 1)</strong>
-                        </div>
-                    }
-
-                    <!-- MOBILE: one card per service. The table below is hidden under
-                         768px, and without these this tab was blank on every phone.
-                         The --sticky-actions modifier reserves room at the bottom for
-                         the floating Save All bar, which otherwise sits permanently on
-                         top of the last service's own Save button. -->
-                    <div class="admin-mobile-cards admin-mobile-cards--sticky-actions">
-                        @foreach (var sp in _servicePricings)
-                        {
-                            var sid = sp.Id;
-                            <div class="admin-edit-card">
-                                <div class="admin-edit-card__title">@sp.Name</div>
-                                <div class="admin-edit-card__meta">@sp.Category &middot; @sp.Duration</div>
-
-                                @if (sp.IsQuoteOnly)
-                                {
-                                    <div class="admin-edit-card__field">
-                                        <span>Price</span>
-                                        <span class="text-faint-sm">Quote only</span>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="admin-edit-card__field">
-                                        <span>Current</span>
-                                        <strong class="price-current">£@sp.CurrentPrice</strong>
-                                    </div>
-                                    <div class="admin-edit-card__field">
-                                        <label for="price-m-@sid">New price (£)</label>
-                                        <input id="price-m-@sid" class="form-control form-control--price"
-                                               type="number" min="0" step="1" inputmode="decimal"
-                                               value="@_editPrices[sid]"
-                                               @oninput="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _editPrices[sid] = v; }" />
-                                    </div>
-                                    <div class="admin-edit-card__actions">
-                                        <button class="btn btn-outline" @onclick="() => SavePrice(sid)">Save</button>
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-
-                    <div class="pricing-sticky-actions">
-                        <button class="btn btn-primary" @onclick="SaveAllPrices">Save All Prices</button>
-                    </div>
-
-                    <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
-                        <table class="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>Service</th>
-                                    <th>Category</th>
-                                    <th>Duration</th>
-                                    <th class="col-price">Current Price</th>
-                                    <th class="col-price-input">New Price (£)</th>
-                                    <th class="col-save">Save</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var sp in _servicePricings)
-                                {
-                                    var sid = sp.Id;
-                                    <tr>
-                                        <td><strong>@sp.Name</strong></td>
-                                        <td class="text-muted-sm">@sp.Category</td>
-                                        <td class="text-muted-sm">@sp.Duration</td>
-                                        <td>
-                                            @if (sp.IsQuoteOnly)
-                                            {
-                                                <span class="text-faint-sm">Quote only</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="price-current">£@sp.CurrentPrice</span>
-                                            }
-                                        </td>
-                                        <td>
-                                            @if (sp.IsQuoteOnly)
-                                            {
-                                                <span class="text-faint-sm">—</span>
-                                            }
-                                            else
-                                            {
-                                                <input class="form-control form-control--price"
-                                                       type="number" min="0" step="1"
-                                                       value="@_editPrices[sid]"
-                                                       @oninput="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _editPrices[sid] = v; }" />
-                                            }
-                                        </td>
-                                        <td>
-                                            @if (!sp.IsQuoteOnly)
-                                            {
-                                                <button class="action-btn action-btn--primary"
-                                                        @onclick="() => SavePrice(sid)">Save</button>
-                                            }
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            }
-
-            <!-- ── STAFF MANAGEMENT TAB ────────────────────────────────── -->
-            <!-- ── CUSTOMERS TAB ─────────────────────────────────────────── -->
-            @if (activeTab == "customers" && CanSeeCustomerDetails)
-            {
-                @if (_importingCustomers)
-                {
-                    <CustomerImportPanel OnBack="CloseImport" OnImported="LoadCustomers" />
-                }
-                else if (_selectedCustomer is null)
-                {
-                    <div class="admin-filters">
-                        <div class="admin-search admin-search--wide">
-                            <label class="sr-only" for="customer-search">Search customers</label>
-                            <input id="customer-search" class="form-control" type="text"
-                                   value="@customerSearch" @oninput="OnCustomerSearch"
-                                   placeholder="Search name, email or phone…" />
-                        </div>
-                        @* Bulk-importing personal data is an owner's job, not a
-                           mechanic's — IsAdmin rather than the tab's own
-                           CanSeeCustomerDetails. *@
-                        @if (IsAdmin)
-                        {
-                            <button class="btn btn-outline" @onclick="OpenImport">Import customers</button>
-                        }
-                    </div>
-
-                    @* Same as the bookings list: the table being searched stays on the
-                       page and reports the empty result itself. *@
-                    <div class="admin-mobile-cards">
-                        @if (_customers.Count == 0)
-                        {
-                            <div class="admin-empty"><p>@CustomersEmptyMessage</p></div>
-                        }
-                        @foreach (var c in _customers)
-                        {
-                            var cust = c;
-                            <button type="button" class="admin-edit-card customer-card"
-                                    @onclick="() => OpenCustomer(cust.Id)">
-                                <span class="admin-edit-card__title">@cust.FullName</span>
-                                <span class="admin-edit-card__meta">@cust.Email</span>
-                                <span class="customer-card__stats">
-                                    <span>@cust.BookingCount booking@(cust.BookingCount == 1 ? "" : "s")</span>
-                                    <span>@(cust.LastVisit is { } lv ? $"Last: {lv:d MMM yyyy}" : "No visits yet")</span>
-                                </span>
-                            </button>
-                        }
-                    </div>
-
-                    <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
-                        <table class="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Phone</th>
-                                    <th>Bookings</th>
-                                    <th>Last visit</th>
-                                    <th>Member since</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @if (_customers.Count == 0)
-                                {
-                                    <tr class="admin-table__empty-row">
-                                        <td colspan="6">@CustomersEmptyMessage</td>
-                                    </tr>
-                                }
-                                @foreach (var c in _customers)
-                                {
-                                    var cust = c;
-                                    <tr @onclick="() => OpenCustomer(cust.Id)">
-                                        <td><strong>@cust.FullName</strong></td>
-                                        <td class="text-muted-sm">@cust.Email</td>
-                                        <td class="text-muted-sm">@cust.Phone</td>
-                                        <td>@cust.BookingCount</td>
-                                        <td class="text-muted-sm">@(cust.LastVisit is { } lv ? lv.ToString("d MMM yyyy") : "—")</td>
-                                        <td class="text-muted-sm">@cust.MemberSince.ToString("d MMM yyyy")</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-
-                    @if (CustomerTotalPages > 1)
-                    {
-                        <nav class="pager" aria-label="Customer pages">
-                            <button class="btn btn-outline pager__btn" disabled="@(_customerPage == 0)"
-                                    @onclick="() => GoToCustomerPage(_customerPage - 1)">
-                                <Icon Name="arrow-left" /> Previous
-                            </button>
-                            <span class="pager__status" aria-live="polite">
-                                Page @(_customerPage + 1) of @CustomerTotalPages &middot; @_customerTotal customer@(_customerTotal == 1 ? "" : "s")
-                            </span>
-                            <button class="btn btn-outline pager__btn" disabled="@(_customerPage >= CustomerTotalPages - 1)"
-                                    @onclick="() => GoToCustomerPage(_customerPage + 1)">
-                                Next <Icon Name="arrow-right" />
-                            </button>
-                        </nav>
-                    }
-                }
-                else
-                {
-                    <CustomerDetailPanel Detail="_selectedCustomer"
-                                         CanManage="CanManage"
-                                         OnBack="CloseCustomer"
-                                         OnAddNote="AddCustomerNote"
-                                         OnDeleteNote="DeleteCustomerNote" />
-                }
-            }
-
-            <!-- ── ENQUIRIES TAB ────────────────────────────────────────── -->
-            @* Messages from the form on /about. They were stored, they raised a bell
-               and they emailed the shop — and then there was no screen in here that
-               could read one back. GetEnquiries and MarkHandled had existed since the
-               form was written, with only the test suite calling them. *@
-            @if (activeTab == "enquiries" && CanSeeCustomerDetails)
-            {
-                <div class="admin-filters">
-                    <button class="btn btn-outline" @onclick="ToggleHandledEnquiries">
-                        @(showHandledEnquiries ? "Hide handled" : "Show handled too")
-                    </button>
-                </div>
-
-                <div class="admin-mobile-cards">
-                    @if (_enquiries.Count == 0)
-                    {
-                        <div class="admin-empty"><p>@EnquiriesEmptyMessage</p></div>
-                    }
-                    @foreach (var enquiry in _enquiries)
-                    {
-                        var e = enquiry;
-                        <div class="admin-card admin-card--static @(e.HandledAt is null ? "" : "admin-card--handled")">
-                            <div class="admin-card__header">
-                                <span class="text-muted-sm">@e.CreatedAt.ToString("d MMM yyyy, HH:mm")</span>
-                                <span class="status-badge @(e.HandledAt is null ? "status-badge--pending" : "status-badge--completed")">
-                                    @(e.HandledAt is null ? "New" : "Handled")
-                                </span>
-                            </div>
-                            <div class="admin-card__name">@e.Name</div>
-                            <div class="admin-card__meta">
-                                <span>@e.Email</span>
-                                <span>@(string.IsNullOrWhiteSpace(e.BikeDescription) ? "" : e.BikeDescription)</span>
-                            </div>
-                            <div class="admin-card__detail">
-                                <p class="enquiry-message">@e.Message</p>
-                                @EnquiryActions(e)
-                            </div>
-                        </div>
-                    }
-                </div>
-
-                <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Received</th>
-                                <th>From</th>
-                                <th>Bike</th>
-                                <th>Message</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if (_enquiries.Count == 0)
-                            {
-                                <tr class="admin-table__empty-row">
-                                    <td colspan="5">@EnquiriesEmptyMessage</td>
-                                </tr>
-                            }
-                            @foreach (var enquiry in _enquiries)
-                            {
-                                var e = enquiry;
-                                <tr class="@(e.HandledAt is null ? "" : "admin-table__row--handled")">
-                                    <td class="text-muted-sm">@e.CreatedAt.ToString("d MMM yyyy, HH:mm")</td>
-                                    <td>
-                                        <strong>@e.Name</strong>
-                                        <span class="status-badge @(e.HandledAt is null ? "status-badge--pending" : "status-badge--completed")">
-                                            @(e.HandledAt is null ? "New" : "Handled")
-                                        </span>
-                                    </td>
-                                    <td class="text-muted-sm">@(string.IsNullOrWhiteSpace(e.BikeDescription) ? "—" : e.BikeDescription)</td>
-                                    <td><p class="enquiry-message">@e.Message</p></td>
-                                    <td>@EnquiryActions(e)</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
-
-            @if (activeTab == "staff" && IsAdmin)
-            {
-                <div class="staff-mgmt">
-
-                    <!-- Add new staff form -->
-                    <div class="staff-add-card">
-                        <h3>Add Staff Member</h3>
-                        @if (staffFormError != null)
-                        {
-                            <div class="booking-error admin-inline-error">@staffFormError</div>
-                        }
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="admin-full-name">Full Name</label>
-                                <input id="admin-full-name" class="form-control" @bind="newStaff.FullName" placeholder="Jane Smith" />
-                            </div>
-                            <div class="form-group">
-                                <label for="admin-email">Email</label>
-                                <input id="admin-email" class="form-control" type="email"
-                                       autocomplete="email" inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"
-                                       @bind="newStaff.Email" placeholder="jane@fixlosophy.com" />
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="admin-password">Password</label>
-                                <input id="admin-password" class="form-control" type="password" @bind="newStaffPassword" placeholder="Temporary password" />
-                            </div>
-                            <div class="form-group">
-                                <label for="admin-role">Role</label>
-                                <select id="admin-role" class="form-control" @bind="newStaff.Role">
-                                    <option value="@StaffRole.Worker">Worker</option>
-                                    <option value="@StaffRole.Admin">Admin</option>
-                                </select>
-                            </div>
-                        </div>
-                        <button class="btn btn-primary" @onclick="AddStaff">Add Staff Member</button>
-                    </div>
-
-                    <!-- Staff list -->
-                    <h3 class="admin-subheading">Current Staff</h3>
-                    @if (staffRowError != null)
-                    {
-                        <div class="booking-error admin-inline-error">@staffRowError</div>
-                    }
-
-                    <!-- MOBILE: one card per staff member. Permission checkboxes become
-                         full-width toggle rows — at 13px in a table cell they were far
-                         too small to hit on touch, and the table itself was hidden. -->
-                    <div class="admin-mobile-cards">
-                        @foreach (var member in _allStaff)
-                        {
-                            var m = member;
-                            var isCurrentUser = m.Id == loggedInStaff.Id;
-                            <div class="admin-edit-card">
-                                <div class="admin-edit-card__title">
-                                    @m.FullName
-                                    @if (isCurrentUser) { <span class="text-muted-sm">(you)</span> }
-                                </div>
-                                <div class="admin-edit-card__meta">@m.Email</div>
-                                <div class="admin-edit-card__field">
-                                    <span>Role</span>
-                                    <span class="status-badge status-badge--@(m.Role == StaffRole.Admin ? "confirmed" : "pending")">@m.Role</span>
-                                </div>
-
-                                @if (m.Role == StaffRole.Admin)
-                                {
-                                    <div class="admin-edit-card__field">
-                                        <span>Permissions</span>
-                                        <span class="text-muted-sm">Full access</span>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <label class="admin-toggle">
-                                        <span>View all bookings</span>
-                                        <input type="checkbox" @bind="m.CanViewAllBookings" />
-                                    </label>
-                                    <label class="admin-toggle">
-                                        <span>Manage bookings</span>
-                                        <input type="checkbox" @bind="m.CanManageBookings" />
-                                    </label>
-                                    <label class="admin-toggle">
-                                        <span>See customer details</span>
-                                        <input type="checkbox" @bind="m.CanViewCustomerDetails" />
-                                    </label>
-                                }
-
-                                @if (!isCurrentUser)
-                                {
-                                    <label class="admin-toggle">
-                                        <span>Active</span>
-                                        <input type="checkbox" @bind="m.IsActive" />
-                                    </label>
-                                }
-
-                                <div class="admin-edit-card__actions">
-                                    <button class="btn btn-outline" @onclick="() => SaveStaffMember(m)">Save</button>
-                                </div>
-                            </div>
-                        }
-                    </div>
-
-                    <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
-                        <table class="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Role</th>
-                                    <th>View All Bookings</th>
-                                    <th>Manage Bookings</th>
-                                    <th>Customer Details</th>
-                                    <th>Status</th>
-                                    <th>Save</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var member in _allStaff)
-                                {
-                                    var m = member;
-                                    var isCurrentUser = m.Id == loggedInStaff.Id;
-                                    <tr>
-                                        <td><strong>@m.FullName</strong> @if (isCurrentUser) { <span class="text-muted-sm">(you)</span> }</td>
-                                        <td class="text-muted-sm">@m.Email</td>
-                                        <td>
-                                            <span class="status-badge status-badge--@(m.Role == StaffRole.Admin ? "confirmed" : "pending")">
-                                                @m.Role
-                                            </span>
-                                        </td>
-                                        @if (m.Role == StaffRole.Admin)
-                                        {
-                                            <td colspan="3" class="text-center text-muted-sm">Full access (Admin)</td>
-                                        }
-                                        else
-                                        {
-                                            <td class="text-center">
-                                                <input type="checkbox" @bind="m.CanViewAllBookings" />
-                                            </td>
-                                            <td class="text-center">
-                                                <input type="checkbox" @bind="m.CanManageBookings" />
-                                            </td>
-                                            <td class="text-center">
-                                                <input type="checkbox" @bind="m.CanViewCustomerDetails" />
-                                            </td>
-                                        }
-                                        <td>
-                                            @if (!isCurrentUser)
-                                            {
-                                                <input type="checkbox" @bind="m.IsActive" title="Active" />
-                                                <span class="text-muted-sm admin-checkbox-label">Active</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="text-muted-sm">—</span>
-                                            }
-                                        </td>
-                                        <td>
-                                            <button class="action-btn action-btn--primary"
-                                                    @onclick="() => SaveStaffMember(m)">Save</button>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            }
+            </CascadingValue>
 
         </div>
     </section>
@@ -1080,328 +187,25 @@
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private StaffMember? loggedInStaff;
+    private const string TabCalendar     = "calendar";
+    private const string TabBookings     = "bookings";
+    private const string TabCustomers    = "customers";
+    private const string TabEnquiries    = "enquiries";
+    private const string TabAvailability = "availability";
+    private const string TabPricing      = "pricing";
+    private const string TabStaff        = "staff";
 
-    private string activeTab = "calendar";
+    private AdminContext? _context;
+    private string activeTab = TabCalendar;
 
-    // Bookings — one page at a time, filtered and searched in SQL. This used to be
-    // every booking (with every photo) held in memory and re-filtered on each
-    // keystroke; see BookingService.GetBookingsPage.
-    private const int PageSize = 25;
-
-    private List<Booking> _pageBookings = [];
-    private int _totalMatches;
-    private int _page;
-    private string activeFilter = "All";
-    private string searchTerm = "";
-    private string sortMode = BookingService.SortUpcoming;
-    private string? expandedId;
-    private (int total, int today, int pending, int confirmed) stats;
-
-    // Debounce so a burst of typing issues one query instead of one per character.
-    private CancellationTokenSource? _searchDebounce;
-
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_totalMatches / (double)PageSize));
-
-    // BookingPhoto.Id -> signed URL, lazily filled the first time a booking with
-    // photos is expanded (see ToggleExpand) rather than signing every booking's
-    // photos up front on every load.
-    private readonly Dictionary<string, string> _photoUrls = new();
-
-    // Booking.Id -> staff notes on that job, loaded on expand for the same reason.
-    private readonly Dictionary<string, List<CustomerNote>> _bookingNotes = new();
-
-    // Customers tab
-    private List<CustomerSummary> _customers = [];
-    private CustomerDetail? _selectedCustomer;
-    private bool _importingCustomers;
-    private string customerSearch = "";
-    private int _customerPage;
-    private int _customerTotal;
-    private CancellationTokenSource? _customerSearchDebounce;
-
-    private int CustomerTotalPages =>
-        Math.Max(1, (int)Math.Ceiling(_customerTotal / (double)CustomerService.PageSize));
-
-    // Completing a job: which booking's note field is open, and its contents.
-    private string? completeNoteBookingId;
-    private string completeNoteBody = "";
-    private bool completeNoteVisible;
-
-    // Calendar tab
-    private DateTime calDay = ShopClock.Today;
-    private List<Booking> _calDayBookings = [];
-    private string? deleteConfirmId;
-    private string? cancelConfirmId;
-
-    // Notifications
     private List<Notification> _notifications = [];
     private int unreadCount;
+    private int unhandledEnquiries;
     private bool bellOpen;
 
     // The panel lists unread by default, so marking all read empties it. Read ones
     // stay available behind the toggle until the retention purge removes them.
     private bool showReadNotifications;
-
-    // Staff management
-    private List<StaffMember> _allStaff = [];
-    private StaffMember newStaff = new();
-    private string newStaffPassword = "";
-    private string? staffFormError;
-    private string? staffRowError;
-
-    // Pricing management
-    private List<ServicePricing> _servicePricings = [];
-    private Dictionary<string, decimal> _editPrices = [];
-    private List<PriceAdjustment> _priceAdjustments = [];
-    private string? _priceSaveMessage;
-
-    private static readonly string[] Filters =
-        ["All", "Today", "Pending", "Confirmed", "In Progress", "Completed", "Cancelled"];
-
-    private bool IsAdmin => loggedInStaff?.Role == StaffRole.Admin;
-    private bool CanManage => IsAdmin || loggedInStaff?.CanManageBookings == true;
-    private bool CanSeeCustomerDetails => IsAdmin || loggedInStaff?.CanViewCustomerDetails == true;
-
-    // Reference, Customer, Service, Date & Time, Status — plus the two columns the
-    // header row adds conditionally. Drives the expanded detail row's colspan, so
-    // these conditions must stay in step with the <th> guards in the table header.
-    private int BookingColumnCount =>
-        5 + (IsAdmin ? 1 : 0) + (CanManage || CanSeeCustomerDetails ? 1 : 0);
-    // Today's schedule is its own small query rather than a slice of the current
-    // page — the booking at 5pm today may well be on page three.
-    private List<Booking> _todayBookings = [];
-    private List<Booking> TodayBookings => _todayBookings;
-
-    // The rendered page of results. Filtering and searching now happen in SQL, so
-    // this is simply what came back.
-    private List<Booking> FilteredBookings => _pageBookings;
-
-    // Says which of the three reasons the list is empty for. The old text was a flat
-    // "No bookings match the current filter", which read as wrong after a search and
-    // as alarming on a brand-new install.
-    private string CustomersEmptyMessage =>
-        string.IsNullOrWhiteSpace(customerSearch)
-            ? "No customer accounts yet."
-            : $"No customers match \u201c{customerSearch.Trim()}\u201d.";
-
-    private string BookingsEmptyMessage =>
-        !string.IsNullOrWhiteSpace(searchTerm) ? $"No bookings match \u201c{searchTerm.Trim()}\u201d."
-        : activeFilter != "All"               ? $"No {activeFilter.ToLowerInvariant()} bookings."
-                                              : "No bookings yet.";
-
-    // True when a booking has any actionable controls for the current user —
-    // used to decide whether to render the action area / Actions column at all.
-    // CanManage always yields at least the primary button: every status either has a
-    // next stage or can be reopened.
-    private bool RowHasActions(Booking b) => CanManage || ShowContact(b);
-
-    // Both the second row's wrapper and RowHasActions ask these, so they live here
-    // rather than inline: an empty wrapper still draws the gap above it.
-    private bool ShowContact(Booking b) =>
-        CanSeeCustomerDetails && AuthService.IsValidPhone(b.CustomerPhone);
-
-    private bool ShowCancel(Booking b) =>
-        CanManage && BookingService.CanTransition(b.Status, BookingStatus.Cancelled);
-
-    // One shared action set, reused by the Bookings cards, the Bookings table and
-    // the Calendar so every view offers the exact same lifecycle + contact + delete
-    // controls. Each call site keeps its own wrapper element for layout/spacing.
-    @* Delete used to sit in the action strip, one tap from Cancel and wearing the same
-       red. They are not peers: Cancel means "this isn't happening" and keeps the record,
-       Delete removes the row and its photos from Supabase Storage for good. It lives in
-       the expanded detail now, admin-only, so reaching it is a decision rather than a
-       mis-tap. Note that job notes SURVIVE this (CustomerNote.BookingId is SET NULL), so
-       on a guest booking a note becomes unreachable from any screen. *@
-    private RenderFragment<Booking> DangerZone => booking => @<text>
-        @if (IsAdmin)
-        {
-            <div class="booking-danger" @onclick:stopPropagation="true">
-                @if (deleteConfirmId == booking.Id)
-                {
-                    <p class="booking-danger__text">
-                        Permanently delete <strong>@booking.Reference</strong> and its photos?
-                        This can't be undone — use Cancel if you just want to free the slot.
-                    </p>
-                    <div class="booking-danger__actions">
-                        <button class="action-btn action-btn--danger"
-                                @onclick="() => DeleteBooking(booking.Id)">Delete permanently</button>
-                        <button class="action-btn action-btn--keep"
-                                @onclick="() => deleteConfirmId = null">Keep</button>
-                    </div>
-                }
-                else
-                {
-                    <button class="action-btn action-btn--delete"
-                            @onclick="() => StartDelete(booking.Id)">
-                        <Icon Name="trash" /> Delete booking
-                    </button>
-                }
-            </div>
-        }
-    </text>;
-
-    /// <summary>
-    /// Reaching the person who wrote in, and marking the message dealt with.
-    ///
-    /// There is no compose box: the enquiry already lands in the shop's own inbox with
-    /// reply-to set to the sender, so replying happens there. These are the two things
-    /// this screen can do that the inbox can't — dial the number, and record that the
-    /// message is done so the next person doesn't answer it twice.
-    /// </summary>
-    private RenderFragment<Enquiry> EnquiryActions => enquiry => @<text>
-        @* Not .booking-actions__row: above 768px that collapses .action-btn--call to a
-           32px icon square and clips the label inside it. That works for a booking,
-           where the label is the word "Call" and the number is in the row already —
-           but here the address is the content, and it painted over the button next to
-           it. See .enquiry-actions. *@
-        <div class="enquiry-actions">
-            <a class="action-btn action-btn--call enquiry-actions__contact"
-               href="mailto:@enquiry.Email" title="@enquiry.Email">
-                <Icon Name="mail" /> <span class="enquiry-actions__text">@enquiry.Email</span>
-            </a>
-            @if (AuthService.IsValidPhone(enquiry.Phone))
-            {
-                <a class="action-btn action-btn--call enquiry-actions__contact"
-                   href="@TelHref(enquiry.Phone)" title="@enquiry.Phone">
-                    <Icon Name="phone" /> <span class="enquiry-actions__text">@enquiry.Phone</span>
-                </a>
-                <a class="action-btn action-btn--whatsapp" href="https://wa.me/@WhatsAppNumber(enquiry.Phone)"
-                   target="_blank" rel="noopener">WhatsApp</a>
-            }
-            @if (CanManage)
-            {
-                <button class="action-btn @(enquiry.HandledAt is null ? "action-btn--primary" : "action-btn--keep")"
-                        @onclick="() => SetEnquiryHandled(enquiry.Id, enquiry.HandledAt is null)">
-                    @(enquiry.HandledAt is null ? "Mark handled" : "Reopen")
-                </button>
-            }
-        </div>
-    </text>;
-
-    private RenderFragment<Booking> ActionButtons => booking => @<text>
-        <div class="booking-actions">
-            @* ── Tier 1: the one thing you came here to do ────────────────────
-               Confirm / In Progress / Complete were three differently-coloured
-               buttons for what is really one control — they were already mutually
-               exclusive, so only ever one showed. Now they share the primary slot
-               and read as the next step rather than the state they set.
-
-               The else-if is Reopen, which is what makes a mis-tap survivable: without
-               it the only way back from a wrong Cancel was to delete the booking and
-               re-key it, which is why Delete got reached for far more often than it
-               should have been. It used to sit in an overflow menu, but a cancelled or
-               completed booking has no next stage — the primary slot is free, and
-               reopening is the only thing left to do with it. CanTransition is the
-               whole condition: those two statuses are exactly the ones that can go
-               back to Confirmed. *@
-            @if (CanManage && BookingService.NextStage(booking.Status) is { } next)
-            {
-                <button class="action-btn action-btn--primary booking-actions__primary"
-                        @onclick="() => AdvanceStage(booking, next)">@StageLabel(next)</button>
-            }
-            else if (CanManage && BookingService.CanTransition(booking.Status, BookingStatus.Confirmed))
-            {
-                <button class="action-btn action-btn--primary booking-actions__primary"
-                        @onclick="() => ReopenBooking(booking)">
-                    <Icon Name="undo" /> Reopen booking
-                </button>
-            }
-
-            @* ── Tier 2: reaching the customer, and calling the job off ───────
-               Cancel spent a release behind a "…" menu — three taps for the second
-               most common thing done to a booking, and invisible until you went
-               looking. It is back on the row and red. The two contact links take the
-               larger share of the width because they are used far more often; Cancel
-               is deliberately the narrow one. It still asks before it fires. *@
-            @if (ShowContact(booking) || ShowCancel(booking))
-            {
-                <div class="booking-actions__row">
-                    @* The booking form has required a phone since Book.razor started
-                       validating it, so in practice both links always render. The check
-                       is IsValidPhone rather than a blank test because older rows
-                       predate that, and a value with no dialable digits produced a
-                       WhatsApp link to wa.me/ with no number and an empty tel: link. *@
-                    @if (ShowContact(booking))
-                    {
-                        <a class="action-btn action-btn--whatsapp"
-                           href="@WhatsAppHref(booking)" target="_blank" rel="noopener"
-                           title="WhatsApp @booking.CustomerName">
-                            <Icon Name="whatsapp" /> <span class="action-btn__label">WhatsApp</span>
-                        </a>
-                        <a class="action-btn action-btn--call"
-                           href="@TelHref(booking.CustomerPhone)"
-                           title="Call @booking.CustomerName">
-                            <Icon Name="phone" /> <span class="action-btn__label">Call</span>
-                        </a>
-                    }
-
-                    @if (ShowCancel(booking))
-                    {
-                        <button class="action-btn action-btn--cancel"
-                                @onclick="() => StartCancel(booking.Id)">Cancel</button>
-                    }
-                </div>
-            }
-        </div>
-
-        @* Cancel now emails the customer and cannot be undone except by Reopen, so it
-           gets the same two-step confirm Delete has always had. It used to fire on a
-           single click. *@
-        @if (cancelConfirmId == booking.Id)
-        {
-            <div class="booking-confirm" @onclick:stopPropagation="true">
-                <p class="booking-confirm__text">
-                    Cancel <strong>@booking.Reference</strong> and free the slot?
-                    @if (!string.IsNullOrWhiteSpace(booking.CustomerEmail))
-                    {
-                        <span>@booking.CustomerName will be emailed.</span>
-                    }
-                </p>
-                <div class="booking-confirm__actions">
-                    <button class="action-btn action-btn--danger"
-                            @onclick="() => CancelBooking(booking)">Yes, cancel it</button>
-                    <button class="action-btn action-btn--keep"
-                            @onclick="() => cancelConfirmId = null">Keep booking</button>
-                </div>
-            </div>
-        }
-
-        @* Sits on its own line below the buttons, so it reads as a step rather than
-           another control crammed into the row. *@
-        @if (completeNoteBookingId == booking.Id)
-        {
-            <div class="complete-note" @onclick:stopPropagation="true">
-                @* Per-booking id: the mobile cards and the desktop table are BOTH always
-                   in the DOM (CSS swaps them at 768px), so a literal id here put two
-                   elements with the same id on the page and bound the label to the
-                   wrong one. *@
-                <label class="complete-note__label" for="@($"complete-note-{booking.Id}")">
-                    Add a note about this job <span class="complete-note__optional">(optional)</span>
-                </label>
-                <textarea id="@($"complete-note-{booking.Id}")" class="form-control" rows="3"
-                          placeholder="e.g. rear hub has play — worth replacing next service"
-                          @bind="completeNoteBody" @bind:event="oninput"></textarea>
-
-                <label class="complete-note__share">
-                    <input type="checkbox" @bind="completeNoteVisible" />
-                    <span>Share this with the customer</span>
-                </label>
-                <p class="complete-note__hint">
-                    @(completeNoteVisible
-                        ? "They'll see it on this booking in their account."
-                        : "Staff only — not shown to the customer.")
-                </p>
-
-                <div class="complete-note__actions">
-                    <button class="action-btn action-btn--primary" @onclick="() => CompleteWithNote(booking)">
-                        @(string.IsNullOrWhiteSpace(completeNoteBody) ? "Complete without a note" : "Save note & complete")
-                    </button>
-                    <button class="action-btn action-btn--keep" @onclick="CancelCompleteNote">Back</button>
-                </div>
-            </div>
-        }
-    </text>;
 
     // The cookie carries the staff id; re-fetch the full record so permission and
     // role changes (or a deactivation) take effect on the next page load rather
@@ -1412,24 +216,37 @@
         var user = (await AuthState).User;
         var staffId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
-        loggedInStaff = staffId is null ? null : AuthService.GetStaffById(staffId);
-        if (loggedInStaff is null)
+        var staff = staffId is null ? null : AuthService.GetStaffById(staffId);
+        if (staff is null)
         {
             // Authorized by cookie but the account is gone/deactivated — clear it.
             Nav.NavigateTo("/auth/logout", forceLoad: true);
             return;
         }
 
-        LoadBookings();
-        RefreshStats();
-        LoadCalDay();  // Calendar is the default tab, so it needs data on first render.
-        // Not for the tab — for the count on it. Loading only on open meant the badge
-        // read zero until you went looking, which is the wrong way round.
-        if (CanSeeCustomerDetails) LoadEnquiries();
-        if (IsAdmin) _allStaff = AuthService.GetAllStaff();
+        _context = new AdminContext(staff);
 
+        RefreshBadges();
         LoadNotifications();
         NotificationHub.Raised += OnNotificationRaised;
+    }
+
+    private void SetTab(string tab) => activeTab = tab;
+
+    /// <summary>
+    /// Re-reads the two counts the shell itself shows. Called by the tabs after
+    /// anything that could move them.
+    /// </summary>
+    /// <remarks>
+    /// A count query rather than a list: the enquiries badge is wanted on every load,
+    /// including by someone who never opens that tab. Loading only on open meant the
+    /// badge read zero until you went looking, which is the wrong way round.
+    /// </remarks>
+    private void RefreshBadges()
+    {
+        if (_context is null) return;
+        if (_context.CanSeeCustomerDetails) unhandledEnquiries = Enquiries.CountUnhandled();
+        unreadCount = Notifications.UnreadCount(_context.Staff.Id);
     }
 
     // ── Notifications ────────────────────────────────────────────────────────
@@ -1439,7 +256,7 @@
     private void OnNotificationRaised(Notification notification)
     {
         // Broadcasts (null target) reach everyone; a targeted one only its recipient.
-        if (notification.TargetStaffId is not null && notification.TargetStaffId != loggedInStaff?.Id)
+        if (notification.TargetStaffId is not null && notification.TargetStaffId != _context?.Staff.Id)
             return;
 
         _ = InvokeAsync(() =>
@@ -1451,9 +268,9 @@
 
     private void LoadNotifications()
     {
-        if (loggedInStaff is null) return;
-        _notifications = Notifications.GetRecent(loggedInStaff.Id, unreadOnly: !showReadNotifications);
-        unreadCount = Notifications.UnreadCount(loggedInStaff.Id);
+        if (_context is null) return;
+        _notifications = Notifications.GetRecent(_context.Staff.Id, unreadOnly: !showReadNotifications);
+        unreadCount = Notifications.UnreadCount(_context.Staff.Id);
     }
 
     private void ToggleBell()
@@ -1470,7 +287,7 @@
 
     private void MarkAllRead()
     {
-        Notifications.MarkAllRead(loggedInStaff!.Id);
+        Notifications.MarkAllRead(_context!.Staff.Id);
         LoadNotifications();
     }
 
@@ -1485,529 +302,9 @@
         return when.ToString("d MMM", System.Globalization.CultureInfo.GetCultureInfo("en-GB"));
     }
 
-    // Unsubscribing matters: the hub is a singleton, so a leaked handler would keep
-    // this circuit's component alive for the life of the process.
-    public void Dispose()
-    {
-        NotificationHub.Raised -= OnNotificationRaised;
-        _searchDebounce?.Cancel();
-        _searchDebounce?.Dispose();
-        _customerSearchDebounce?.Cancel();
-        _customerSearchDebounce?.Dispose();
-    }
-
     private void Logout() => Nav.NavigateTo("/auth/logout", forceLoad: true);
 
-    // Workers without CanViewAllBookings only ever see what's assigned to them; that
-    // restriction is applied in the query rather than after it.
-    private string? BookingScopeStaffId =>
-        IsAdmin || loggedInStaff?.CanViewAllBookings == true ? null : loggedInStaff!.Id;
-
-    private void LoadBookings()
-    {
-        var (items, total) = BookingService.GetBookingsPage(
-            BookingScopeStaffId, activeFilter, searchTerm, _page, PageSize, sortMode);
-
-        // A delete or a status change can shrink the result set past the current page;
-        // step back rather than showing an empty list with a pager that says otherwise.
-        if (items.Count == 0 && _page > 0 && total > 0)
-        {
-            _page = Math.Max(0, (int)Math.Ceiling(total / (double)PageSize) - 1);
-            (items, total) = BookingService.GetBookingsPage(
-                BookingScopeStaffId, activeFilter, searchTerm, _page, PageSize, sortMode);
-        }
-
-        _pageBookings = items;
-        _totalMatches = total;
-
-        // Today's schedule banner is only shown on the unfiltered view.
-        _todayBookings = activeFilter == "All"
-            ? BookingService.GetBookingsPage(BookingScopeStaffId, "Today", null, 0, PageSize).items
-            : [];
-    }
-
-    private void GoToPage(int page)
-    {
-        _page = Math.Clamp(page, 0, TotalPages - 1);
-        expandedId = null;
-        CloseTransientPanels();
-        LoadBookings();
-    }
-
-    private void RefreshStats()
-    {
-        stats = IsAdmin || loggedInStaff?.CanViewAllBookings == true
-            ? BookingService.GetStats()
-            : BookingService.GetStatsForStaff(loggedInStaff!.Id);
-    }
-
-    private void SetFilter(string f)
-    {
-        activeFilter = f;
-        expandedId = null;
-        CloseTransientPanels();
-        _page = 0;          // a new filter starts at the first page
-        LoadBookings();
-    }
-
-    private void SetSort(ChangeEventArgs e)
-    {
-        sortMode = e.Value?.ToString() ?? BookingService.SortUpcoming;
-        expandedId = null;
-        CloseTransientPanels();
-        _page = 0;          // a re-sort starts at the first page
-        LoadBookings();
-    }
-
-    private async Task ToggleExpand(string id)
-    {
-        var opening = expandedId != id;
-        expandedId = opening ? id : null;
-        if (!opening) return;
-
-        var booking = FilteredBookings.FirstOrDefault(b => b.Id == id);
-        if (booking is null) return;
-
-        // Photos are no longer eager-loaded with the list — only the row being opened
-        // needs them, so they're fetched here and then signed. Job notes ride along
-        // for the same reason.
-        if (booking.Photos.Count == 0)
-            booking.Photos = BookingService.GetPhotosForBooking(booking.Id);
-
-        _bookingNotes[booking.Id] = Customers.GetNotesForBooking(booking.Id);
-
-        foreach (var photo in booking.Photos)
-        {
-            if (_photoUrls.ContainsKey(photo.Id)) continue;
-            var url = await Storage.GetSignedPhotoUrlAsync(photo.StoragePath, TimeSpan.FromMinutes(15));
-            if (url is not null) _photoUrls[photo.Id] = url;
-        }
-    }
-
-    // Debounced: the search box fires on every keystroke, and each one is now a real
-    // database query rather than an in-memory filter. 250ms turns a typed word into
-    // one round trip instead of eight.
-    private async Task OnSearch(ChangeEventArgs e)
-    {
-        searchTerm = e.Value?.ToString() ?? "";
-
-        _searchDebounce?.Cancel();
-        _searchDebounce?.Dispose();
-        _searchDebounce = new CancellationTokenSource();
-        var token = _searchDebounce.Token;
-
-        try
-        {
-            await Task.Delay(250, token);
-        }
-        catch (TaskCanceledException)
-        {
-            return;   // superseded by a later keystroke
-        }
-
-        _page = 0;
-        expandedId = null;
-        CloseTransientPanels();
-        LoadBookings();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    /// Delete-confirm, cancel-confirm and the completion note are three different
-    /// two-step flows on the same row. Opening any one closes the others — leaving two
-    /// open at once was how a single booking could end up showing twelve controls.
-    private void CloseTransientPanels()
-    {
-        deleteConfirmId = null;
-        cancelConfirmId = null;
-        completeNoteBookingId = null;
-    }
-
-    private void UpdateStatus(string id, BookingStatus status)
-    {
-        if (!CanManage) return;  // server-side guard; don't rely on hidden buttons alone
-        BookingService.UpdateStatus(id, status);
-        CloseTransientPanels();
-        LoadBookings();
-        RefreshStats();
-        LoadCalDay();  // Keep the calendar view in sync when acted on from either tab.
-    }
-
-    /// Label for the primary button: the step being taken, not the state it lands in.
-    private static string StageLabel(BookingStatus next) => next switch
-    {
-        BookingStatus.Confirmed  => "Confirm booking",
-        BookingStatus.InProgress => "Start work",
-        BookingStatus.Completed  => "Mark complete",
-        _                        => next.ToString()
-    };
-
-    /// The one primary action. Completing is the exception — it opens the note panel
-    /// rather than finishing outright, so the mechanic can record what they found.
-    private async Task AdvanceStage(Booking booking, BookingStatus next)
-    {
-        if (!CanManage) return;
-
-        if (next == BookingStatus.Completed)
-        {
-            StartComplete(booking.Id);
-            return;
-        }
-
-        UpdateStatus(booking.Id, next);
-
-        // Confirming is the moment the customer's booking becomes real to them, so it
-        // is the one stage change worth an email. Starting work isn't — they are
-        // already in the diary. Best-effort: the status is committed either way.
-        if (next == BookingStatus.Confirmed)
-            await NotifyCustomerAsync(booking, isCancellation: false);
-    }
-
-    private void StartCancel(string bookingId)
-    {
-        CloseTransientPanels();
-        cancelConfirmId = bookingId;
-    }
-
-    private void StartDelete(string bookingId)
-    {
-        CloseTransientPanels();
-        deleteConfirmId = bookingId;
-    }
-
-    private async Task CancelBooking(Booking booking)
-    {
-        if (!CanManage) return;
-
-        UpdateStatus(booking.Id, BookingStatus.Cancelled);
-
-        // RaiseBookingCancelled existed but had no production caller at all, so the
-        // bell never showed a cancellation from either side.
-        Notifications.RaiseBookingCancelled(booking);
-        await NotifyCustomerAsync(booking, isCancellation: true);
-    }
-
-    private void ReopenBooking(Booking booking)
-    {
-        if (!CanManage) return;
-        UpdateStatus(booking.Id, BookingStatus.Confirmed);
-    }
-
-    /// Best-effort, exactly like the booking confirmation on Book.razor: the status
-    /// change is already committed and the slot already freed, so a mail failure must
-    /// not undo it or surface as an error on an action that did succeed.
-    private async Task NotifyCustomerAsync(Booking booking, bool isCancellation)
-    {
-        if (string.IsNullOrWhiteSpace(booking.CustomerEmail)) return;
-        try
-        {
-            await EmailSender.SendBookingStatusChangedAsync(booking, isCancellation);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Could not email {Email} about booking {Reference}",
-                booking.CustomerEmail, booking.Reference);
-        }
-    }
-
-    // ── Completing a job, with an optional note ──────────────────────────────
-
-    private void StartComplete(string bookingId)
-    {
-        completeNoteBookingId = bookingId;
-        completeNoteBody = "";
-        completeNoteVisible = false;   // staff-only unless they say otherwise
-        deleteConfirmId = null;
-    }
-
-    private void CancelCompleteNote()
-    {
-        completeNoteBookingId = null;
-        completeNoteBody = "";
-    }
-
-    private void CompleteWithNote(Booking booking)
-    {
-        if (!CanManage) return;  // server-side guard
-
-        // The note is recorded first: if it fails, the job hasn't been marked done, so
-        // a retry is the obvious thing to do. The other order would leave a completed
-        // booking whose note silently vanished.
-        // AddNote no-ops on an empty body, which is what makes the note optional.
-        Customers.AddNote(
-            customerId: booking.CustomerId,
-            bookingId: booking.Id,
-            authorStaffId: loggedInStaff?.Id,
-            body: completeNoteBody,
-            visibleToCustomer: completeNoteVisible);
-
-        CancelCompleteNote();
-        UpdateStatus(booking.Id, BookingStatus.Completed);
-
-        // Re-read this job's notes. UpdateStatus reloads the bookings but not the note
-        // cache, which is otherwise only filled by ToggleExpand — so on an already-open
-        // row the note just written stayed invisible until it was collapsed and reopened.
-        _bookingNotes[booking.Id] = Customers.GetNotesForBooking(booking.Id);
-    }
-
-    private void AssignBooking(string bookingId, string? staffId)
-    {
-        if (!IsAdmin) return;  // assignment is admin-only
-        BookingService.AssignStaff(bookingId, staffId);
-        LoadBookings();
-    }
-
-    private void SetBookingsTab() => activeTab = "bookings";
-
-    private void OpenCalendarTab()
-    {
-        activeTab = "calendar";
-        SetCalDay(calDay);
-    }
-
-    private void SetCalDay(DateTime day)
-    {
-        calDay = day.Date;
-        deleteConfirmId = null;
-        LoadCalDay();
-    }
-
-    private void ChangeCalDay(int days) => SetCalDay(calDay.AddDays(days));
-
-    private void OnCalDatePicked(ChangeEventArgs e)
-    {
-        if (DateTime.TryParse(e.Value?.ToString(), out var d)) SetCalDay(d);
-    }
-
-    private void LoadCalDay()
-    {
-        var dayBookings = BookingService.GetBookingsByDate(calDay);
-        _calDayBookings = IsAdmin || loggedInStaff?.CanViewAllBookings == true
-            ? dayBookings
-            : dayBookings.Where(b => b.AssignedStaffId == loggedInStaff!.Id).ToList();
-    }
-
-    private async Task DeleteBooking(string id)
-    {
-        if (!CanManage) return;  // server-side guard
-        await BookingService.DeleteBookingAsync(id);
-        deleteConfirmId = null;
-        LoadCalDay();
-        LoadBookings();
-        RefreshStats();
-    }
-
-    // wa.me needs the number in international format with no '+' or leading
-    // zeros; bare national numbers (single leading 0) are assumed to be UK.
-    private static string WhatsAppNumber(string phone)
-    {
-        var digits = new string(phone.Where(char.IsDigit).ToArray());
-        if (digits.StartsWith("00")) return digits[2..];
-        if (digits.StartsWith('0')) return "44" + digits[1..];
-        return digits;
-    }
-
-    private string WhatsAppHref(Booking b)
-    {
-        var msg = $"Hi {b.CustomerName}, this is Fixlosophy about your booking {b.Reference} " +
-                  $"({b.ServiceName}) on {b.SlotDate:dddd d MMMM} at {b.SlotTime}.";
-        return $"https://wa.me/{WhatsAppNumber(b.CustomerPhone)}?text={Uri.EscapeDataString(msg)}";
-    }
-
-    private static string TelHref(string phone) =>
-        $"tel:{new string(phone.Where(c => char.IsDigit(c) || c == '+').ToArray())}";
-
-    private void OpenPricingTab()
-    {
-        if (!IsAdmin) return;  // pricing is admin-only
-        activeTab = "pricing";
-        _servicePricings = BookingService.GetServicePricings();
-        _editPrices = _servicePricings.ToDictionary(s => s.Id, s => s.CurrentPrice);
-        _priceAdjustments = BookingService.GetPriceAdjustments();
-        _priceSaveMessage = null;
-    }
-
-    private void SavePrice(string id)
-    {
-        if (!IsAdmin) return;  // pricing is admin-only
-        if (!_editPrices.TryGetValue(id, out var price) || price < 0) return;
-        BookingService.UpdateServicePrice(id, Math.Round(price, 2));
-        _priceSaveMessage = "Price updated.";
-        _servicePricings = BookingService.GetServicePricings();
-    }
-
-    private void SaveAllPrices()
-    {
-        if (!IsAdmin) return;  // pricing is admin-only
-        foreach (var (id, price) in _editPrices.Where(p => p.Value >= 0))
-            BookingService.UpdateServicePrice(id, Math.Round(price, 2));
-        _priceSaveMessage = "All prices saved.";
-        _servicePricings = BookingService.GetServicePricings();
-    }
-
-    // ── Customers tab ────────────────────────────────────────────────────────
-
-    private void OpenImport()
-    {
-        if (!IsAdmin) return;   // server-side guard; don't rely on a hidden button
-        _selectedCustomer = null;
-        _importingCustomers = true;
-    }
-
-    private void CloseImport()
-    {
-        _importingCustomers = false;
-        LoadCustomers();
-    }
-
-    private void OpenCustomersTab()
-    {
-        if (!CanSeeCustomerDetails) return;  // server-side guard, not just a hidden tab
-        activeTab = "customers";
-        _selectedCustomer = null;
-        _importingCustomers = false;   // re-entering the tab starts on the list
-        LoadCustomers();
-    }
-
-    private void LoadCustomers()
-    {
-        var (items, total) = Customers.GetCustomersPage(customerSearch, _customerPage);
-
-        // A search can shrink the result set past the current page; step back rather
-        // than showing an empty list with a pager that disagrees.
-        if (items.Count == 0 && _customerPage > 0 && total > 0)
-        {
-            _customerPage = Math.Max(0, (int)Math.Ceiling(total / (double)CustomerService.PageSize) - 1);
-            (items, total) = Customers.GetCustomersPage(customerSearch, _customerPage);
-        }
-
-        _customers = items;
-        _customerTotal = total;
-    }
-
-    // Debounced like the bookings search: each keystroke is a real query now.
-    private async Task OnCustomerSearch(ChangeEventArgs e)
-    {
-        customerSearch = e.Value?.ToString() ?? "";
-
-        _customerSearchDebounce?.Cancel();
-        _customerSearchDebounce?.Dispose();
-        _customerSearchDebounce = new CancellationTokenSource();
-        var token = _customerSearchDebounce.Token;
-
-        try
-        {
-            await Task.Delay(250, token);
-        }
-        catch (TaskCanceledException)
-        {
-            return;   // superseded by a later keystroke
-        }
-
-        _customerPage = 0;
-        LoadCustomers();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private void GoToCustomerPage(int page)
-    {
-        _customerPage = Math.Clamp(page, 0, CustomerTotalPages - 1);
-        LoadCustomers();
-    }
-
-    // ── Enquiries ────────────────────────────────────────────────────────────
-
-    private List<Enquiry> _enquiries = [];
-    private bool showHandledEnquiries;
-
-    private int UnhandledEnquiryCount => _enquiries.Count(e => e.HandledAt is null);
-
-    private string EnquiriesEmptyMessage => showHandledEnquiries
-        ? "No messages yet. They arrive from the form on the About Us page."
-        : "Nothing outstanding — every message has been marked handled.";
-
-    private void OpenEnquiriesTab()
-    {
-        if (!CanSeeCustomerDetails) return;  // server-side guard
-        activeTab = "enquiries";
-        LoadEnquiries();
-    }
-
-    private void LoadEnquiries() =>
-        _enquiries = Enquiries.GetEnquiries(includeHandled: showHandledEnquiries);
-
-    private void ToggleHandledEnquiries()
-    {
-        showHandledEnquiries = !showHandledEnquiries;
-        LoadEnquiries();
-    }
-
-    private void SetEnquiryHandled(string id, bool handled)
-    {
-        if (!CanManage) return;  // server-side guard
-        Enquiries.MarkHandled(id, handled);
-        // Re-read rather than patching the row: with "show handled" off, marking one
-        // handled should take it off the list, which only a reload gets right.
-        LoadEnquiries();
-    }
-
-    private void OpenCustomer(string customerId)
-    {
-        if (!CanSeeCustomerDetails) return;  // server-side guard
-        _selectedCustomer = Customers.GetCustomerDetail(customerId);
-    }
-
-    private void CloseCustomer() => _selectedCustomer = null;
-
-    private void AddCustomerNote((string Body, bool Visible) note)
-    {
-        if (!CanManage || _selectedCustomer is null) return;  // server-side guard
-        Customers.AddNote(
-            customerId: _selectedCustomer.Customer.Id,
-            bookingId: null,
-            authorStaffId: loggedInStaff?.Id,
-            body: note.Body,
-            visibleToCustomer: note.Visible);
-
-        // Re-read so the timeline reflects what was stored rather than what we sent.
-        _selectedCustomer = Customers.GetCustomerDetail(_selectedCustomer.Customer.Id);
-    }
-
-    private void DeleteCustomerNote(string noteId)
-    {
-        if (!CanManage || _selectedCustomer is null) return;  // server-side guard
-        Customers.DeleteNote(noteId);
-        _selectedCustomer = Customers.GetCustomerDetail(_selectedCustomer.Customer.Id);
-    }
-
-    private void OpenStaffTab()
-    {
-        if (!IsAdmin) return;  // staff management is admin-only
-        activeTab = "staff";
-        _allStaff = AuthService.GetAllStaff();
-    }
-
-    private void AddStaff()
-    {
-        if (!IsAdmin) return;  // staff management is admin-only
-        staffFormError = null;
-        if (string.IsNullOrWhiteSpace(newStaff.FullName)) { staffFormError = "Name is required."; return; }
-        if (!AuthService.IsValidEmail(newStaff.Email)) { staffFormError = "Please enter a valid email."; return; }
-        if (AuthService.ValidatePassword(newStaffPassword) is { } pwError) { staffFormError = pwError; return; }
-
-        newStaff.Email = AuthService.NormalizeEmail(newStaff.Email);
-        newStaff.PasswordHash = AuthService.HashPassword(newStaffPassword);
-        staffFormError = AuthService.SaveStaff(newStaff);
-        if (staffFormError != null) return;
-
-        _allStaff = AuthService.GetAllStaff();
-        newStaff = new StaffMember();
-        newStaffPassword = "";
-    }
-
-    private void SaveStaffMember(StaffMember member)
-    {
-        if (!IsAdmin) return;  // staff management is admin-only
-        staffRowError = AuthService.SaveStaff(member);
-        _allStaff = AuthService.GetAllStaff();
-    }
+    // Unsubscribing matters: the hub is a singleton, so a leaked handler would keep
+    // this circuit's component alive for the life of the process.
+    public void Dispose() => NotificationHub.Raised -= OnNotificationRaised;
 }

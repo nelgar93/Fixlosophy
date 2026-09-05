@@ -101,6 +101,7 @@ certificate.
 - `Services/` — business logic and the EF Core models.
 - `Data/AppDbContext.cs` — the EF Core context.
 - `Components/Pages/` — routed pages (`Home`, `Book`, `Admin`, `AccountLogin`, …).
+- `Components/Admin/` — the dashboard's tabs, one component each. See below.
 - `Components/Layout/` — `NavMenu`, `MainLayout`, shared `Logo` component.
 - `Components/Shared/` — reusable panels (`CustomerDetailPanel`, `CustomerImportPanel`,
   `Icon`, `SeoHead`).
@@ -117,6 +118,8 @@ certificate.
 - **Staff** are `Admin` or `Worker`. Admins have full access; Workers have three
   independent permission flags (`CanViewAllBookings`, `CanManageBookings`,
   `CanViewCustomerDetails`) set per-staff-member in the admin dashboard.
+- `IsMechanic` sits alongside those but is not a permission — it says whether someone
+  works on bikes, which is what availability counts. See below.
 
 ## How a few things work
 
@@ -132,9 +135,63 @@ Note the app is intended to run as a **single instance**. Blazor Server holds st
 circuit, so scaling out would also need sticky sessions, and `NotificationHub` is an
 in-process fan-out that would need a SignalR backplane.
 
+### The admin dashboard
+
+`Components/Pages/Admin.razor` is only the shell — the header, the notification bell
+and the tab bar. Each tab is its own component in `Components/Admin/`:
+
+| Component | Gate |
+|---|---|
+| `CalendarTab` | any staff |
+| `BookingsTab` | any staff (scoped to their own bookings without `CanViewAllBookings`) |
+| `CustomersTab`, `EnquiriesTab` | `CanSeeCustomerDetails` |
+| `AvailabilityTab`, `PricingTab`, `StaffTab` | Admin |
+
+Three things to know before changing it:
+
+- **`AdminContext` is cascaded**, carrying the staff member and the derived
+  permissions. It's for *rendering decisions only* — every handler that changes
+  something re-checks, because a Blazor circuit takes instructions from a browser.
+  The duplicated guards are deliberate.
+- **Switching tabs destroys and recreates the component**, so each tab loads its own
+  data in `OnInitialized` and can never show something stale. This replaced a set of
+  hand-written cross-tab reloads (the bookings tab used to have to remember to refresh
+  the calendar).
+- **`BookingActions` and `BookingDangerZone` are shared** by the Bookings and Calendar
+  tabs, so both offer the same controls. Which confirm panel is open is held by the
+  *parent* and passed down, so opening one closes any other on the page.
+
+This was one 2,013-line file with all six tabs sharing a single `@code` block of about
+forty fields. They never shared state — they shared a file.
+
+### Availability: closures and staff absence
+
+A day is bookable if it's a trading day, no all-day `Closure` covers it, and at least
+one mechanic is in. `AvailabilityService` owns that rule; `BookingService` consults it
+in `GetAvailableSlots`, `DescribeMonth` and `CreateBooking`.
+
+- A **closure** is customer-facing — the reason shows on the booking calendar, because
+  "Closed — Christmas" and "fully booked" are different answers and only one means try
+  tomorrow. Optionally part-day.
+- A **staff absence** is internal. Customers see a closed day, never whose holiday it is.
+- `StaffMember.IsMechanic` is what counts towards a day being open, deliberately
+  separate from `Role` and `CanManageBookings` — those govern the dashboard, this
+  governs the workshop.
+- **With nobody flagged as a mechanic the rule switches off** rather than closing every
+  day. Failing open is the safe direction: the alternative turns unticking the last
+  mechanic into a site that silently stops taking bookings. The Availability and Staff
+  tabs both warn when it happens.
+
+Adding a closure that lands on existing bookings surfaces them, with a choice per
+booking: move it (keeps the reference, notes and photos) or cancel it and email an
+invitation to rebook.
+
+Bookings are also capped at `BookingService.BookingHorizon` (60 days) — the calendar
+used to page forward indefinitely, so "fill the whole calendar" had no end to it.
+
 ### Recurring work
 
-`MaintenanceService` is a `BackgroundService` that ticks every 30 minutes and calls
+`MaintenanceService` is a `BackgroundService` that ticks every 10 minutes and calls
 each job on `MaintenanceJobs`. It keeps no state about what it has already done — every
 job decides for itself whether it is due, so a tick is always safe and a missed window
 heals on the next one.
@@ -145,6 +202,13 @@ heals on the next one.
   that's unreachable; either way a **5% business floor** applies, so the configured value
   is a fallback, not a minimum.
 - **Notification retention** — deletes notifications older than 30 days.
+- **Error log retention** — deletes error groups not seen for 90 days. A group still
+  happening is never removed, however old it is.
+- **Late arrivals** — rings the bell once for a booking still Pending or Confirmed
+  more than 20 minutes past its slot. Moving a booking to InProgress is what the shop
+  does when a bike hits the stand, so that's the arrival signal; there's no check-in
+  step to remember. The dashboard also shows a derived "Not arrived" badge, which
+  doesn't wait on a tick.
 - **Appointment reminders** — emails everyone booked in tomorrow, once, no earlier than
   `Maintenance:ReminderHour`. `Bookings.ReminderSentAt` is what makes it once. Bookings
   made within the last 6 hours are skipped, because their confirmation email carried the
@@ -204,7 +268,7 @@ availability check an hour out for the whole of summer.
 dotnet test Fixlosophy.Tests/Fixlosophy.Tests.csproj
 ```
 
-319 tests over `AuthService`, `AuthClaims`, `BookingService`, `CustomerService`,
+375 tests over `AuthService`, `AuthClaims`, `BookingService`, `CustomerService`,
 `CustomerImportService`, `EnquiryService`, `NotificationService`, `BikeService`,
 `MaintenanceJobs`, `StorageService` and `ShopClock`, using EF Core's InMemory provider
 — no database connection needed.
