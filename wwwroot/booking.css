@@ -1007,14 +1007,24 @@
     font-size: var(--fs-caption);
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s;
+    /* Named properties, not `all`. The active state used to also change font-weight,
+       and `all` happily animated the resulting width change — so selecting a tab made
+       it grow by ~3px over 150ms and shunt every tab after it sideways. Listing the
+       properties means a future style that affects layout can't quietly become an
+       animation. */
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
     white-space: nowrap;
 }
 
 @media (hover: hover) and (pointer: fine) {
     .filter-tab:hover { border-color: var(--green); color: var(--white); }
 }
-.filter-tab.active { background: var(--green); border-color: var(--green); color: var(--dark); font-weight: 700; }
+
+/* Deliberately no font-weight change. Bold text is wider, so it resized the button
+   and shifted its neighbours every time the selection moved. The weight was
+   redundant anyway: a solid green pill with near-black text on a dark bar is already
+   about as loud as an active state gets. */
+.filter-tab.active { background: var(--green); border-color: var(--green); color: var(--dark); }
 
 .admin-search { width: 100%; }
 .admin-search .form-control { font-size: var(--fs-sm); }
