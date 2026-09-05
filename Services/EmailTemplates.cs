@@ -105,11 +105,18 @@ public static class EmailTemplates
         if (!string.IsNullOrWhiteSpace(b.BikeDescription))
             rows.Add(Row("Bike", b.BikeDescription));
 
+        // Says up front what the account page will and won't let them do, so the two
+        // limits on self-cancelling aren't discovered at the moment they're hit.
+        var cancelHours = BookingService.SelfCancelCutoff.TotalHours.ToString("0", CultureInfo.InvariantCulture);
+
         // Account holders get a link to their bookings list; guests have nowhere to
         // manage it themselves yet, so they're pointed at the shop instead.
         var (linkLabel, linkNote) = b.CustomerId is null
             ? ("Get in touch", $"Need to change or cancel? Call us on {SiteContent.PhoneDisplay}.")
-            : ("View my bookings", $"You can cancel from your account, or call us on {SiteContent.PhoneDisplay}.");
+            : ("View my bookings",
+               $"You can cancel from your account up to {cancelHours} hours before your slot. " +
+               $"After that, or once we've started work on your bike, call us on {SiteContent.PhoneDisplay} " +
+               "and we'll sort it out with you.");
 
         var html = Shell("Your booking is confirmed",
             Para($"Hi {b.CustomerName},") +
@@ -128,6 +135,7 @@ public static class EmailTemplates
             $"Where:     {SiteContent.AddressOneLine}\n\n" +
             "Please arrive about five minutes early. The final price is confirmed after assessment.\n\n" +
             $"{linkLabel}: {manageLink}\n" +
+            $"{linkNote}\n" +
             $"Questions: {SiteContent.PhoneDisplay}\n";
 
         return (html, text);

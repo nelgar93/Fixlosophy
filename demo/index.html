@@ -2181,6 +2181,18 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     justify-content: flex-end;
 }
 
+/* Why the Cancel button isn't there — work already started, or the two-hour cutoff
+   passed. Its own full-width line, like the job notes below it, and order 3 so it
+   still lands under the actions once the row reorders on a phone. Said on the page
+   rather than in a title attribute: the reason is the whole point of the change. */
+.account-booking-row__blocked {
+    flex: 1 1 100%;
+    order: 3;
+    margin: 0;
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.5);
+}
+
 @media (max-width: 479px) {
     .account-booking-row {
         flex-wrap: wrap;
@@ -5849,17 +5861,35 @@ function createBooking(input) {
 
 // BookingService.CancelOwnBooking — the customer id is part of the lookup, so one
 // customer can never cancel another's booking.
+// BookingService.CanCustomerCancel. Deliberately narrower than ALLOWED_TRANSITIONS,
+// which is what *staff* may do: staff can cancel a job mid-repair because they're
+// holding the bike, and a customer can't.
+function canCustomerCancel(status) {
+    return status === STATUS.Pending || status === STATUS.Confirmed;
+}
+
+// BookingService.SelfCancelBlockedReason. One rule read by both sides — the account
+// page picks its control from it, cancelOwnBooking decides from it — so the button
+// can't offer what the call behind it refuses.
+function selfCancelBlockedReason(booking) {
+    if (booking.status === STATUS.Cancelled) return 'That booking is already cancelled.';
+    if (booking.status === STATUS.Completed) return 'That booking is already completed.';
+    if (!canCustomerCancel(booking.status))
+        return 'We’ve already started work on this one — please call us on ' +
+               SITE.phoneDisplay + ' and we’ll sort it out with you.';
+    if ((slotStart(booking) - now()) / 36e5 < SELF_CANCEL_CUTOFF_HOURS)
+        return 'This booking is less than ' + SELF_CANCEL_CUTOFF_HOURS +
+               ' hours away — please call us on ' + SITE.phoneDisplay +
+               ' so we can free the slot properly.';
+    return null;
+}
+
 function cancelOwnBooking(customerId, bookingId) {
     const booking = DB.bookings.find((b) => b.id === bookingId && b.customerId === customerId);
     if (!booking) return { error: 'We couldn’t find that booking.' };
-    if (booking.status === STATUS.Cancelled) return { error: 'That booking is already cancelled.' };
-    if (booking.status === STATUS.Completed) return { error: 'That booking is already completed.' };
 
-    const hoursAway = (slotStart(booking) - now()) / 36e5;
-    if (hoursAway < SELF_CANCEL_CUTOFF_HOURS)
-        return { error: 'This booking is less than ' + SELF_CANCEL_CUTOFF_HOURS +
-                        ' hours away — please call us on ' + SITE.phoneDisplay +
-                        ' so we can free the slot properly.' };
+    const blocked = selfCancelBlockedReason(booking);
+    if (blocked) return { error: blocked };
 
     booking.status = STATUS.Cancelled;
     raiseNotification({
@@ -7838,10 +7868,16 @@ function accountUpcoming(upcoming, a, shared) {
     }
 
     const rows = upcoming.map((b) => {
+        // Null when they can still cancel it themselves; otherwise the reason, which
+        // decides both the control and the line under it.
+        const blocked = selfCancelBlockedReason(b);
         const actions = a.cancelConfirmId === b.id
             ? '<button class="action-btn action-btn--danger" data-act="account-cancel" data-id="' + b.id + '">Confirm cancel</button>' +
               '<button class="action-btn action-btn--keep" data-act="account-cancel-keep">Keep</button>'
-            : '<button class="action-btn action-btn--delete" data-act="account-cancel-start" data-id="' + b.id + '">Cancel</button>';
+            : blocked
+              ? '<a class="action-btn action-btn--call" href="tel:' + SITE.phoneE164 + '">' +
+                icon('phone') + ' Call to cancel</a>'
+              : '<button class="action-btn action-btn--delete" data-act="account-cancel-start" data-id="' + b.id + '">Cancel</button>';
 
         return '<div class="account-booking-row">' + refBadge(b.reference) +
             '<div class="account-booking-row__info"><strong>' + esc(b.serviceName) + '</strong>' +
@@ -7849,6 +7885,7 @@ function accountUpcoming(upcoming, a, shared) {
               (b.bikeDescription ? '<span>' + esc(b.bikeDescription) + '</span>' : '') +
             '</div>' +
             '<div class="account-booking-row__actions">' + statusBadge(b.status) + actions + '</div>' +
+            (blocked ? '<p class="account-booking-row__blocked">' + esc(blocked) + '</p>' : '') +
             jobNotes(b.id, shared) +
         '</div>';
     }).join('');

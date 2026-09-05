@@ -399,6 +399,49 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
     public static readonly TimeSpan SelfCancelCutoff = TimeSpan.FromHours(2);
 
     /// <summary>
+    /// Whether a booking is at a stage the customer may still call off themselves.
+    ///
+    /// Deliberately narrower than <see cref="CanTransition"/>, which governs what
+    /// *staff* may do: staff can cancel a job mid-repair, because they're the ones
+    /// holding the bike. A customer can't — once a mechanic has it apart, calling the
+    /// job off is a conversation about parts already fitted, not a button.
+    /// </summary>
+    public static bool CanCustomerCancel(BookingStatus status) =>
+        status is BookingStatus.Pending or BookingStatus.Confirmed;
+
+    /// <summary>
+    /// SlotTime is "HH:mm" and SlotDate is midnight, so neither alone says when the
+    /// appointment actually starts.
+    /// </summary>
+    public static DateTime SlotStart(Booking booking) =>
+        TimeOnly.TryParse(booking.SlotTime, CultureInfo.InvariantCulture, out var t)
+            ? booking.SlotDate.Date.Add(t.ToTimeSpan())
+            : booking.SlotDate.Date;
+
+    /// <summary>
+    /// Why this customer can't cancel this booking themselves, or null if they can.
+    ///
+    /// One rule, read by both sides: the account page calls it to decide whether to
+    /// offer a Cancel button or a phone number, and CancelOwnBooking calls it to decide
+    /// what to allow. That's what stops the button and the rule drifting apart — which
+    /// is exactly how a Cancel button came to sit on jobs already in progress.
+    /// </summary>
+    public static string? SelfCancelBlockedReason(Booking booking)
+    {
+        if (booking.Status == BookingStatus.Cancelled)
+            return "That booking is already cancelled.";
+        if (booking.Status == BookingStatus.Completed)
+            return "That booking is already completed.";
+        if (!CanCustomerCancel(booking.Status))
+            return "We've already started work on this one — please call us on " +
+                   $"{SiteContent.PhoneDisplay} and we'll sort it out with you.";
+        if (SlotStart(booking) - ShopClock.Now < SelfCancelCutoff)
+            return $"This booking is less than {SelfCancelCutoff.TotalHours:0} hours away — " +
+                   $"please call us on {SiteContent.PhoneDisplay} so we can free the slot properly.";
+        return null;
+    }
+
+    /// <summary>
     /// Cancels a booking on the customer's own behalf.
     ///
     /// customerId is part of the lookup rather than checked afterwards, so one
@@ -412,20 +455,9 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         if (booking is null)
             return (null, "We couldn't find that booking.");
 
-        if (booking.Status == BookingStatus.Cancelled)
-            return (null, "That booking is already cancelled.");
-        if (booking.Status == BookingStatus.Completed)
-            return (null, "That booking is already completed.");
-
-        // SlotTime is "HH:mm"; combine it with the date so the cutoff compares against
-        // the actual appointment, not midnight on the day.
-        var slotStart = booking.SlotDate.Date;
-        if (TimeOnly.TryParse(booking.SlotTime, CultureInfo.InvariantCulture, out var t))
-            slotStart = slotStart.Add(t.ToTimeSpan());
-
-        if (slotStart - ShopClock.Now < SelfCancelCutoff)
-            return (null, $"This booking is less than {SelfCancelCutoff.TotalHours:0} hours away — " +
-                          $"please call us on {SiteContent.PhoneDisplay} so we can free the slot properly.");
+        var blocked = SelfCancelBlockedReason(booking);
+        if (blocked is not null)
+            return (null, blocked);
 
         booking.Status = BookingStatus.Cancelled;
         db.SaveChanges();

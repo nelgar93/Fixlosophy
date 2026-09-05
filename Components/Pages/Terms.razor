@@ -45,6 +45,7 @@
             <li>We'll confirm your booking by email. If you don't get one, check your spam folder, then call us — assume it hasn't reached us.</li>
             <li>Please arrive about five minutes before your slot. We hold slots for @HoldMinutes minutes; after that we may give it to someone else.</li>
             <li>To cancel or change, use your account if you have one, or call the shop. Please give us as much notice as you can.</li>
+            <li>You can cancel from your account up to @CancelHours hours before your slot. After that, or once we've started work on your bike, please call us — by then the slot is hard to fill and parts may already be fitted.</li>
         </ul>
 
         <h2>Prices and quotes</h2>
@@ -99,4 +100,8 @@
     private const string LastUpdated = "30 August 2026";
     private const int HoldMinutes = 15;
     private const int CollectionDays = 14;
+
+    // Read from the service rather than typed here, so the terms can't promise a
+    // window the booking code doesn't actually honour.
+    private static int CancelHours => (int)BookingService.SelfCancelCutoff.TotalHours;
 }

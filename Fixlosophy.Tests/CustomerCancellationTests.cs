@@ -162,4 +162,45 @@ public class CustomerCancellationTests
         Assert.Null(booking);
         Assert.NotNull(error);
     }
+
+    // The gap this suite used to have. InProgress is upcoming, so it appeared in the
+    // customer's list with a Cancel button beside it, and nothing refused the call —
+    // a customer could call off a job with the bike already apart on the stand.
+    [Fact]
+    public void CancelOwnBooking_RefusesAJobAlreadyInProgress()
+    {
+        using var db = NewDb();
+        var b = Seed(db, "cust-1", FutureWeekday(), status: BookingStatus.InProgress);
+
+        var (booking, error) = NewService(db).CancelOwnBooking("cust-1", b.Id);
+
+        Assert.Null(booking);
+        Assert.Contains("already started work", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(BookingStatus.InProgress, db.Bookings.Single().Status);
+    }
+
+    // Staff keep the ability the customer loses: the dashboard cancels mid-repair,
+    // because the people holding the bike are the ones who can explain why.
+    [Fact]
+    public void StaffCanStillCancelAJobInProgress()
+    {
+        Assert.False(BookingService.CanCustomerCancel(BookingStatus.InProgress));
+        Assert.True(BookingService.CanTransition(BookingStatus.InProgress, BookingStatus.Cancelled));
+    }
+
+    // The page renders from the same predicate the service enforces, so a button can
+    // never offer something the call behind it would refuse.
+    [Theory]
+    [InlineData(BookingStatus.Pending,   true)]
+    [InlineData(BookingStatus.Confirmed, true)]
+    [InlineData(BookingStatus.InProgress, false)]
+    [InlineData(BookingStatus.Completed, false)]
+    [InlineData(BookingStatus.Cancelled, false)]
+    public void SelfCancelBlockedReason_AgreesWithCanCustomerCancel(BookingStatus status, bool allowed)
+    {
+        using var db = NewDb();
+        var b = Seed(db, "cust-1", FutureWeekday(), status: status);
+
+        Assert.Equal(allowed, BookingService.SelfCancelBlockedReason(b) is null);
+    }
 }
