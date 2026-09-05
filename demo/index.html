@@ -2254,6 +2254,42 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     flex-wrap: wrap;
 }
 
+/* Back and Start over travel together, so the primary action keeps the right-hand
+   end of the row to itself and "Start over" never reads as the way forward. */
+.booking-nav__left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+/* Says the booking cap has been reached before any of the wizard is filled in, so
+   it can't be discovered at the Confirm click. Amber rather than red: nothing has
+   gone wrong, there's just a limit and a way past it. */
+.booking-limit-notice {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+    padding: var(--space-5);
+    background: rgba(234,179,8,0.08);
+    border: 1px solid rgba(234,179,8,0.28);
+    border-radius: var(--radius);
+}
+
+.booking-limit-notice h2 {
+    margin: 0;
+    font-size: var(--fs-lg);
+    color: #fbbf24;
+}
+
+.booking-limit-notice p {
+    margin: 0;
+    color: rgba(255,255,255,0.72);
+    line-height: 1.55;
+}
+
 /* ---------- Customer Auth Strip ---------- */
 .customer-auth-strip {
     display: flex;
@@ -2850,6 +2886,9 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     .booking-nav { flex-direction: column-reverse; }
     .booking-nav .btn { width: 100%; justify-content: center; }
     .booking-nav > span { display: none; }
+    /* The grouped Back/Start over pair stacks too, rather than trying to sit two
+       full-width buttons side by side. */
+    .booking-nav__left { width: 100%; flex-direction: column; gap: var(--space-2); }
 
     /* Calendar: tighten up */
     .cal-day { font-size: var(--fs-caption); border-radius: var(--radius-sm); }
@@ -5799,9 +5838,19 @@ const isValidPhone = (phone) => {
 const isValidEmail = (email) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((email || '').trim());
 
 // BookingService.CreateBooking, validation and all.
+// BookingService.CountUpcomingForEmail. Shared with the wizard, which asks it before
+// anything is filled in — the cap used to surface only at the final Confirm click.
+function countUpcomingForEmail(email) {
+    const norm = (email || '').trim().toLowerCase();
+    if (!norm) return 0;
+    const t = today();
+    return DB.bookings.filter((b) =>
+        b.customerEmail.toLowerCase() === norm &&
+        dateOnly(b.slotDate) >= t && b.status !== STATUS.Cancelled).length;
+}
+
 function createBooking(input) {
     const email = (input.customerEmail || '').trim().toLowerCase();
-    const t = today();
 
     // Their own duplicate first: at one booking per slot the two conditions coincide,
     // and this is the more useful of the two answers when the clash is with themselves.
@@ -5817,9 +5866,7 @@ function createBooking(input) {
     if (taken >= MAX_PER_SLOT)
         return { error: 'Sorry, this time slot has just been taken. Please pick another time.' };
 
-    const upcoming = DB.bookings.filter((b) =>
-        b.customerEmail.toLowerCase() === email &&
-        dateOnly(b.slotDate) >= t && b.status !== STATUS.Cancelled).length;
+    const upcoming = countUpcomingForEmail(email);
     if (upcoming >= MAX_ACTIVE_BOOKINGS_PER_EMAIL)
         return { error: 'You already have ' + MAX_ACTIVE_BOOKINGS_PER_EMAIL +
                         ' upcoming bookings — please contact us if you need to change one.' };
@@ -6344,6 +6391,8 @@ function freshUiState() {
             time: null,
             name: '', email: '', phone: '', bike: '', notes: '',
             photos: [],
+            // Upcoming bookings held by this email, against MAX_ACTIVE_BOOKINGS_PER_EMAIL.
+            upcomingCount: 0,
             error: null,
             photoError: null,
             confirmed: null
@@ -7415,18 +7464,35 @@ function viewBook() {
         b.bike = customer.bikes.length === 1 ? customer.bikes[0].makeModel : '';
     }
 
+    // A signed-in customer's cap is known from step 1; a guest's only once they've
+    // typed an email on step 3, which bookValidateDetails fills in.
+    if (customer) b.upcomingCount = countUpcomingForEmail(customer.email);
+    const atLimit = (b.upcomingCount || 0) >= MAX_ACTIVE_BOOKINGS_PER_EMAIL;
+
     let body = '';
-    if (b.step === 1) body = bookStep1();
+    if (b.step === 1) body = bookStep1(atLimit);
     else if (b.step === 2) body = bookStep2();
     else if (b.step === 3) body = bookStep3(customer);
-    else if (b.step === 4) body = bookStep4();
+    else if (b.step === 4) body = bookStep4(atLimit);
     else body = bookConfirmed();
+
+    const limitNotice = (b.step < 5 && atLimit)
+        ? '<div class="booking-limit-notice">' +
+            '<h2>You already have ' + b.upcomingCount + ' upcoming bookings</h2>' +
+            '<p>That\'s the most we hold for one email at a time, so slots stay free for ' +
+            'everyone. Cancel one and you can book again straight away.</p>' +
+            (customer
+              ? '<a href="#/account" class="btn btn-primary" data-nav>View my bookings</a>'
+              : '<a href="tel:' + SITE.phoneE164 + '" class="btn btn-primary">' +
+                icon('phone') + ' Call us on ' + SITE.phoneDisplay + '</a>') +
+          '</div>'
+        : '';
 
     return '' +
     pageHero('Online Booking', 'Book a Repair',
              'Pick your service, choose a time, and we\'ll have you back on the road.') +
     '<section class="section booking-section"><div class="container">' +
-      (b.step < 5 ? customerAuthStrip(customer) + stepsIndicator(b.step) : '') +
+      (b.step < 5 ? customerAuthStrip(customer) + limitNotice + stepsIndicator(b.step) : '') +
       body +
     '</div></section>';
 }
@@ -7453,7 +7519,7 @@ function stepsIndicator(step) {
     }).join('') + '</div>';
 }
 
-function bookStep1() {
+function bookStep1(atLimit) {
     const services = serviceOptions();
     const categories = [...new Set(services.map((s) => s.category))];
     const selected = state.book.service;
@@ -7482,7 +7548,8 @@ function bookStep1() {
         '<p class="booking-card__subtitle">Select the type of repair or service you need.</p>' +
         groups +
         '<div class="booking-nav"><span></span>' +
-          '<button class="btn btn-primary btn-lg" data-act="book-step2" ' + (selected ? '' : 'disabled') + '>' +
+          '<button class="btn btn-primary btn-lg" data-act="book-step2" ' +
+            (selected && !atLimit ? '' : 'disabled') + '>' +
             'Continue ' + icon('arrow-right') + '</button>' +
         '</div>' +
     '</div>';
@@ -7551,7 +7618,10 @@ function bookStep2() {
           '<div class="timeslot-wrapper">' + slotPanel + '</div>' +
         '</div>' +
         '<div class="booking-nav">' +
-          '<button class="btn btn-outline" data-act="book-step" data-step="1">' + icon('arrow-left') + ' Back</button>' +
+          '<div class="booking-nav__left">' +
+            '<button class="btn btn-outline" data-act="book-step" data-step="1">' + icon('arrow-left') + ' Back</button>' +
+            '<button class="btn btn-ghost" data-act="book-restart">Start over</button>' +
+          '</div>' +
           '<button class="btn btn-primary btn-lg" data-act="book-step3" ' +
             (b.date && b.time ? '' : 'disabled') + '>Continue ' + icon('arrow-right') + '</button>' +
         '</div>' +
@@ -7614,13 +7684,16 @@ function bookStep3(customer) {
           '</div>' +
         '</div>' +
         '<div class="booking-nav">' +
-          '<button class="btn btn-outline" data-act="book-step" data-step="2">' + icon('arrow-left') + ' Back</button>' +
+          '<div class="booking-nav__left">' +
+            '<button class="btn btn-outline" data-act="book-step" data-step="2">' + icon('arrow-left') + ' Back</button>' +
+            '<button class="btn btn-ghost" data-act="book-restart">Start over</button>' +
+          '</div>' +
           '<button class="btn btn-primary btn-lg" data-act="book-step4">Continue ' + icon('arrow-right') + '</button>' +
         '</div>' +
     '</div>';
 }
 
-function bookStep4() {
+function bookStep4(atLimit) {
     const b = state.book;
     const customer = currentCustomer();
     const item = (label, value, green) =>
@@ -7649,8 +7722,12 @@ function bookStep4() {
           'using the details above to arrange your repair — see our ' +
           '<a href="#/privacy" data-nav>privacy policy</a>.</p>' +
         '<div class="booking-nav">' +
-          '<button class="btn btn-outline" data-act="book-step" data-step="3">' + icon('arrow-left') + ' Back</button>' +
-          '<button class="btn btn-primary btn-lg" data-act="book-confirm">Confirm Booking ✓</button>' +
+          '<div class="booking-nav__left">' +
+            '<button class="btn btn-outline" data-act="book-step" data-step="3">' + icon('arrow-left') + ' Back</button>' +
+            '<button class="btn btn-ghost" data-act="book-restart">Start over</button>' +
+          '</div>' +
+          '<button class="btn btn-primary btn-lg" data-act="book-confirm" ' +
+            (atLimit ? 'disabled' : '') + '>Confirm Booking ✓</button>' +
         '</div>' +
     '</div>';
 }
@@ -7701,6 +7778,19 @@ function bookValidateDetails() {
     // required — isValidPhone rejects "call me" and similar, which would otherwise
     // produce a dead Call button in the dashboard.
     if (!isValidPhone(b.phone)) { b.error = 'Please enter a phone number we can reach you on.'; return false; }
+
+    // A guest's email is only known here, so this is the earliest their cap can be
+    // asked about — still ahead of the review screen. Kept on this step rather than
+    // advancing, so a mistyped address can be corrected.
+    if (!customer) {
+        b.upcomingCount = countUpcomingForEmail(email);
+        if (b.upcomingCount >= MAX_ACTIVE_BOOKINGS_PER_EMAIL) {
+            b.error = 'This email already has ' + MAX_ACTIVE_BOOKINGS_PER_EMAIL +
+                      ' upcoming bookings. Cancel one from your account, or call us on ' +
+                      SITE.phoneDisplay + '.';
+            return false;
+        }
+    }
     return true;
 }
 
@@ -9389,7 +9479,10 @@ document.addEventListener('click', (e) => {
     case 'book-step4': if (bookValidateDetails()) bookGoToStep(4); else render(); break;
     case 'book-step': bookGoToStep(parseInt(actEl.dataset.step, 10)); break;
     case 'book-confirm': bookConfirm(); break;
-    case 'book-reset': bookReset(); break;
+    // Same clear-and-start-again either way: "Book Another" after a success, and
+    // "Start over" from inside the wizard, which previously had no way out at all.
+    case 'book-reset':
+    case 'book-restart': bookReset(); break;
     case 'cal-prev': {
         const m = state.book.calendarMonth;
         const prev = new Date(m.getFullYear(), m.getMonth() - 1, 1);

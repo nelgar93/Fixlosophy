@@ -134,12 +134,34 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         return GetAvailableSlots(date).Count > 0;
     }
 
+    /// <summary>
+    /// Upcoming, uncancelled bookings already held by this email — the figure
+    /// <see cref="MaxActiveBookingsPerEmail"/> is measured against.
+    ///
+    /// Public because the wizard needs it too: the cap used to be discovered only at
+    /// the final Confirm click, after the customer had picked a service and a slot and
+    /// typed every field. Asking the same question up front is the difference between
+    /// a limit and a dead end.
+    /// </summary>
+    public int CountUpcomingForEmail(string email)
+    {
+        var normEmail = email.Trim().ToLowerInvariant();
+        if (normEmail.Length == 0) return 0;
+
+        var today = ShopClock.Today;
+#pragma warning disable CA1304, CA1311, CA1862
+        return db.Bookings.Count(b =>
+            b.CustomerEmail.ToLower() == normEmail &&
+            b.SlotDate >= today &&
+            b.Status != BookingStatus.Cancelled);
+#pragma warning restore CA1304, CA1311, CA1862
+    }
+
     public (Booking? booking, string? error) CreateBooking(Booking booking)
     {
         booking.CustomerEmail = booking.CustomerEmail.Trim();
         booking.CustomerPhone = booking.CustomerPhone.Trim();
         var normEmail = booking.CustomerEmail.ToLowerInvariant();
-        var today = ShopClock.Today;
 
         // Their own duplicate is checked before capacity: at one booking per slot the
         // two conditions coincide, and "you already have a booking at this time" is the
@@ -161,11 +183,8 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         if (slotTaken >= MaxPerSlot)
             return (null, "Sorry, this time slot has just been taken. Please pick another time.");
 
-        var upcoming = db.Bookings.Count(b =>
-            b.CustomerEmail.ToLower() == normEmail &&
-            b.SlotDate >= today &&
-            b.Status != BookingStatus.Cancelled);
 #pragma warning restore CA1304, CA1311, CA1862
+        var upcoming = CountUpcomingForEmail(normEmail);
         if (upcoming >= MaxActiveBookingsPerEmail)
             return (null, $"You already have {MaxActiveBookingsPerEmail} upcoming bookings — please contact us if you need to change one.");
 

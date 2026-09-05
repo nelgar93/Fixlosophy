@@ -71,7 +71,7 @@ confirm the copy is exact:
 
 ```bash
 sed -n '5,2034p'    demo/index.html | diff --strip-trailing-cr - wwwroot/app.css
-sed -n '2035,4574p' demo/index.html | diff --strip-trailing-cr - wwwroot/booking.css
+sed -n '2035,4613p' demo/index.html | diff --strip-trailing-cr - wwwroot/booking.css
 ```
 
 (The line ranges move when the stylesheets grow — they start after `<style>` and end at

@@ -220,6 +220,42 @@
     flex-wrap: wrap;
 }
 
+/* Back and Start over travel together, so the primary action keeps the right-hand
+   end of the row to itself and "Start over" never reads as the way forward. */
+.booking-nav__left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+/* Says the booking cap has been reached before any of the wizard is filled in, so
+   it can't be discovered at the Confirm click. Amber rather than red: nothing has
+   gone wrong, there's just a limit and a way past it. */
+.booking-limit-notice {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+    padding: var(--space-5);
+    background: rgba(234,179,8,0.08);
+    border: 1px solid rgba(234,179,8,0.28);
+    border-radius: var(--radius);
+}
+
+.booking-limit-notice h2 {
+    margin: 0;
+    font-size: var(--fs-lg);
+    color: #fbbf24;
+}
+
+.booking-limit-notice p {
+    margin: 0;
+    color: rgba(255,255,255,0.72);
+    line-height: 1.55;
+}
+
 /* ---------- Customer Auth Strip ---------- */
 .customer-auth-strip {
     display: flex;
@@ -816,6 +852,9 @@
     .booking-nav { flex-direction: column-reverse; }
     .booking-nav .btn { width: 100%; justify-content: center; }
     .booking-nav > span { display: none; }
+    /* The grouped Back/Start over pair stacks too, rather than trying to sit two
+       full-width buttons side by side. */
+    .booking-nav__left { width: 100%; flex-direction: column; gap: var(--space-2); }
 
     /* Calendar: tighten up */
     .cal-day { font-size: var(--fs-caption); border-radius: var(--radius-sm); }
