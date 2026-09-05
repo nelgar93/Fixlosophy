@@ -155,7 +155,10 @@ public class BookingServiceTests
     {
         using var db = NewDb();
         var date = FutureWorkday();
-        Seed(db, date, "09:00");
+        // One short of capacity, whatever capacity is — at MaxPerSlot 1 that's an
+        // empty slot, and the assertion still says the thing it means.
+        for (var i = 0; i < BookingService.MaxPerSlot - 1; i++)
+            Seed(db, date, "09:00", email: $"filler{i}@example.com");
 
         Assert.Contains("09:00", NewService(db).GetAvailableSlots(date));
     }
@@ -211,7 +214,7 @@ public class BookingServiceTests
             .CreateBooking(NewBooking(date, "09:00", "jane@example.com"));
 
         Assert.Null(created);
-        Assert.Contains("just filled up", error);
+        Assert.Contains("just been taken", error);
     }
 
     [Fact]

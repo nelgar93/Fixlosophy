@@ -45,7 +45,7 @@ falls back to those bucket URLs and looks the same.
 ## What it stands in for
 
 The business rules are ports of the real ones, so what the demo refuses the real site
-refuses too: slot times derived from `SiteContent`'s trading hours, two bookings per
+refuses too: slot times derived from `SiteContent`'s trading hours, one booking per
 slot, three active bookings per email address, a two-hour cutoff on cancelling your own
 booking, and the staff permission matrix (`CanViewAllBookings`, `CanManageBookings`,
 `CanViewCustomerDetails`) gating what each dashboard shows.

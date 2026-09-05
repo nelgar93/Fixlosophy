@@ -1,12 +1,22 @@
 using System.Globalization;
 using Fixlosophy.Data;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Fixlosophy.Services;
 
 public class BookingService(AppDbContext db, IStorageService storage, ILogger<BookingService> logger)
 {
-    public const int MaxPerSlot = 2;
+    // One booking per slot: one bike, one customer, one mechanic. The shop currently
+    // runs one mechanic a day, so an hour-long slot is exactly one job — and hourly
+    // slots leave room for the walk-in fixes that never get booked.
+    //
+    // This is deliberately the capacity the database can enforce on its own: a unique
+    // index over (SlotDate, SlotTime) makes overbooking impossible, which no
+    // count-then-insert check can promise. Raising this above 1 gives that up, because
+    // a unique index cannot express "at most N" — that needs a seats table, one row per
+    // (date, time, seat), so a unique constraint keeps doing the enforcing.
+    public const int MaxPerSlot = 1;
     public const int MaxActiveBookingsPerEmail = 3;
 
     // Slots are derived from the trading hours in SiteContent rather than typed out,
@@ -131,12 +141,10 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         var normEmail = booking.CustomerEmail.ToLowerInvariant();
         var today = ShopClock.Today;
 
-        var slotTaken = db.Bookings.Count(b =>
-            b.SlotDate == booking.SlotDate && b.SlotTime == booking.SlotTime &&
-            b.Status != BookingStatus.Cancelled);
-        if (slotTaken >= MaxPerSlot)
-            return (null, "Sorry, this time slot has just filled up. Please pick another time.");
-
+        // Their own duplicate is checked before capacity: at one booking per slot the
+        // two conditions coincide, and "you already have a booking at this time" is the
+        // more useful of the two answers when the clash is with themselves.
+        //
         // ToLower() below is translated to SQL lower(...) by EF Core — the analyzer's
         // suggested StringComparison overload isn't SQL-translatable and would throw.
 #pragma warning disable CA1304, CA1311, CA1862
@@ -146,6 +154,12 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
             b.Status != BookingStatus.Cancelled);
         if (hasDuplicate)
             return (null, "You already have a booking at this time.");
+
+        var slotTaken = db.Bookings.Count(b =>
+            b.SlotDate == booking.SlotDate && b.SlotTime == booking.SlotTime &&
+            b.Status != BookingStatus.Cancelled);
+        if (slotTaken >= MaxPerSlot)
+            return (null, "Sorry, this time slot has just been taken. Please pick another time.");
 
         var upcoming = db.Bookings.Count(b =>
             b.CustomerEmail.ToLower() == normEmail &&
@@ -163,12 +177,16 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         {
             db.SaveChanges();
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex)
         {
-            // Lost a race against IX_Bookings_NoDuplicateSlot; detach so the
-            // circuit-scoped context stays usable.
+            // Lost a race against one of the slot indexes; detach so the circuit-scoped
+            // context stays usable. Which index caught it decides what to say: their own
+            // second booking at that time, or somebody else reaching the slot first.
             db.Entry(booking).State = EntityState.Detached;
-            return (null, "You already have a booking at this time.");
+            var constraint = (ex.InnerException as PostgresException)?.ConstraintName;
+            return (null, constraint == "IX_Bookings_OneBookingPerSlot"
+                ? "Sorry, this time slot has just been taken. Please pick another time."
+                : "You already have a booking at this time.");
         }
         return (booking, null);
     }

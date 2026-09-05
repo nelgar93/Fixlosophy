@@ -781,6 +781,38 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
             "Could not create IX_Bookings_NoDuplicateSlot — existing data may contain duplicate bookings.");
     }
 
+    // Capacity, enforced where it can't be raced: one active booking per slot. The
+    // count-then-insert check in CreateBooking is read-committed, so two customers
+    // confirming the same empty slot at once both read zero and both succeed — their
+    // emails differ, so the duplicate index above never fires. This one does.
+    //
+    // Only correct while MaxPerSlot is 1; a unique index cannot express "at most N".
+    // Same separate-try treatment as above, so a slot that already holds two bookings
+    // degrades to a startup warning naming the clashes rather than blocking boot.
+    try
+    {
+        db.Database.ExecuteSqlRaw(@"
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Bookings_OneBookingPerSlot""
+            ON ""Bookings"" (""SlotDate"", ""SlotTime"")
+            WHERE ""Status"" <> 4;");
+    }
+    catch (Exception ex)
+    {
+        var clashes = db.Bookings
+            .Where(b => b.Status != BookingStatus.Cancelled)
+            .GroupBy(b => new { b.SlotDate, b.SlotTime })
+            .Where(g => g.Count() > 1)
+            .Select(g => new { g.Key.SlotDate, g.Key.SlotTime, Count = g.Count() })
+            .ToList();
+
+        logger.LogWarning(ex,
+            "Could not create IX_Bookings_OneBookingPerSlot — {Count} slot(s) already hold more " +
+            "than one active booking, so overbooking is not yet enforced by the database. " +
+            "Move or cancel one booking from each of: {Slots}",
+            clashes.Count,
+            string.Join(", ", clashes.Select(c => $"{c.SlotDate:yyyy-MM-dd} {c.SlotTime} ({c.Count})")));
+    }
+
     // Case-insensitive unique email indexes so differing casing can't create
     // duplicate accounts. Done separately (and after dropping any case-sensitive
     // predecessor) so pre-existing case-variant duplicates degrade to a warning

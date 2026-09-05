@@ -4908,7 +4908,10 @@ const HOURS = {
     6: { open: 9, close: 18 }
 };
 const LUNCH_START = 13;
-const MAX_PER_SLOT = 2;
+// One booking per slot: one bike, one customer, one mechanic. The real site backs this
+// with a unique index over (SlotDate, SlotTime), which is the part a browser-only build
+// can't stand in for — here the check is all there is.
+const MAX_PER_SLOT = 1;
 const MAX_ACTIVE_BOOKINGS_PER_EMAIL = 3;
 const SELF_CANCEL_CUTOFF_HOURS = 2;
 const MIN_PASSWORD_LENGTH = 8;
@@ -5277,7 +5280,7 @@ function seedBookings() {
     const activeStaff = DB.staff.filter((s) => s.isActive);
     const rows = [];
 
-    // Seeded data has to obey the same two-per-slot cap the booking wizard enforces,
+    // Seeded data has to obey the same one-per-slot cap the booking wizard enforces,
     // or the calendar shows a slot the app itself would refuse to create. Occupancy
     // is tracked across the random pass and the fixtures alike: a fixture whose
     // preferred slot is full slides to the next free one on the same day.
@@ -5788,17 +5791,19 @@ function createBooking(input) {
     const email = (input.customerEmail || '').trim().toLowerCase();
     const t = today();
 
-    const taken = DB.bookings.filter((b) =>
-        sameDay(b.slotDate, input.slotDate) && b.slotTime === input.slotTime &&
-        b.status !== STATUS.Cancelled).length;
-    if (taken >= MAX_PER_SLOT)
-        return { error: 'Sorry, this time slot has just filled up. Please pick another time.' };
-
+    // Their own duplicate first: at one booking per slot the two conditions coincide,
+    // and this is the more useful of the two answers when the clash is with themselves.
     const duplicate = DB.bookings.some((b) =>
         b.customerEmail.toLowerCase() === email &&
         sameDay(b.slotDate, input.slotDate) && b.slotTime === input.slotTime &&
         b.status !== STATUS.Cancelled);
     if (duplicate) return { error: 'You already have a booking at this time.' };
+
+    const taken = DB.bookings.filter((b) =>
+        sameDay(b.slotDate, input.slotDate) && b.slotTime === input.slotTime &&
+        b.status !== STATUS.Cancelled).length;
+    if (taken >= MAX_PER_SLOT)
+        return { error: 'Sorry, this time slot has just been taken. Please pick another time.' };
 
     const upcoming = DB.bookings.filter((b) =>
         b.customerEmail.toLowerCase() === email &&
