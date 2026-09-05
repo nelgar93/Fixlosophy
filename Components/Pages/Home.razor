@@ -10,7 +10,7 @@
 <section class="hero">
     <img class="hero-photo" src="@Images.Url("shop/hero-bikes-outside.jpg")" alt=""
          width="1920" height="1440" fetchpriority="high" decoding="async"
-         onerror="this.style.display='none'" />
+         data-hide-on-error />
     <div class="hero-scrim"></div>
     <div class="hero-overlay"></div>
     <div class="container hero-content">
@@ -161,17 +161,17 @@
             <figure class="gallery-item">
                 <img src="@Images.Url("shop/logo-window.jpg")" alt="The Fixlosophy logo painted on the shop window"
                      width="1200" height="900" loading="lazy" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
+                     data-hide-on-error="figure" />
             </figure>
             <figure class="gallery-item">
                 <img src="@Images.Url("shop/new-bikes.jpg")" alt="A row of new bikes lined up outside the shop"
                      width="1200" height="900" loading="lazy" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
+                     data-hide-on-error="figure" />
             </figure>
             <figure class="gallery-item">
                 <img src="@Images.Url("shop/window-art.jpg")" alt="Bicycles hand-painted across the shop window"
                      width="1200" height="900" loading="lazy" decoding="async"
-                     onerror="this.closest('figure').style.display='none'" />
+                     data-hide-on-error="figure" />
             </figure>
         </div>
         <div class="section-cta">

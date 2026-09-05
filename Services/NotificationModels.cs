@@ -16,6 +16,11 @@ public enum NotificationType
     NewBooking        = 0,
     BookingCancelled  = 1,
     NewEnquiry        = 2,
+
+    /// A slot has come and gone with the bike not booked in. Raised by
+    /// MaintenanceJobs, not by anything a person did — see FlagLateArrivalsAsync.
+    LateArrival       = 3,
+
     LowStock          = 10,
     OutOfStock        = 11,
 }

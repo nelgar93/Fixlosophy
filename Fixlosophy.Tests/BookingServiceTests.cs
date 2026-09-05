@@ -22,7 +22,7 @@ public class BookingServiceTests
     }
 
     private static BookingService NewService(AppDbContext db) =>
-        new(db, new FakeStorageService(), NullLogger<BookingService>.Instance);
+        TestFactory.NewBookingService(db);
 
     private static AppDbContext NewDb() =>
         new(new DbContextOptionsBuilder<AppDbContext>()

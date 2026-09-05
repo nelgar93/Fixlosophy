@@ -40,6 +40,10 @@ public class StorageService(IHttpClientFactory httpFactory, IConfiguration confi
 
     // Shared by Book.razor (fast per-file feedback at selection time) and
     // UploadCustomerPhotoAsync (defense in depth) so the rules only live in one place.
+    //
+    // This checks only what's knowable before the bytes arrive: the type the browser
+    // claims, and the size. The bytes themselves are checked by SniffImageType at
+    // upload time — see UploadCustomerPhotoAsync.
     public string? ValidatePhoto(string contentType, long size)
     {
         if (!AllowedImageTypes.ContainsKey(contentType))
@@ -49,6 +53,71 @@ public class StorageService(IHttpClientFactory httpFactory, IConfiguration confi
         return null;
     }
 
+    /// <summary>
+    /// The content type the file's own leading bytes say it is, or null if they don't
+    /// match any format we accept.
+    /// </summary>
+    /// <remarks>
+    /// <para>The browser-declared content type is attacker-controlled — it's whatever
+    /// the multipart part says. Taking it on trust meant a file declared
+    /// <c>image/jpeg</c> could hold anything, and would later be handed to staff
+    /// through a signed URL <em>labelled</em> as a JPEG, because the declared type is
+    /// also what gets stored as the object's Content-Type.</para>
+    ///
+    /// <para>So the sniffed type wins over the declared one everywhere: it decides
+    /// whether the upload is allowed at all, the extension on the stored object, and
+    /// the Content-Type sent to Supabase. A genuine photo whose browser mislabelled it
+    /// — iOS is inconsistent about HEIC — therefore uploads correctly rather than being
+    /// rejected, which the old check couldn't manage either.</para>
+    ///
+    /// <para>Magic numbers only, deliberately. This is not a decoder and is not trying
+    /// to prove the file is a <em>valid</em> image; it's establishing that the bytes
+    /// agree with the label, which is the property that was missing.</para>
+    /// </remarks>
+    public static string? SniffImageType(ReadOnlySpan<byte> content)
+    {
+        // JPEG: SOI marker, then the start of any segment.
+        if (content.Length >= 3 && content[0] == 0xFF && content[1] == 0xD8 && content[2] == 0xFF)
+            return "image/jpeg";
+
+        // PNG: the 8-byte signature, including the CRLF/EOF bytes that catch
+        // transfers which mangled line endings.
+        if (StartsWith(content, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
+            return "image/png";
+
+        // WEBP: a RIFF container whose form type is WEBP. Bytes 4-7 are the chunk
+        // length and vary, so the two markers are checked at their own offsets.
+        if (content.Length >= 12 &&
+            StartsWith(content, "RIFF"u8) &&
+            content[8..12].SequenceEqual("WEBP"u8))
+            return "image/webp";
+
+        // HEIC: an ISO base-media file whose major brand is one of the HEIF ones.
+        // Bytes 0-3 are the box size, so "ftyp" sits at offset 4 and the brand at 8.
+        if (content.Length >= 12 && content[4..8].SequenceEqual("ftyp"u8))
+        {
+            var brand = content[8..12];
+            foreach (var known in HeifBrands)
+                if (brand.SequenceEqual(known))
+                    return "image/heic";
+        }
+
+        return null;
+    }
+
+    // Major brands that mean "HEIF image" in practice. mif1/msf1 are the generic
+    // still-image brands iOS also emits; heic/heix/hevc/hevx are the codec-specific
+    // ones. Anything else with an ftyp box is some other ISO-BMFF file — an MP4, say —
+    // and must not be accepted as a photo.
+    private static readonly byte[][] HeifBrands =
+    [
+        "heic"u8.ToArray(), "heix"u8.ToArray(), "hevc"u8.ToArray(), "hevx"u8.ToArray(),
+        "mif1"u8.ToArray(), "msf1"u8.ToArray(), "heim"u8.ToArray(), "heis"u8.ToArray(),
+    ];
+
+    private static bool StartsWith(ReadOnlySpan<byte> content, ReadOnlySpan<byte> prefix) =>
+        content.Length >= prefix.Length && content[..prefix.Length].SequenceEqual(prefix);
+
     // Uploads into the private Fixlosophy_Customers_Uploads folder, under the
     // booking's own id. The filename is never trusted for the storage path — a
     // fresh guid plus an extension derived from the allowlisted content-type is
@@ -56,11 +125,26 @@ public class StorageService(IHttpClientFactory httpFactory, IConfiguration confi
     public async Task<(string? path, string? error)> UploadCustomerPhotoAsync(
         string bookingId, string contentType, byte[] content)
     {
-        var validationError = ValidatePhoto(contentType, content.LongLength);
-        if (validationError is not null)
-            return (null, validationError);
+        if (content.LongLength > MaxFileSizeBytes)
+            return (null, "Each photo must be 8 MB or smaller.");
 
-        var ext  = AllowedImageTypes[contentType];
+        // The file's own bytes decide, not the type the browser claimed. Everything
+        // downstream — the extension, and the Content-Type Supabase will serve it
+        // back with — is derived from this rather than from the declared value.
+        var actualType = SniffImageType(content);
+        if (actualType is null)
+            return (null, "That file doesn't look like a JPEG, PNG, WEBP or HEIC photo.");
+
+        // Not an error — browsers get this wrong honestly, iOS especially, and the
+        // sniffed type has already been used in preference. Logged because a sudden
+        // run of mismatches is the first sign of either a browser quirk worth knowing
+        // about or somebody probing the upload.
+        if (actualType != contentType && logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation(
+                "Upload for booking {BookingId} declared {Declared}; its bytes are {Actual}, which is what was used.",
+                bookingId, contentType, actualType);
+
+        var ext  = AllowedImageTypes[actualType];
         var path = $"{CustomerUploadsFolder}/{bookingId}/{Guid.NewGuid()}.{ext}";
 
         try
@@ -70,7 +154,7 @@ public class StorageService(IHttpClientFactory httpFactory, IConfiguration confi
             {
                 Content = new ByteArrayContent(content)
             };
-            request.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue(actualType);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ServiceRoleKey);
             request.Headers.Add("apikey", ServiceRoleKey);
 

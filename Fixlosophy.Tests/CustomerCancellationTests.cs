@@ -26,7 +26,7 @@ public class CustomerCancellationTests
             .Options);
 
     private static BookingService NewService(AppDbContext db) =>
-        new(db, new FakeStorageService(), NullLogger<BookingService>.Instance);
+        TestFactory.NewBookingService(db);
 
     // Far enough ahead to clear the cutoff, and never a Sunday (shorter slot list).
     private static DateTime FutureWeekday(int daysAhead = 7)

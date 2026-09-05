@@ -1,0 +1,47 @@
+[Unit]
+Description=Fixlosophy booking site
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+# Requires Microsoft.Extensions.Hosting.Systemd + UseSystemd() for Type=notify to be
+# honoured. Without it, switch this to Type=simple — the deploy script polls /health
+# rather than trusting systemd's readiness signal either way.
+WorkingDirectory=/srv/fixlosophy
+ExecStart=/usr/bin/dotnet /srv/fixlosophy/Fixlosophy.dll
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+# Long enough for ErrorLogWriter to flush its last batch and the circuits to close.
+TimeoutStopSec=30
+
+User=fixlosophy
+Group=fixlosophy
+
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PrintTelemetryMessage=false
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+
+# Secrets and host-specific settings. Keep them here rather than in
+# appsettings.Local.json: root-owned, 0600, and never anywhere near the repo.
+# See fixlosophy.env.example for the full list.
+EnvironmentFile=/etc/fixlosophy/app.env
+
+# ── Hardening ────────────────────────────────────────────────────────────────
+# The app writes to exactly one place — the Data Protection key ring. Everything
+# else being read-only means a compromise cannot rewrite the binaries it runs from.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/fixlosophy
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

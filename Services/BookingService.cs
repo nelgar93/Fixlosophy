@@ -5,8 +5,25 @@ using Npgsql;
 
 namespace Fixlosophy.Services;
 
-public class BookingService(AppDbContext db, IStorageService storage, ILogger<BookingService> logger)
+public class BookingService(
+    AppDbContext db, IStorageService storage, AvailabilityService availability,
+    ILogger<BookingService> logger)
 {
+    /// <summary>
+    /// How far ahead a booking may be made.
+    /// </summary>
+    /// <remarks>
+    /// The calendar used to page forward indefinitely, which meant "fill the whole
+    /// calendar" had no end to it — a script could take every slot from here to the
+    /// heat death of the universe. A horizon bounds the damage any abuse can do, and
+    /// it also stops a customer booking a service for a date the shop hasn't decided
+    /// its holidays for yet.
+    /// </remarks>
+    public static readonly TimeSpan BookingHorizon = TimeSpan.FromDays(60);
+
+    /// The last date a booking may be made for.
+    public static DateTime LatestBookableDate => ShopClock.Today.Add(BookingHorizon);
+
     // One booking per slot: one bike, one customer, one mechanic. The shop currently
     // runs one mechanic a day, so an hour-long slot is exactly one job — and hourly
     // slots leave room for the walk-in fixes that never get booked.
@@ -108,7 +125,12 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
 
     public List<string> GetAvailableSlots(DateTime date)
     {
-        if (date.Date < ShopClock.Today)
+        if (date.Date < ShopClock.Today || date.Date > LatestBookableDate)
+            return [];
+
+        // Shut for the day — a closure, or nobody in the workshop. Either way there is
+        // nothing to offer, whatever the booking table says.
+        if (availability.StateOf(date) != DayState.Open)
             return [];
 
         var start = date.Date;
@@ -120,8 +142,12 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
             .Select(g => new { Slot = g.Key, Count = g.Count() })
             .ToDictionary(x => x.Slot, x => x.Count);
 
+        // A part-day closure takes some slots without shutting the day.
+        var blocked = availability.BlockedSlotsOn(date);
+
         return SlotsFor(date).Where(slot =>
         {
+            if (blocked.Contains(slot)) return false;
             if (date.Date == ShopClock.Today && TimeOnly.TryParse(slot, out var t) && t <= TimeOnly.FromDateTime(ShopClock.Now))
                 return false;
             return !booked.TryGetValue(slot, out var count) || count < MaxPerSlot;
@@ -130,8 +156,22 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
 
     public bool IsDateAvailable(DateTime date)
     {
-        if (date.Date < ShopClock.Today) return false;
+        if (date.Date < ShopClock.Today || date.Date > LatestBookableDate) return false;
         return GetAvailableSlots(date).Count > 0;
+    }
+
+    /// <summary>
+    /// The full picture for one day: why it is or isn't bookable, and whether anything
+    /// is left. What the calendar renders from.
+    /// </summary>
+    public DayAvailability DescribeDay(DateTime date)
+    {
+        if (date.Date > LatestBookableDate)
+            return new DayAvailability(DayState.NotTrading, null, false);
+
+        var state = availability.StateOf(date);
+        var reason = state == DayState.Closed ? availability.AllDayClosureOn(date)?.Reason : null;
+        return new DayAvailability(state, reason, state == DayState.Open && GetAvailableSlots(date).Count > 0);
     }
 
     /// <summary>
@@ -162,6 +202,30 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         booking.CustomerEmail = booking.CustomerEmail.Trim();
         booking.CustomerPhone = booking.CustomerPhone.Trim();
         var normEmail = booking.CustomerEmail.ToLowerInvariant();
+
+        // Checked server-side as well as hidden from the calendar: the slot list is a
+        // UI convenience, and this is a public POST target. A closure added while
+        // somebody had the wizard open lands here too.
+        if (booking.SlotDate.Date > LatestBookableDate)
+            return (null, $"We're only taking bookings up to {LatestBookableDate:d MMMM}. Please pick an earlier date.");
+
+        switch (availability.StateOf(booking.SlotDate))
+        {
+            case DayState.Past:
+                return (null, "That date has already passed. Please pick another.");
+            case DayState.NotTrading:
+                return (null, "We're not open that day. Please pick another.");
+            case DayState.Closed:
+                var reason = availability.AllDayClosureOn(booking.SlotDate)?.Reason;
+                return (null, string.IsNullOrWhiteSpace(reason)
+                    ? "We're closed that day. Please pick another."
+                    : $"We're closed that day ({reason}). Please pick another.");
+            case DayState.NoMechanic:
+                return (null, "We've no mechanic in that day. Please pick another.");
+        }
+
+        if (availability.BlockedSlotsOn(booking.SlotDate).Contains(booking.SlotTime))
+            return (null, "We're closed at that time. Please pick another slot.");
 
         // Their own duplicate is checked before capacity: at one booking per slot the
         // two conditions coincide, and "you already have a booking at this time" is the
@@ -483,14 +547,23 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
         return (booking, null);
     }
 
-    // Single DB query: returns true/false availability for every day in the given month.
-    // A day is available when it has at least one open slot (not at MaxPerSlot capacity).
-    public Dictionary<DateTime, bool> GetDateAvailabilityForMonth(int year, int month)
+    // Batched: availability for every day in the given month in a handful of queries
+    // rather than a handful per day. A day is available when it's open (trading, not
+    // closed, a mechanic in) and has at least one slot left.
+    public Dictionary<DateTime, bool> GetDateAvailabilityForMonth(int year, int month) =>
+        DescribeMonth(year, month).ToDictionary(kv => kv.Key, kv => kv.Value.IsBookable);
+
+    /// <summary>
+    /// Every day in a month with the reason behind its state, so the calendar can say
+    /// "Closed — Christmas" rather than greying a day out silently.
+    /// </summary>
+    public Dictionary<DateTime, DayAvailability> DescribeMonth(int year, int month)
     {
         var start = new DateTime(year, month, 1);
         var end = start.AddMonths(1);
         var today = ShopClock.Today;
         var now = ShopClock.Now;
+        var horizon = LatestBookableDate;
 
         // One round-trip: booked count per (date, slot) for the whole month
         var bookedPerSlot = db.Bookings
@@ -505,18 +578,39 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
                 g => g.Key,
                 g => g.Where(x => x.Count >= MaxPerSlot).Select(x => x.SlotTime).ToHashSet());
 
-        var result = new Dictionary<DateTime, bool>();
+        // Three more queries for the whole month, not three per day.
+        var states = availability.StatesForMonth(year, month);
+
+        var result = new Dictionary<DateTime, DayAvailability>();
         for (var d = start; d < end; d = d.AddDays(1))
         {
-            if (d.Date < today) { result[d] = false; continue; }
+            var (state, reason, blocked) = states[d];
+
+            // Past the horizon reads as "not trading" rather than "closed": the shop
+            // isn't shut, it just isn't taking bookings that far out yet.
+            if (state == DayState.Open && d.Date > horizon)
+            {
+                result[d] = new DayAvailability(DayState.NotTrading, null, false);
+                continue;
+            }
+
+            if (state != DayState.Open)
+            {
+                result[d] = new DayAvailability(state, reason, false);
+                continue;
+            }
 
             var full = fullSlotsByDate.TryGetValue(d, out var set) ? set : [];
-            result[d] = SlotsFor(d).Any(slot =>
+            var day = d;
+            var hasFree = SlotsFor(d).Any(slot =>
             {
-                if (d == today && TimeOnly.TryParse(slot, out var t) && t <= TimeOnly.FromDateTime(now))
+                if (blocked.Contains(slot)) return false;
+                if (day == today && TimeOnly.TryParse(slot, out var t) && t <= TimeOnly.FromDateTime(now))
                     return false;
                 return !full.Contains(slot);
             });
+
+            result[d] = new DayAvailability(DayState.Open, null, hasFree);
         }
         return result;
     }
@@ -537,6 +631,64 @@ public class BookingService(AppDbContext db, IStorageService storage, ILogger<Bo
           .OrderByDescending(b => b.SlotDate)
           .ThenByDescending(b => b.SlotTime)
           .ToList();
+
+    /// <summary>
+    /// Moves a booking to a different date and slot, keeping its reference and history.
+    /// </summary>
+    /// <remarks>
+    /// <para>The alternative — cancel and rebook — loses the reference the customer
+    /// has in their confirmation email, and drops the notes and photos attached to the
+    /// job. When a closure displaces someone, moving them is what you actually want.</para>
+    ///
+    /// <para>Goes through the same availability checks a new booking does, and the same
+    /// unique index catches a race for the target slot. Clears
+    /// <c>ReminderSentAt</c>: the reminder that already went out named the old date, so
+    /// the customer is owed a fresh one.</para>
+    /// </remarks>
+    public (Booking? booking, string? error) RescheduleBooking(string bookingId, DateTime newDate, string newSlot)
+    {
+        var booking = db.Bookings.Find(bookingId);
+        if (booking is null) return (null, "That booking no longer exists.");
+
+        if (booking.Status is BookingStatus.Cancelled or BookingStatus.Completed)
+            return (null, "That booking is already closed — it can't be moved.");
+
+        if (booking.SlotDate.Date == newDate.Date && booking.SlotTime == newSlot)
+            return (booking, null);   // nothing to do
+
+        if (newDate.Date < ShopClock.Today)
+            return (null, "That date has already passed.");
+        if (newDate.Date > LatestBookableDate)
+            return (null, $"We're only booking up to {LatestBookableDate:d MMMM}.");
+        if (availability.StateOf(newDate) != DayState.Open)
+            return (null, "We're not open that day.");
+        if (!SlotsFor(newDate).Contains(newSlot))
+            return (null, "That isn't one of the day's slots.");
+        if (availability.BlockedSlotsOn(newDate).Contains(newSlot))
+            return (null, "We're closed at that time.");
+
+        var taken = db.Bookings.Any(b =>
+            b.Id != bookingId && b.SlotDate == newDate.Date && b.SlotTime == newSlot &&
+            b.Status != BookingStatus.Cancelled);
+        if (taken) return (null, "Something else is already booked into that slot.");
+
+        booking.SlotDate       = newDate.Date;
+        booking.SlotTime       = newSlot;
+        booking.ReminderSentAt = null;
+
+        try
+        {
+            db.SaveChanges();
+        }
+        catch (DbUpdateException)
+        {
+            // Lost a race for the slot against a customer booking it at the same moment.
+            db.Entry(booking).State = EntityState.Detached;
+            return (null, "Something else was just booked into that slot. Please pick another.");
+        }
+
+        return (booking, null);
+    }
 
     public bool AssignStaff(string bookingId, string? staffId)
     {

@@ -16,6 +16,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationRead> NotificationReads => Set<NotificationRead>();
     public DbSet<CustomerNote> CustomerNotes => Set<CustomerNote>();
+    public DbSet<ErrorLogEntry> ErrorLog => Set<ErrorLogEntry>();
+    public DbSet<Closure> Closures => Set<Closure>();
+    public DbSet<StaffAbsence> StaffAbsences => Set<StaffAbsence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -136,6 +139,45 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Id).HasMaxLength(36).ValueGeneratedNever();
             // Newest first is the only order the admin list ever wants.
             e.HasIndex(x => x.CreatedAt);
+        });
+
+        modelBuilder.Entity<Closure>(c =>
+        {
+            c.HasKey(x => x.Id);
+            c.Property(x => x.Id).HasMaxLength(36).ValueGeneratedNever();
+            c.Property(x => x.CreatedByStaffId).HasMaxLength(36);
+            c.Property(x => x.StartTime).HasMaxLength(5);
+            c.Property(x => x.EndTime).HasMaxLength(5);
+            // Every availability query is "closures overlapping this range".
+            c.HasIndex(x => new { x.StartDate, x.EndDate });
+            c.Ignore(x => x.IsAllDay);
+        });
+
+        modelBuilder.Entity<StaffAbsence>(a =>
+        {
+            a.HasKey(x => x.Id);
+            a.Property(x => x.Id).HasMaxLength(36).ValueGeneratedNever();
+            a.Property(x => x.StaffId).HasMaxLength(36);
+            a.HasIndex(x => new { x.StartDate, x.EndDate });
+
+            // Cascade: an absence is a fact about a person, and means nothing once
+            // they're gone — unlike a CustomerNote, which is the shop's own record.
+            a.HasOne(x => x.Staff)
+             .WithMany(s => s.Absences)
+             .HasForeignKey(x => x.StaffId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ErrorLogEntry>(el =>
+        {
+            el.HasKey(x => x.Id);
+            el.Property(x => x.Id).HasMaxLength(36).ValueGeneratedNever();
+            el.Property(x => x.Fingerprint).HasMaxLength(32);
+            // Unique: the fingerprint *is* the identity of a group, and the writer
+            // looks a row up by it on every batch.
+            el.HasIndex(x => x.Fingerprint).IsUnique();
+            // "What's broken now" is the only question this table gets asked.
+            el.HasIndex(x => x.LastSeen);
         });
 
         modelBuilder.Entity<PriceAdjustment>(pa =>

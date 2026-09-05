@@ -10,25 +10,8 @@ namespace Fixlosophy.Tests;
 // matter now: the enquiry is stored, and a mail failure doesn't lose it.
 public class EnquiryServiceTests
 {
-    private sealed class RecordingEmailSender : IEmailSender
-    {
-        public bool ThrowOnSend { get; init; }
-        public List<Enquiry> Sent { get; } = [];
-
-        public Task SendContactEnquiryAsync(Enquiry enquiry)
-        {
-            if (ThrowOnSend) throw new InvalidOperationException("SMTP is down");
-            Sent.Add(enquiry);
-            return Task.CompletedTask;
-        }
-
-        public Task SendVerificationEmailAsync(string toEmail, string toName, string link) => Task.CompletedTask;
-        public Task SendPasswordResetEmailAsync(string toEmail, string toName, string link) => Task.CompletedTask;
-        public Task SendBookingConfirmationAsync(Booking booking, string manageLink) => Task.CompletedTask;
-        public Task SendBookingNotificationAsync(Booking booking, bool isCancellation) => Task.CompletedTask;
-        public Task SendBookingStatusChangedAsync(Booking booking, bool isCancellation) => Task.CompletedTask;
-        public Task SendAccountClaimAsync(string toEmail, string toName, string claimLink) => Task.CompletedTask;
-    }
+    // The double lives in RecordingEmailSender.cs — it's shared with the other suites
+    // that need one, so a new IEmailSender method is one edit rather than several.
 
     private static AppDbContext NewDb() =>
         new(new DbContextOptionsBuilder<AppDbContext>()

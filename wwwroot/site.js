@@ -1,11 +1,11 @@
 // Small behaviours for the statically-rendered auth pages, which have no Blazor
-// circuit to handle them. Everything is delegated from document, so it works for
-// markup that arrives after load and needs no per-page wiring.
+// circuit to handle them, plus the image fallbacks used across the public pages.
+// Everything is delegated from document, so it works for markup that arrives after
+// load and needs no per-page wiring.
 //
-// Kept in a file rather than inline <script> so the page's own script is
-// self-hosted. (The CSP still needs 'unsafe-inline' for now — Blazor renders its
-// <script type="importmap"> inline, and an importmap cannot be nonce-exempted
-// without framework support. See the CSP note in Program.cs.)
+// This file is where any inline handler has to end up: script-src carries no
+// 'unsafe-inline', so an onclick="" or onerror="" attribute is silently dead. See
+// the CSP note in Program.cs.
 (function () {
     'use strict';
 
@@ -243,4 +243,55 @@
             setTimeout(tick, 1000);
         })();
     });
+
+    // ── Images that get out of the way when they fail ────────────────────────
+    // Site photography lives in a Supabase bucket, so any given photo can 404 while
+    // the rest of the page is fine. Rather than leave a broken-image icon in a
+    // gallery grid, the image (or the figure around it) removes itself.
+    //
+    // This was eight inline onerror="" attributes until the CSP dropped
+    // 'unsafe-inline' from script-src — inline handlers are exactly what that
+    // forbids, and unlike a <script> block they can't carry a nonce. Same behaviour,
+    // one place.
+    //
+    // Markup:
+    //   data-hide-on-error            hide the image itself
+    //   data-hide-on-error="figure"   hide the nearest matching ancestor instead
+    //   data-reveal-next-on-error     also un-hide the next sibling (the logo's
+    //                                 text fallback)
+    function hideFailedImage(img) {
+        if (!img || !img.hasAttribute('data-hide-on-error')) return;
+
+        var selector = img.getAttribute('data-hide-on-error');
+        var target = selector ? img.closest(selector) : img;
+        if (target) target.style.display = 'none';
+
+        if (img.hasAttribute('data-reveal-next-on-error') && img.nextElementSibling) {
+            img.nextElementSibling.style.display = 'inline';
+        }
+    }
+
+    // 'error' doesn't bubble, so this has to listen in the capture phase. Delegating
+    // from document is what makes it work for images Blazor renders later.
+    document.addEventListener('error', function (e) {
+        if (e.target && e.target.tagName === 'IMG') hideFailedImage(e.target);
+    }, true);
+
+    // The listener above is attached when this file runs, at the end of <body> —
+    // images higher up the page load in parallel with parsing and can fail before
+    // then, and that error is gone for good. An image that has finished loading with
+    // no intrinsic width is one that failed, so sweeping catches those. Cheap enough
+    // to repeat once everything has settled.
+    function sweepFailedImages() {
+        document.querySelectorAll('img[data-hide-on-error]').forEach(function (img) {
+            if (img.complete && img.naturalWidth === 0) hideFailedImage(img);
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', sweepFailedImages);
+    } else {
+        sweepFailedImages();
+    }
+    window.addEventListener('load', sweepFailedImages);
 })();

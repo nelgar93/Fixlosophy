@@ -7,6 +7,7 @@ using Fixlosophy.Data;
 using Fixlosophy.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -57,6 +58,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 builder.Services.AddHttpClient();
+builder.Services.AddScoped<AvailabilityService>();
 builder.Services.AddScoped<BookingService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<InflationService>();
@@ -68,6 +70,18 @@ builder.Services.AddScoped<EnquiryService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<CustomerService>();
 builder.Services.AddScoped<CustomerImportService>();
+// Error capture. The queue is the hand-off point between a request thread and the
+// single writer; the provider turns every Error/Critical log record in the app — ours
+// and the framework's — into a row without any call site knowing about it.
+builder.Services.AddSingleton<ErrorLogBuffer>();
+builder.Services.AddSingleton<ILoggerProvider>(sp =>
+    new DatabaseLoggerProvider(sp.GetRequiredService<ErrorLogBuffer>()));
+builder.Services.AddHostedService<ErrorLogWriter>();
+
+builder.Services.AddScoped<MaintenanceJobs>();
+// The timer that drives MaintenanceJobs. Hosted services start after the schema
+// bootstrap below has finished, so its first tick always sees a seeded database.
+builder.Services.AddHostedService<MaintenanceService>();
 // Singleton: the in-process fan-out that lets an open dashboard hear about a new
 // notification without polling. See NotificationHub for why a plain event suffices.
 builder.Services.AddSingleton<NotificationHub>();
@@ -107,6 +121,14 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
+// Liveness for the deploy script and the uptime monitor. AddDbContextCheck opens a
+// connection and runs a trivial query, which is the point: the failure worth catching
+// is Supabase going away — a pooler hiccup, a connection-limit ceiling, a paused
+// project — while this process stays perfectly healthy. systemd would still say
+// "running", and only a check that touches the database says "not serving".
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database");
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
@@ -131,6 +153,51 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
+
+// The Data Protection keyring encrypts the auth cookie above and every antiforgery
+// token. Left at its default it is generated in memory and thrown away on shutdown,
+// which means every restart signs out every customer and staff member, and any form
+// already open in a browser fails its next POST with a bare 400. On a host that
+// restarts to deploy, that is not an edge case — it's every release.
+//
+// SetApplicationName pins the key derivation's discriminator, which otherwise comes
+// from the content root path: move or rename the deployment directory and, without
+// this, every previously issued cookie stops decrypting.
+//
+// Keys are protected by filesystem permissions rather than a certificate — the app
+// runs as its own user on a single VPS, so `chmod 700` on the directory is the
+// boundary. Encrypting them at rest would need a cert whose private key lives in the
+// same place, which moves the problem rather than solving it.
+var keyPath = builder.Configuration["DataProtection:KeyPath"];
+if (!string.IsNullOrWhiteSpace(keyPath))
+{
+    // Fail at startup rather than on the first key write, which would otherwise
+    // surface mid-request as a 500 on somebody's login.
+    Directory.CreateDirectory(keyPath);
+    var probe = Path.Combine(keyPath, ".write-probe");
+    File.WriteAllText(probe, "");
+    File.Delete(probe);
+
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(keyPath))
+        .SetApplicationName("Fixlosophy");
+}
+else if (!builder.Environment.IsDevelopment())
+{
+    // Same stance as AllowedHosts and SeedAdmin:Password below: an ephemeral keyring
+    // is invisible until it logs everyone out, so refuse to start rather than run in
+    // a state that looks fine and isn't.
+    throw new InvalidOperationException(
+        "DataProtection:KeyPath is not configured. Point it at a directory on durable " +
+        "storage (e.g. \"/var/lib/fixlosophy/keys\") via the DataProtection__KeyPath " +
+        "environment variable — without it every restart signs out every user.");
+}
+else
+{
+    // Development only: the in-memory default is fine, and writing a keyring into a
+    // developer's working tree is worse than being signed out by a rebuild.
+    builder.Services.AddDataProtection().SetApplicationName("Fixlosophy");
+}
 
 // The configuration sources are set up at the top of this file, so
 // appsettings.Local.json's Smtp:Host (if any) is already visible here. Singleton is
@@ -161,35 +228,36 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var db        = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var config    = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-    var inflation = scope.ServiceProvider.GetRequiredService<InflationService>();
-    EnsureSchema(db, app.Logger);
-    SeedServicePricings(db);
-    // Development only. These are five invented customers with invented emails and
-    // phone numbers; seeding them outside dev drops fake bookings straight into the
-    // live dashboard on first deploy, indistinguishable from real ones.
-    if (app.Environment.IsDevelopment())
-        SeedDemoData(db);
-    SeedDefaultAdmin(db, config, app.Logger, app.Environment.IsDevelopment());
-    await ApplyAnnualPriceIncreaseAsync(db, config, inflation);
+    var db     = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
-    // Housekeeping: drop notifications past their retention window so the table can't
-    // grow forever. Best-effort — a failure here must not stop the app starting.
-    var startupLogger = app.Logger;
-    try
+    // Schema creation and seeding run under a Postgres advisory lock, so two
+    // processes reaching this point together can't race. That happens whenever a
+    // deploy starts the new instance before stopping the old one, and it would put
+    // two writers through CREATE TABLE, ALTER TABLE, CREATE INDEX and the seeders at
+    // once — where the loser doesn't get a clean "already exists", it gets a
+    // duplicate-key or a deadlock, mid-startup.
+    //
+    // Everything inside stays idempotent regardless: the lock orders the two
+    // instances, and idempotency is what makes the second one's pass a no-op.
+    //
+    // Recurring work — the annual price increase, notification retention, appointment
+    // reminders — deliberately does NOT live here any more; see MaintenanceService.
+    // Startup ran each exactly once, which is wrong for anything that needs to happen
+    // on a schedule: a server that stays up from March to May never applied the April
+    // increase. Hosted services start after this block completes, so the seeded price
+    // list is always in place before MaintenanceService's first pass reads it.
+    await WithSchemaLockAsync(db, app.Logger, () =>
     {
-        var notifications = scope.ServiceProvider.GetRequiredService<NotificationService>();
-        var purged = notifications.PurgeOlderThanRetention();
-        // IsEnabled guard is what CA1873 asks for: don't pay for the argument array
-        // when Information-level logging is switched off.
-        if (purged > 0 && startupLogger.IsEnabled(LogLevel.Information))
-            startupLogger.LogInformation("Purged {Count} notifications past the retention window.", purged);
-    }
-    catch (Exception ex)
-    {
-        startupLogger.LogWarning(ex, "Could not purge old notifications.");
-    }
+        EnsureSchema(db, app.Logger);
+        SeedServicePricings(db);
+        // Development only. These are five invented customers with invented emails and
+        // phone numbers; seeding them outside dev drops fake bookings straight into the
+        // live dashboard on first deploy, indistinguishable from real ones.
+        if (app.Environment.IsDevelopment())
+            SeedDemoData(db);
+        SeedDefaultAdmin(db, config, app.Logger, app.Environment.IsDevelopment());
+    });
 }
 
 // Must run before anything that reads the client IP or the request scheme — which
@@ -218,13 +286,26 @@ app.Use(async (context, next) =>
     // older ones that don't implement it.
     headers["X-Frame-Options"]        = "DENY";
 
-    // 'unsafe-inline' in script-src is currently required: the image fallbacks use
-    // inline onerror= attributes and the resend countdown is an inline <script>.
-    // Inline handlers can't be covered by a nonce, so tightening this means moving
-    // that code into a file first — tracked as a follow-up. Even as it stands this
-    // blocks loading script from any other origin, which is the delivery route that
-    // actually matters. Supabase is allowed for images (site photography, signed
-    // customer-upload URLs) and connect-src (storage API).
+    // script-src no longer allows 'unsafe-inline'. Getting there took three things:
+    // the image fallbacks moved from inline onerror= attributes to a delegated
+    // listener in site.js, the JSON-LD block below carries the nonce minted here, and
+    // <ImportMap /> came out of App.razor — an import map is the one inline script a
+    // nonce can't cover, so it was the piece actually forcing the exception.
+    //
+    // 'unsafe-inline' does stay in style-src: Blazor's own reconnect/error UI carries
+    // inline style attributes, and there is no nonce hook for framework-emitted
+    // markup. That's a far weaker exposure than script — it can restyle a page, not
+    // execute on it.
+    //
+    // A nonce is per-response and unguessable, so injected markup can't carry a valid
+    // one. Note browsers ignore 'unsafe-inline' whenever a nonce is present, so the
+    // two can't be listed as a fallback pair — this is all-or-nothing.
+    //
+    // Supabase is allowed for images (site photography, signed customer-upload URLs)
+    // and connect-src (storage API); wss:/ws: are the SignalR circuit.
+    var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
+    context.Items[Fixlosophy.Components.App.CspNonceKey] = nonce;
+
     headers["Content-Security-Policy"] = string.Join("; ",
         "default-src 'self'",
         "base-uri 'self'",
@@ -234,7 +315,7 @@ app.Use(async (context, next) =>
         "img-src 'self' data: https://*.supabase.co",
         "font-src 'self' data:",
         "style-src 'self' 'unsafe-inline'",
-        "script-src 'self' 'unsafe-inline'",
+        $"script-src 'self' 'nonce-{nonce}'",
         "connect-src 'self' https://*.supabase.co wss: ws:");
 
     await next();
@@ -246,6 +327,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseAntiforgery();
+
+// 200 "Healthy" when the database answers, 503 when it doesn't. Deliberately outside
+// the rate limiter: a probe every ten seconds must not eat a real visitor's budget,
+// and a health check that starts 429ing under load reports an outage that isn't one.
+// It's in robots.txt's disallow list too — no reason for it in a search index.
+app.MapHealthChecks("/health").DisableRateLimiting();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
@@ -279,6 +366,7 @@ app.MapGet("/robots.txt", (HttpContext http, IConfiguration config) =>
         "Disallow: /reset-password",
         "Disallow: /not-found",
         "Disallow: /Error",
+        "Disallow: /health",
         "",
         $"Sitemap: {baseUrl}/sitemap.xml",
         "");
@@ -496,6 +584,96 @@ static string BuildVerifyEmailLink(HttpContext http, IConfiguration config, stri
     BuildAbsoluteUrl(http, config,
         $"/auth/verify-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}");
 
+/// <summary>
+/// Runs the schema bootstrap holding a Postgres session-level advisory lock, so only
+/// one process at a time can be creating tables and seeding.
+/// </summary>
+/// <remarks>
+/// Session-level (<c>pg_advisory_lock</c>) rather than transaction-level, because the
+/// bootstrap is a series of separate statements with their own implicit transactions —
+/// a transaction-scoped lock would be released after the first one. The connection is
+/// held open for the duration so every statement runs in the same session; EF Core
+/// ref-counts <c>OpenConnection</c>, so the nested open/close inside
+/// <see cref="BookingService.NextReferenceSequence"/> can't close it underneath us.
+///
+/// If the process dies mid-bootstrap the lock goes with the session, so there is
+/// nothing to clean up by hand — the reason this beats a lock row in a table.
+///
+/// Waiting is the correct behaviour for the loser: the winner is doing the very work
+/// it was about to do, and the idempotent statements make its own pass a no-op
+/// afterwards. The bound exists only so a genuinely stuck peer fails the deploy with
+/// a clear message instead of hanging a container that never reports ready.
+/// </remarks>
+static async Task WithSchemaLockAsync(AppDbContext db, ILogger logger, Action bootstrap)
+{
+    // The test suite's InMemory provider has no advisory locks — and no concurrency
+    // to protect against either.
+    if (!db.Database.IsRelational())
+    {
+        bootstrap();
+        return;
+    }
+
+    // Arbitrary but stable 64-bit key. Advisory locks share one namespace per
+    // database, so this only needs to not collide with anything else using the same
+    // Postgres instance.
+    const long schemaLockKey = 0x_46_49_58_4C_4F_53_01;  // "FIXLOS" + slot 1
+    var waitedFor = TimeSpan.Zero;
+    var pollEvery = TimeSpan.FromSeconds(1);
+    var giveUpAfter = TimeSpan.FromSeconds(60);
+
+    await db.Database.OpenConnectionAsync();
+    try
+    {
+        while (true)
+        {
+            var acquired = await TryAcquireAsync(db, schemaLockKey);
+            if (acquired) break;
+
+            if (waitedFor >= giveUpAfter)
+                throw new InvalidOperationException(
+                    $"Could not acquire the schema bootstrap lock within {giveUpAfter.TotalSeconds:0}s — " +
+                    "another instance appears to be stuck partway through startup. Check for an " +
+                    "orphaned process still holding a connection to this database.");
+
+            if (waitedFor == TimeSpan.Zero)
+                logger.LogInformation(
+                    "Another instance is running the schema bootstrap — waiting for it to finish.");
+
+            await Task.Delay(pollEvery);
+            waitedFor += pollEvery;
+        }
+
+        try
+        {
+            bootstrap();
+        }
+        finally
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "SELECT pg_advisory_unlock({0})", schemaLockKey);
+        }
+    }
+    finally
+    {
+        await db.Database.CloseConnectionAsync();
+    }
+
+    // pg_try_advisory_lock returns immediately with whether it got the lock, which is
+    // what lets the wait above stay bounded — pg_advisory_lock would block forever.
+    static async Task<bool> TryAcquireAsync(AppDbContext db, long key)
+    {
+        var connection = db.Database.GetDbConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT pg_try_advisory_lock(@key)";
+        var parameter = cmd.CreateParameter();
+        parameter.ParameterName = "key";
+        parameter.Value = key;
+        cmd.Parameters.Add(parameter);
+        return (bool)(await cmd.ExecuteScalarAsync())!;
+    }
+}
+
 static void EnsureSchema(AppDbContext db, ILogger logger)
 {
     db.Database.ExecuteSqlRaw(@"
@@ -580,6 +758,15 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
 
         ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""CustomerId""       varchar(36) NULL;
         ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""AssignedStaffId""  varchar(36) NULL;
+
+        -- Day-before reminders. NULL means ""not sent yet"", which is the correct
+        -- grandfathering for rows that predate the feature: the job only ever looks at
+        -- tomorrow's bookings, so old rows are never picked up regardless.
+        ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""ReminderSentAt""    timestamp   NULL;
+
+        -- When staff were told the bike hadn't turned up. Same purpose as
+        -- ReminderSentAt: ring the bell once, not on every tick for the rest of the day.
+        ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""LateNotifiedAt""    timestamp   NULL;
 
         -- Relational FK constraints, added after every referenced table exists (idempotent via pg_constraint check)
         DO $$ BEGIN
@@ -709,6 +896,72 @@ static void EnsureSchema(AppDbContext db, ILogger logger)
         );
         CREATE INDEX IF NOT EXISTS ""IX_CustomerNotes_Customer"" ON ""CustomerNotes"" (""CustomerId"", ""CreatedAt"" DESC);
         CREATE INDEX IF NOT EXISTS ""IX_CustomerNotes_Booking""  ON ""CustomerNotes"" (""BookingId"");
+
+        -- Application errors, grouped by fingerprint rather than one row per
+        -- occurrence — see ErrorLogEntry. Written only by ErrorLogWriter. There is no
+        -- admin screen for this on purpose: it's read in Supabase's table editor when
+        -- something needs diagnosing, and a bike shop's dashboard has no business
+        -- carrying a stack-trace viewer.
+        CREATE TABLE IF NOT EXISTS ""ErrorLog"" (
+            ""Id""               varchar(36) NOT NULL,
+            ""Fingerprint""      varchar(32) NOT NULL,
+            ""Level""            text        NOT NULL DEFAULT '',
+            ""Logger""           text        NOT NULL DEFAULT '',
+            ""MessageTemplate""  text        NOT NULL DEFAULT '',
+            ""LastMessage""      text        NOT NULL DEFAULT '',
+            ""ExceptionType""    text        NULL,
+            ""ExceptionMessage"" text        NULL,
+            ""StackTrace""       text        NULL,
+            ""FirstSeen""        timestamp   NOT NULL DEFAULT now(),
+            ""LastSeen""         timestamp   NOT NULL DEFAULT now(),
+            ""Count""            integer     NOT NULL DEFAULT 1,
+            CONSTRAINT ""PK_ErrorLog"" PRIMARY KEY (""Id"")
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ErrorLog_Fingerprint"" ON ""ErrorLog"" (""Fingerprint"");
+        CREATE INDEX IF NOT EXISTS ""IX_ErrorLog_LastSeen"" ON ""ErrorLog"" (""LastSeen"" DESC);
+
+        -- Days the shop is shut. Customer-facing: the reason is shown on the booking
+        -- calendar, because ""Closed — Christmas"" and ""fully booked"" are different
+        -- answers and only one means try tomorrow. Both dates inclusive.
+        CREATE TABLE IF NOT EXISTS ""Closures"" (
+            ""Id""               varchar(36) NOT NULL,
+            ""StartDate""        timestamp   NOT NULL,
+            ""EndDate""          timestamp   NOT NULL,
+            ""StartTime""        varchar(5)  NULL,
+            ""EndTime""          varchar(5)  NULL,
+            ""Reason""           text        NOT NULL DEFAULT '',
+            ""CreatedAt""        timestamp   NOT NULL DEFAULT now(),
+            ""CreatedByStaffId"" varchar(36) NULL,
+            CONSTRAINT ""PK_Closures"" PRIMARY KEY (""Id"")
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_Closures_Range"" ON ""Closures"" (""StartDate"", ""EndDate"");
+
+        -- A mechanic being away. Internal only — a customer sees a closed day, never
+        -- whose holiday it is. Availability treats it like a closure in exactly one
+        -- respect: a day with nobody in can't take a booking.
+        CREATE TABLE IF NOT EXISTS ""StaffAbsences"" (
+            ""Id""        varchar(36) NOT NULL,
+            ""StaffId""   varchar(36) NOT NULL,
+            ""StartDate"" timestamp   NOT NULL,
+            ""EndDate""   timestamp   NOT NULL,
+            ""Type""      integer     NOT NULL DEFAULT 0,
+            ""Note""      text        NOT NULL DEFAULT '',
+            ""CreatedAt"" timestamp   NOT NULL DEFAULT now(),
+            CONSTRAINT ""PK_StaffAbsences"" PRIMARY KEY (""Id"")
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_StaffAbsences_Range"" ON ""StaffAbsences"" (""StartDate"", ""EndDate"");
+
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_StaffAbsences_Staff') THEN
+                ALTER TABLE ""StaffAbsences"" ADD CONSTRAINT ""FK_StaffAbsences_Staff""
+                    FOREIGN KEY (""StaffId"") REFERENCES ""Staff""(""Id"") ON DELETE CASCADE;
+            END IF;
+        END $$;
+
+        -- Whether someone actually works on bikes. DEFAULT true grandfathers existing
+        -- staff: before this column there was no such distinction, and every one of
+        -- them was in the workshop. Untick the office ones afterwards.
+        ALTER TABLE ""Staff"" ADD COLUMN IF NOT EXISTS ""IsMechanic"" boolean NOT NULL DEFAULT true;
 
         DO $$ BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_CustomerNotes_Customers') THEN
@@ -895,30 +1148,6 @@ static void SeedServicePricings(AppDbContext db)
 
     foreach (var s in services)
         db.ServicePricings.Add(s);
-    db.SaveChanges();
-}
-
-static async Task ApplyAnnualPriceIncreaseAsync(
-    AppDbContext db, IConfiguration config, InflationService inflation)
-{
-    var today  = ShopClock.Today;
-    var april1 = new DateTime(today.Year, 4, 1);
-
-    if (today < april1) return;
-    if (db.PriceAdjustments.Any(a => a.Year == today.Year)) return;
-
-    // Fetch live UK CPI (ONS CPIH L55O series). PriceIncrease:InflationRate is the
-    // fallback used only when the ONS API is unavailable — it is not the floor.
-    // The business floor is a deliberate 5% a year, so any rate below it (live or
-    // configured) is raised to 5%; only a rate above 5% is used as-is.
-    var liveRate       = await inflation.GetLatestAnnualRateAsync();
-    var configuredMin  = config.GetValue<decimal>("PriceIncrease:InflationRate", 0.03m);
-    var rate           = Math.Max(liveRate ?? configuredMin, 0.05m);
-
-    foreach (var service in db.ServicePricings.Where(s => !s.IsQuoteOnly).ToList())
-        service.CurrentPrice = Math.Ceiling(service.CurrentPrice * (1 + rate));
-
-    db.PriceAdjustments.Add(new PriceAdjustment { Year = today.Year, Rate = rate });
     db.SaveChanges();
 }
 

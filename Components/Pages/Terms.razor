@@ -34,16 +34,17 @@
             Contact us on <a href="tel:@SiteContent.PhoneE164">@SiteContent.PhoneDisplay</a>
             or <a href="mailto:@SiteContent.Email">@SiteContent.Email</a>.
         </p>
-        <p class="legal-doc__todo">
-            <strong>To complete before launch:</strong> registered company name, company
-            number and registered office.
+        <p>
+            @SiteContent.LegalName is a private limited company registered in England and
+            Wales, company number <strong>@SiteContent.CompanyNumber</strong>. Registered
+            office: @SiteContent.RegisteredOffice.
         </p>
 
         <h2>Booking an appointment</h2>
         <ul class="legal-doc__list">
             <li>Booking online reserves a slot; it isn't a contract for the work itself. That starts when you bring the bike in and approve the quote.</li>
             <li>We'll confirm your booking by email. If you don't get one, check your spam folder, then call us — assume it hasn't reached us.</li>
-            <li>Please arrive about five minutes before your slot. We hold slots for @HoldMinutes minutes; after that we may give it to someone else.</li>
+            <li>Please arrive about five minutes before your slot. Running late is usually fine — give us a ring so we know to expect you, and we'll fit you in.</li>
             <li>To cancel or change, use your account if you have one, or call the shop. Please give us as much notice as you can.</li>
             <li>You can cancel from your account up to @CancelHours hours before your slot. After that, or once we've started work on your bike, please call us — by then the slot is hard to fill and parts may already be fitted.</li>
         </ul>
@@ -61,11 +62,48 @@
             <li>Please remove valuables, lights, computers and luggage before dropping off. We can't accept responsibility for accessories left on the bike.</li>
             <li>Tell us about anything we should know — previous repairs, known faults, non-standard or modified parts.</li>
             <li>We may decline work where a bike is unsafe to ride, beyond economic repair, or needs parts we can't source. We'll always explain why.</li>
-            <li>Please collect within @CollectionDays days of us telling you it's ready. After that we may charge storage, and after 3 months we may treat an uncollected bike as abandoned under the Torts (Interference with Goods) Act 1977 — we'll write to you first.</li>
         </ul>
-        <p class="legal-doc__todo">
-            <strong>To confirm:</strong> the slot-hold window and the collection period above
-            are placeholders — tell me what you actually do and I'll set them.
+
+        <h2>Collecting your bike</h2>
+        <p>
+            When the work is done we'll tell you by phone, text or email. That notice sets out
+            what we did, an itemised invoice, any storage charges, and where the bike is being
+            held.
+        </p>
+        <ul class="legal-doc__list">
+            <li>Please settle the invoice and collect within <strong>@CollectionDays days</strong> of that notice, during our opening hours.</li>
+            <li>Bikes left longer may accrue storage charges. We'll tell you the rate in the notice rather than springing it on you afterwards.</li>
+        </ul>
+
+        <h2>Uncollected bikes</h2>
+        <p>
+            We'd much rather give you your bike back — but we can't store bikes indefinitely,
+            so there has to be a point at which one is treated as abandoned. This section
+            explains exactly when that is and what happens.
+        </p>
+        <ul class="legal-doc__list">
+            <li>
+                If a bike is still uncollected after <strong>@CollectionDays days</strong> and
+                the repair and storage charges are still unpaid, we may treat it as abandoned.
+            </li>
+            <li>
+                Before selling or disposing of anything we will send a <strong>final
+                notice</strong> giving you at least <strong>@FinalNoticeDays days</strong> to
+                pay and collect. If we hear nothing in that time, the sale goes ahead without
+                further notice.
+            </li>
+            <li>
+                Proceeds are applied to what's owed — the unpaid repair, accumulated storage,
+                and the costs of the sale or disposal itself.
+            </li>
+            <li>
+                By leaving a bike with us you accept this policy, including that ownership is
+                forfeited once the periods above have passed.
+            </li>
+        </ul>
+        <p>
+            This sits alongside, and does not replace, our rights and duties under the Torts
+            (Interference with Goods) Act 1977.
         </p>
 
         <h2>Our work</h2>
@@ -97,9 +135,14 @@
 </section>
 
 @code {
-    private const string LastUpdated = "30 August 2026";
-    private const int HoldMinutes = 15;
-    private const int CollectionDays = 14;
+    private const string LastUpdated = "5 September 2026";
+
+    /// Days from the "your bike is ready" notice before a bike counts as uncollected.
+    private const int CollectionDays = 30;
+
+    /// Minimum notice given in the final letter before an abandoned bike is sold.
+    /// The policy says "no less than a week", so this is a floor, not a target.
+    private const int FinalNoticeDays = 7;
 
     // Read from the service rather than typed here, so the terms can't promise a
     // window the booking code doesn't actually honour.

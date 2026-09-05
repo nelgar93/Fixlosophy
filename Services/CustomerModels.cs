@@ -61,6 +61,22 @@ public class StaffMember
     public bool CanManageBookings { get; set; } = true;
     public bool CanViewCustomerDetails { get; set; }
 
+    /// <summary>
+    /// Whether this person actually works on bikes. Availability counts mechanics, not
+    /// staff: a day with no mechanic in can't take a booking, and an owner or office
+    /// admin being at their desk doesn't change that.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not derived from <see cref="Role"/> or from CanManageBookings.
+    /// Those are about what someone is allowed to do in the dashboard; this is about
+    /// what they do in the workshop, and conflating the two would mean granting
+    /// someone a permission quietly changed what customers can book.
+    /// </remarks>
+    public bool IsMechanic { get; set; } = true;
+
+    // Navigation
+    public List<StaffAbsence> Absences { get; set; } = [];
+
     // Forgot-password — see Customer.ResetCooldownUntil for why this is separate
     // from ResetTokenExpiresAt.
     public string? ResetTokenHash { get; set; }
