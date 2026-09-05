@@ -1488,9 +1488,11 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
 }
 
+/* Colour-change only, deliberately without the translateY lift the other cards use:
+   the Home teaser shares this class, and shifting a photo under the cursor meant
+   chasing it. The border was always 1px — only its colour moves. */
 @media (hover: hover) and (pointer: fine) {
     .gallery-item:hover {
-        transform: translateY(-3px);
         border-color: var(--green);
         box-shadow: var(--shadow);
     }
@@ -1540,14 +1542,17 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
 .lightbox:focus { outline: none; }
 
+/* The arrows are pinned to the viewport edges (below), so the photo keeps clear of
+   them by reserving a gutter each side: 44px control + 1.25rem offset + breathing
+   room. Without this a wide landscape shot slides underneath them. */
 .lightbox__figure {
-    max-width: 92vw;
+    max-width: min(92vw, calc(100vw - 176px));
     max-height: 88vh;
     cursor: default;
 }
 
 .lightbox__figure img {
-    max-width: 92vw;
+    max-width: min(92vw, calc(100vw - 176px));
     max-height: 88vh;
     width: auto;
     height: auto;
@@ -1595,6 +1600,19 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     right: calc(1rem + env(safe-area-inset-right));
 }
 
+/* Pinned to the viewport rather than sitting in the flex row beside the photo.
+   In flow they moved on every click: the figure is width:auto, so a portrait shot
+   is far narrower than a landscape one, and centring the row slid both arrows in
+   and out under the cursor. Anchoring them means only the photo changes size. */
+.lightbox__nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.lightbox__nav--prev { left: calc(1.25rem + env(safe-area-inset-left)); }
+.lightbox__nav--next { right: calc(1.25rem + env(safe-area-inset-right)); }
+
 .lightbox__count {
     position: absolute;
     bottom: 1rem;
@@ -1608,7 +1626,8 @@ textarea.form-control { resize: vertical; min-height: 130px; }
    bottom corners and the photo gets the full width. */
 @media (max-width: 639px) {
     .lightbox__nav {
-        position: absolute;
+        top: auto;
+        transform: none;
         bottom: calc(1rem + env(safe-area-inset-bottom));
     }
     .lightbox__nav--prev { left: calc(1rem + env(safe-area-inset-left)); }
