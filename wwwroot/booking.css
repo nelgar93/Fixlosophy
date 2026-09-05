@@ -1860,6 +1860,53 @@ a.action-btn { text-decoration: none; }
     }
 }
 
+/* ── An enquiry's controls ───────────────────────────────────────────────────
+   Their own row rather than .booking-actions__row, which above 768px squeezes
+   .action-btn--call to a 32px icon square and visually hides the label inside it.
+   A booking survives that: the label is the word "Call" and the number is already
+   in the row. An enquiry doesn't — the sender's address appears nowhere else, so
+   there is nothing to hide it in favour of, and unhidden text in a 32px box with
+   zero inline padding simply overprinted the button beside it. */
+.enquiry-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.enquiry-actions .action-btn {
+    min-height: var(--touch-min);
+    gap: var(--space-1);
+}
+
+/* An address can be arbitrarily long, and the Actions cell sits inside the table's
+   overflow-x wrapper — so it truncates here rather than pushing a scrollbar under
+   the whole dashboard. The full value stays in the title and in the mailto:. */
+.enquiry-actions__contact { min-width: 0; }
+
+.enquiry-actions__text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+    /* Same reasoning as .booking-actions__row: a mouse doesn't need 44px, and the
+       table cell has less room than a card. */
+    .enquiry-actions {
+        gap: var(--space-1);
+        flex-wrap: nowrap;
+    }
+    .enquiry-actions .action-btn { min-height: 28px; }
+    /* The contact pills give up width first; WhatsApp and Mark handled keep theirs,
+       because a truncated verb is useless where a truncated address still reads. */
+    .enquiry-actions__contact { flex: 0 1 auto; }
+    .enquiry-actions .action-btn--whatsapp,
+    .enquiry-actions .action-btn--primary,
+    .enquiry-actions .action-btn--keep { flex: 0 0 auto; }
+}
+
 /* The confirm step for Cancel. It used to fire on a single click, despite being
    irreversible and now emailing the customer. */
 .booking-confirm {

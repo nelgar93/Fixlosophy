@@ -1250,11 +1250,22 @@
     /// message is done so the next person doesn't answer it twice.
     /// </summary>
     private RenderFragment<Enquiry> EnquiryActions => enquiry => @<text>
-        <div class="booking-actions__row">
-            <a class="action-btn action-btn--call" href="mailto:@enquiry.Email">@enquiry.Email</a>
+        @* Not .booking-actions__row: above 768px that collapses .action-btn--call to a
+           32px icon square and clips the label inside it. That works for a booking,
+           where the label is the word "Call" and the number is in the row already —
+           but here the address is the content, and it painted over the button next to
+           it. See .enquiry-actions. *@
+        <div class="enquiry-actions">
+            <a class="action-btn action-btn--call enquiry-actions__contact"
+               href="mailto:@enquiry.Email" title="@enquiry.Email">
+                <Icon Name="mail" /> <span class="enquiry-actions__text">@enquiry.Email</span>
+            </a>
             @if (AuthService.IsValidPhone(enquiry.Phone))
             {
-                <a class="action-btn action-btn--call" href="@TelHref(enquiry.Phone)">@enquiry.Phone</a>
+                <a class="action-btn action-btn--call enquiry-actions__contact"
+                   href="@TelHref(enquiry.Phone)" title="@enquiry.Phone">
+                    <Icon Name="phone" /> <span class="enquiry-actions__text">@enquiry.Phone</span>
+                </a>
                 <a class="action-btn action-btn--whatsapp" href="https://wa.me/@WhatsAppNumber(enquiry.Phone)"
                    target="_blank" rel="noopener">WhatsApp</a>
             }
