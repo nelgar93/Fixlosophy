@@ -326,6 +326,62 @@ public class AvailabilityService(AppDbContext db)
         return candidates.Where(b => WouldHaveNoMechanic(b.SlotDate, from, to)).ToList();
     }
 
+    /// <summary>
+    /// Every future booking currently sitting on a day — or in a slot — the shop can no
+    /// longer serve. The standing list of people who need dealing with.
+    /// </summary>
+    /// <remarks>
+    /// <para>Distinct from <see cref="FindAffectedBookings"/>, which answers "what did
+    /// the change I just made strand?". This answers "what is stranded right now?", and
+    /// it's the one that matters: the first version of the availability screen showed
+    /// displaced bookings only in the moment they were created, so switching tabs made
+    /// them vanish with nothing left to say they existed. A warning you can navigate
+    /// away from is a warning you will miss.</para>
+    ///
+    /// <para>Batched: closures, absences and the mechanic list are read once and the
+    /// per-day decision made in memory, rather than asking the database per booking.</para>
+    /// </remarks>
+    public List<Booking> FindStrandedBookings()
+    {
+        var today = ShopClock.Today;
+
+        var upcoming = db.Bookings
+            .Where(b => b.SlotDate >= today
+                     && (b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed))
+            .OrderBy(b => b.SlotDate).ThenBy(b => b.SlotTime)
+            .ToList();
+
+        if (upcoming.Count == 0) return upcoming;
+
+        var last = upcoming[^1].SlotDate;
+        var closures = ClosuresOverlapping(today, last);
+        var absences = AbsencesOverlapping(today, last);
+        var mechanicIds = db.Staff
+            .Where(s => s.IsActive && s.IsMechanic)
+            .Select(s => s.Id)
+            .ToList();
+
+        return upcoming.Where(booking =>
+        {
+            var day = booking.SlotDate;
+
+            // Shut for the whole day.
+            if (closures.Exists(c => c.IsAllDay && c.Covers(day))) return true;
+
+            // Nobody in. Skipped entirely when no mechanics are configured — see
+            // MechanicRuleApplies for why that means "rule off", not "shop shut".
+            if (mechanicIds.Count > 0)
+            {
+                var away = absences.Where(a => a.Covers(day)).Select(a => a.StaffId)
+                                   .ToHashSet(StringComparer.Ordinal);
+                if (mechanicIds.TrueForAll(away.Contains)) return true;
+            }
+
+            // Open, but this particular slot is inside a part-day closure.
+            return closures.Exists(c => !c.IsAllDay && c.Covers(day) && c.CoversSlot(booking.SlotTime));
+        }).ToList();
+    }
+
     /// Whether adding an absence over [from, to] would leave <paramref name="date"/>
     /// with no mechanic — counting the absence being proposed, which isn't saved yet.
     private bool WouldHaveNoMechanic(DateTime date, DateTime from, DateTime to)

@@ -313,6 +313,197 @@ public class AvailabilityTests
         Assert.Equal("afternoon@example.com", affected[0].CustomerEmail);
     }
 
+    // ── What the customer is told ────────────────────────────────────────────
+    // "Closed — Christmas" and "fully booked" are different disappointments: one means
+    // come back tomorrow, the other means try another time today. A grey square says
+    // neither, which is what the booking calendar used to show.
+
+    [Fact]
+    public void DescribeMonth_CarriesTheClosureReasonToTheCustomer()
+    {
+        using var db = TestFactory.NewDb();
+        var day = TestFactory.FutureWorkday(10);
+        db.Closures.Add(NewClosure(day, reason: "Bank holiday"));
+        db.SaveChanges();
+
+        var month = TestFactory.NewBookingService(db).DescribeMonth(day.Year, day.Month);
+
+        Assert.Equal(DayState.Closed, month[day].State);
+        Assert.Equal("Closed — Bank holiday", month[day].CustomerLabel);
+        Assert.False(month[day].IsBookable);
+    }
+
+    // Whose holiday it is isn't a customer's business — they get "Closed", full stop.
+    [Fact]
+    public void DescribeMonth_DoesNotLeakWhoIsAway()
+    {
+        using var db = TestFactory.NewDb();
+        var francesco = TestFactory.AddMechanic(db, "Francesco");
+        var day = TestFactory.FutureWorkday(10);
+        db.StaffAbsences.Add(new StaffAbsence { StaffId = francesco.Id, StartDate = day, EndDate = day });
+        db.SaveChanges();
+
+        var month = TestFactory.NewBookingService(db).DescribeMonth(day.Year, day.Month);
+
+        Assert.Equal(DayState.NoMechanic, month[day].State);
+        Assert.Equal("Closed", month[day].CustomerLabel);
+        Assert.Null(month[day].Reason);
+    }
+
+    // A day that's simply full gets no label — the calendar's own styling says that,
+    // and "Closed" would be a lie.
+    [Fact]
+    public void DescribeMonth_GivesAFullDayNoLabel()
+    {
+        using var db = TestFactory.NewDb();
+        var service = TestFactory.NewBookingService(db);
+        var day = TestFactory.FutureWorkday(10);
+
+        foreach (var slot in BookingService.SlotsFor(day))
+            service.CreateBooking(NewBooking(day, slot, $"{slot.Replace(":", "")}@example.com"));
+
+        var month = service.DescribeMonth(day.Year, day.Month);
+
+        Assert.Equal(DayState.Open, month[day].State);
+        Assert.False(month[day].IsBookable);
+        Assert.Null(month[day].CustomerLabel);
+    }
+
+    [Fact]
+    public void DescribeMonth_GivesAnOrdinaryOpenDayNoLabel()
+    {
+        using var db = TestFactory.NewDb();
+        var day = TestFactory.FutureWorkday(10);
+
+        var month = TestFactory.NewBookingService(db).DescribeMonth(day.Year, day.Month);
+
+        Assert.True(month[day].IsBookable);
+        Assert.Null(month[day].CustomerLabel);
+    }
+
+    // ── The standing stranded list ───────────────────────────────────────────
+    // FindAffectedBookings answers "what did the change I just made strand?";
+    // FindStrandedBookings answers "what is stranded right now?". The admin screen
+    // needs the second: the first version showed displaced bookings only in the moment
+    // they were created, so switching tabs made them vanish with nothing left to say
+    // they existed.
+
+    [Fact]
+    public void FindStrandedBookings_FindsBookingsOnAClosedDay()
+    {
+        using var db = TestFactory.NewDb();
+        var service = TestFactory.NewBookingService(db);
+        var day = TestFactory.FutureWorkday(10);
+
+        service.CreateBooking(NewBooking(day, "09:00"));
+        db.Closures.Add(NewClosure(day, reason: "Closed"));
+        db.SaveChanges();
+
+        Assert.Single(TestFactory.NewAvailability(db).FindStrandedBookings());
+    }
+
+    [Fact]
+    public void FindStrandedBookings_FindsBookingsOnADayWithNoMechanic()
+    {
+        using var db = TestFactory.NewDb();
+        var francesco = TestFactory.AddMechanic(db);
+        var service = TestFactory.NewBookingService(db);
+        var day = TestFactory.FutureWorkday(10);
+
+        service.CreateBooking(NewBooking(day, "09:00"));
+        db.StaffAbsences.Add(new StaffAbsence { StaffId = francesco.Id, StartDate = day, EndDate = day });
+        db.SaveChanges();
+
+        Assert.Single(TestFactory.NewAvailability(db).FindStrandedBookings());
+    }
+
+    // A part-day closure strands only what falls inside its window.
+    [Fact]
+    public void FindStrandedBookings_FindsOnlySlotsInsideAPartDayClosure()
+    {
+        using var db = TestFactory.NewDb();
+        var service = TestFactory.NewBookingService(db);
+        var day = TestFactory.FutureWorkday(10);
+
+        service.CreateBooking(NewBooking(day, "09:00", "morning@example.com"));
+        service.CreateBooking(NewBooking(day, "15:00", "afternoon@example.com"));
+        db.Closures.Add(NewClosure(day, reason: "Delivery", startTime: "14:00", endTime: "19:00"));
+        db.SaveChanges();
+
+        var stranded = TestFactory.NewAvailability(db).FindStrandedBookings();
+
+        Assert.Single(stranded);
+        Assert.Equal("afternoon@example.com", stranded[0].CustomerEmail);
+    }
+
+    [Fact]
+    public void FindStrandedBookings_IsEmptyWhenNothingIsClosed()
+    {
+        using var db = TestFactory.NewDb();
+        TestFactory.NewBookingService(db).CreateBooking(NewBooking(TestFactory.FutureWorkday(10), "09:00"));
+
+        Assert.Empty(TestFactory.NewAvailability(db).FindStrandedBookings());
+    }
+
+    // Dealing with one takes it off the list — that's what makes the warning clear
+    // itself rather than nagging forever.
+    [Fact]
+    public void FindStrandedBookings_DropsOneOnceItIsCancelled()
+    {
+        using var db = TestFactory.NewDb();
+        var service = TestFactory.NewBookingService(db);
+        var day = TestFactory.FutureWorkday(10);
+
+        var (booking, _) = service.CreateBooking(NewBooking(day, "09:00"));
+        db.Closures.Add(NewClosure(day, reason: "Closed"));
+        db.SaveChanges();
+        Assert.Single(TestFactory.NewAvailability(db).FindStrandedBookings());
+
+        booking!.Status = BookingStatus.Cancelled;
+        db.SaveChanges();
+
+        Assert.Empty(TestFactory.NewAvailability(db).FindStrandedBookings());
+    }
+
+    [Fact]
+    public void FindStrandedBookings_DropsOneOnceItIsMovedSomewhereOpen()
+    {
+        using var db = TestFactory.NewDb();
+        var service = TestFactory.NewBookingService(db);
+        var closed = TestFactory.FutureWorkday(10);
+        var open = TestFactory.FutureWorkday(17);
+
+        var (booking, _) = service.CreateBooking(NewBooking(closed, "09:00"));
+        db.Closures.Add(NewClosure(closed, reason: "Closed"));
+        db.SaveChanges();
+        Assert.Single(TestFactory.NewAvailability(db).FindStrandedBookings());
+
+        service.RescheduleBooking(booking!.Id, open, "11:00");
+
+        Assert.Empty(TestFactory.NewAvailability(db).FindStrandedBookings());
+    }
+
+    // Yesterday's closed day is history, not something to chase.
+    [Fact]
+    public void FindStrandedBookings_IgnoresThePast()
+    {
+        using var db = TestFactory.NewDb();
+        var past = ShopClock.Today.AddDays(-7);
+        db.Bookings.Add(new Booking
+        {
+            Reference = "FIX-OLD-001",
+            CustomerName = "Jane Doe",
+            CustomerEmail = "jane@example.com",
+            SlotDate = past,
+            SlotTime = "09:00",
+            Status = BookingStatus.Confirmed
+        });
+        db.Closures.Add(NewClosure(past, reason: "Was closed"));
+        db.SaveChanges();
+
+        Assert.Empty(TestFactory.NewAvailability(db).FindStrandedBookings());
+    }
+
     // ── Rescheduling ─────────────────────────────────────────────────────────
 
     [Fact]

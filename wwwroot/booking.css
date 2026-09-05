@@ -488,6 +488,17 @@
     background: transparent;
 }
 
+/* Shut, as opposed to merely full. A struck-through number distinguishes the two at
+   a glance — "come back tomorrow" versus "try another time today" — without adding
+   colour the calendar doesn't otherwise use. The reason itself is on the title and
+   the aria-label, so it reaches a screen reader too. */
+.cal-day--closed {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    color: rgba(255,255,255,0.28);
+    cursor: not-allowed;
+}
+
 .cal-day--available {
     color: var(--white);
     background: var(--dark-3);
@@ -529,6 +540,15 @@
 .cal-legend__dot--available { background: var(--dark-4); border: 1px solid var(--border-dark); }
 .cal-legend__dot--selected { background: var(--green); }
 .cal-legend__dot--disabled { background: transparent; border: 1px solid var(--border-dark); opacity: 0.3; }
+
+/* The legend's "closed" marker mirrors the day itself rather than being a dot — a
+   struck-through swatch is what the calendar actually shows. */
+.cal-legend__closed {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    color: rgba(255,255,255,0.4);
+    margin-right: var(--space-1);
+}
 
 /* ---------- Time Slots ---------- */
 .timeslot-wrapper h4 {
