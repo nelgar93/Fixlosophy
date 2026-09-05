@@ -1,0 +1,232 @@
+@implements IDisposable
+@inject CustomerService Customers
+
+@*
+    The customer list, one customer's detail, and the bulk importer — three views of
+    the same tab, switched by which of the two state fields is set.
+
+    Gated on CanSeeCustomerDetails, the same permission that governs seeing contact
+    details on a booking.
+*@
+
+@if (_importing)
+{
+    <CustomerImportPanel OnBack="CloseImport" OnImported="Reload" />
+}
+else if (_selected is null)
+{
+    <div class="admin-filters">
+        <div class="admin-search admin-search--wide">
+            <label class="sr-only" for="customer-search">Search customers</label>
+            <input id="customer-search" class="form-control" type="text"
+                   value="@search" @oninput="OnSearch"
+                   placeholder="Search name, email or phone…" />
+        </div>
+        @* Bulk-importing personal data is an owner's job, not a mechanic's —
+           IsAdmin rather than the tab's own CanSeeCustomerDetails. *@
+        @if (Context.IsAdmin)
+        {
+            <button class="btn btn-outline" @onclick="OpenImport">Import customers</button>
+        }
+    </div>
+
+    @* Same as the bookings list: the table being searched stays on the page and
+       reports the empty result itself. *@
+    <div class="admin-mobile-cards">
+        @if (_customers.Count == 0)
+        {
+            <div class="admin-empty"><p>@EmptyMessage</p></div>
+        }
+        @foreach (var c in _customers)
+        {
+            var cust = c;
+            <button type="button" class="admin-edit-card customer-card"
+                    @onclick="() => OpenCustomer(cust.Id)">
+                <span class="admin-edit-card__title">@cust.FullName</span>
+                <span class="admin-edit-card__meta">@cust.Email</span>
+                <span class="customer-card__stats">
+                    <span>@cust.BookingCount booking@(cust.BookingCount == 1 ? "" : "s")</span>
+                    <span>@(cust.LastVisit is { } lv ? $"Last: {lv:d MMM yyyy}" : "No visits yet")</span>
+                </span>
+            </button>
+        }
+    </div>
+
+    <div class="admin-table-wrapper admin-table-wrapper--desktop-only">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Bookings</th>
+                    <th>Last visit</th>
+                    <th>Member since</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_customers.Count == 0)
+                {
+                    <tr class="admin-table__empty-row">
+                        <td colspan="6">@EmptyMessage</td>
+                    </tr>
+                }
+                @foreach (var c in _customers)
+                {
+                    var cust = c;
+                    <tr @onclick="() => OpenCustomer(cust.Id)">
+                        <td><strong>@cust.FullName</strong></td>
+                        <td class="text-muted-sm">@cust.Email</td>
+                        <td class="text-muted-sm">@cust.Phone</td>
+                        <td>@cust.BookingCount</td>
+                        <td class="text-muted-sm">@(cust.LastVisit is { } lv ? lv.ToString("d MMM yyyy") : "—")</td>
+                        <td class="text-muted-sm">@cust.MemberSince.ToString("d MMM yyyy")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (TotalPages > 1)
+    {
+        <nav class="pager" aria-label="Customer pages">
+            <button class="btn btn-outline pager__btn" disabled="@(_page == 0)"
+                    @onclick="() => GoToPage(_page - 1)">
+                <Icon Name="arrow-left" /> Previous
+            </button>
+            <span class="pager__status" aria-live="polite">
+                Page @(_page + 1) of @TotalPages &middot; @_total customer@(_total == 1 ? "" : "s")
+            </span>
+            <button class="btn btn-outline pager__btn" disabled="@(_page >= TotalPages - 1)"
+                    @onclick="() => GoToPage(_page + 1)">
+                Next <Icon Name="arrow-right" />
+            </button>
+        </nav>
+    }
+}
+else
+{
+    <CustomerDetailPanel Detail="_selected"
+                         CanManage="Context.CanManage"
+                         OnBack="CloseCustomer"
+                         OnAddNote="AddNote"
+                         OnDeleteNote="DeleteNote" />
+}
+
+@code {
+    [CascadingParameter] private AdminContext Context { get; set; } = default!;
+
+    private List<CustomerSummary> _customers = [];
+    private CustomerDetail? _selected;
+    private bool _importing;
+    private string search = "";
+    private int _page;
+    private int _total;
+    private CancellationTokenSource? _searchDebounce;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_total / (double)CustomerService.PageSize));
+
+    // Says which of the reasons the list is empty for. The old text was a flat
+    // "No bookings match the current filter", which read as wrong after a search and
+    // as alarming on a brand-new install.
+    private string EmptyMessage =>
+        string.IsNullOrWhiteSpace(search)
+            ? "No customer accounts yet."
+            : $"No customers match “{search.Trim()}”.";
+
+    protected override void OnInitialized() => Reload();
+
+    private void Reload()
+    {
+        var (items, total) = Customers.GetCustomersPage(search, _page);
+
+        // A search can shrink the result set past the current page; step back rather
+        // than showing an empty list with a pager that disagrees.
+        if (items.Count == 0 && _page > 0 && total > 0)
+        {
+            _page = Math.Max(0, (int)Math.Ceiling(total / (double)CustomerService.PageSize) - 1);
+            (items, total) = Customers.GetCustomersPage(search, _page);
+        }
+
+        _customers = items;
+        _total = total;
+    }
+
+    // Debounced like the bookings search: each keystroke is a real query.
+    private async Task OnSearch(ChangeEventArgs e)
+    {
+        search = e.Value?.ToString() ?? "";
+
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+        _searchDebounce = new CancellationTokenSource();
+        var token = _searchDebounce.Token;
+
+        try
+        {
+            await Task.Delay(250, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;   // superseded by a later keystroke
+        }
+
+        _page = 0;
+        Reload();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void GoToPage(int page)
+    {
+        _page = Math.Clamp(page, 0, TotalPages - 1);
+        Reload();
+    }
+
+    private void OpenImport()
+    {
+        if (!Context.IsAdmin) return;   // server-side guard; don't rely on a hidden button
+        _selected = null;
+        _importing = true;
+    }
+
+    private void CloseImport()
+    {
+        _importing = false;
+        Reload();
+    }
+
+    private void OpenCustomer(string customerId)
+    {
+        if (!Context.CanSeeCustomerDetails) return;  // server-side guard
+        _selected = Customers.GetCustomerDetail(customerId);
+    }
+
+    private void CloseCustomer() => _selected = null;
+
+    private void AddNote((string Body, bool Visible) note)
+    {
+        if (!Context.CanManage || _selected is null) return;  // server-side guard
+        Customers.AddNote(
+            customerId: _selected.Customer.Id,
+            bookingId: null,
+            authorStaffId: Context.Staff.Id,
+            body: note.Body,
+            visibleToCustomer: note.Visible);
+
+        // Re-read so the timeline reflects what was stored rather than what we sent.
+        _selected = Customers.GetCustomerDetail(_selected.Customer.Id);
+    }
+
+    private void DeleteNote(string noteId)
+    {
+        if (!Context.CanManage || _selected is null) return;  // server-side guard
+        Customers.DeleteNote(noteId);
+        _selected = Customers.GetCustomerDetail(_selected.Customer.Id);
+    }
+
+    public void Dispose()
+    {
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+    }
+}

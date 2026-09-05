@@ -1,0 +1,582 @@
+@implements IDisposable
+@inject BookingService BookingService
+@inject CustomerService Customers
+@inject AuthService AuthService
+@inject IStorageService Storage
+
+@*
+    The booking list: filtered, searched and paged in SQL.
+
+    This used to hold every booking (with every photo) in memory and re-filter on each
+    keystroke — see BookingService.GetBookingsPage. Photos and job notes are still
+    fetched lazily, only for the row being opened.
+
+    Mobile cards and the desktop table are BOTH always in the DOM; CSS swaps them at
+    768px. That's why anything with an id in here has the booking id in it.
+*@
+
+<!-- Stats -->
+<div class="admin-stats">
+    <div class="admin-stat">
+        <div class="admin-stat__number">@stats.total</div>
+        <div class="admin-stat__label">@(Context.CanViewAllBookings ? "Total" : "Assigned")</div>
+    </div>
+    <div class="admin-stat admin-stat--highlight">
+        <div class="admin-stat__number">@stats.today</div>
+        <div class="admin-stat__label">Today</div>
+    </div>
+    <div class="admin-stat">
+        <div class="admin-stat__number">@stats.pending</div>
+        <div class="admin-stat__label">Pending</div>
+    </div>
+    <div class="admin-stat">
+        <div class="admin-stat__number">@stats.confirmed</div>
+        <div class="admin-stat__label">Confirmed</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="admin-filters">
+    <div class="admin-filter-scroll">
+        <div class="admin-filter-tabs">
+            @foreach (var f in Filters)
+            {
+                <button class="filter-tab @(activeFilter == f ? "active" : "")"
+                        @onclick="() => SetFilter(f)">@f</button>
+            }
+        </div>
+    </div>
+    <div class="admin-search">
+        <label class="sr-only" for="booking-search">Search bookings</label>
+        <input id="booking-search" class="form-control" type="text"
+               value="@searchTerm" @oninput="OnSearch"
+               placeholder="Search name, ref, service…" />
+    </div>
+    <div class="admin-sort">
+        <label class="sr-only" for="booking-sort">Sort bookings</label>
+        <select id="booking-sort" class="form-control"
+                value="@sortMode" @onchange="SetSort">
+            @foreach (var opt in BookingService.SortOptions)
+            {
+                <option value="@opt">@BookingService.SortLabel(opt)</option>
+            }
+        </select>
+    </div>
+</div>
+
+@if (_todayBookings.Count > 0 && activeFilter == "All")
+{
+    <div class="today-schedule">
+        <h3><Icon Name="clock" /> Today's Schedule</h3>
+        <div class="today-slots">
+            @foreach (var b in _todayBookings.OrderBy(x => x.SlotTime))
+            {
+                <div class="today-slot">
+                    <span class="today-slot__time">@b.SlotTime</span>
+                    <span class="today-slot__name">@b.CustomerName</span>
+                    <span class="today-slot__service">@b.ServiceName</span>
+                    <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                    @if (IsLate(b))
+                    {
+                        <span class="status-badge status-badge--late">Not arrived</span>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@* A search that matches nothing used to remove the cards, the pager AND
+   the whole table, column headers included, leaving one line of text
+   where the list had been. The table is the thing being searched, so it
+   stays put and says it found nothing. *@
+<!-- MOBILE: Card list -->
+<div class="admin-cards">
+    @if (_pageBookings.Count == 0)
+    {
+        <div class="admin-empty"><p>@EmptyMessage</p></div>
+    }
+    @foreach (var booking in _pageBookings)
+    {
+        var b = booking;
+        var isOpen = expandedId == b.Id;
+        <div class="admin-card @(isOpen ? "admin-card--open" : "")" @onclick="() => ToggleExpand(b.Id)">
+            <div class="admin-card__header">
+                <span class="ref-badge">@b.Reference</span>
+                <div class="admin-card__header-right">
+                    <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                    @if (IsLate(b))
+                    {
+                        <span class="status-badge status-badge--late">Not arrived</span>
+                    }
+                    <span class="admin-card__chevron @(isOpen ? "open" : "")"><Icon Name="chevron-right" /></span>
+                </div>
+            </div>
+            <div class="admin-card__name">@b.CustomerName</div>
+            <div class="admin-card__meta">
+                <span>@b.ServiceName</span>
+                <span>@b.SlotDate.ToString("d MMM") &middot; @b.SlotTime</span>
+            </div>
+
+            @if (isOpen)
+            {
+                <div class="admin-card__detail">
+                    @if (Context.CanSeeCustomerDetails)
+                    {
+                        <div class="admin-card__detail-row"><span>Email</span><span>@b.CustomerEmail</span></div>
+                        @if (!string.IsNullOrWhiteSpace(b.CustomerPhone))
+                        {
+                            <div class="admin-card__detail-row"><span>Phone</span><span>@b.CustomerPhone</span></div>
+                        }
+                    }
+                    @if (!string.IsNullOrWhiteSpace(b.BikeDescription))
+                    {
+                        <div class="admin-card__detail-row"><span>Bike</span><span>@b.BikeDescription</span></div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(b.Notes))
+                    {
+                        <div class="admin-card__detail-row"><span>Notes</span><span>@b.Notes</span></div>
+                    }
+                    @* Staff notes on this job. Shown here as well as on the
+                       customer's page because a guest booking has no customer
+                       record — without this, a note written against one would
+                       be stored and then invisible. *@
+                    @if (_bookingNotes.TryGetValue(b.Id, out var jobNotes) && jobNotes.Count > 0)
+                    {
+                        <div class="admin-card__detail-row">
+                            <span>Job notes</span>
+                            <span class="booking-notes">
+                                @foreach (var note in jobNotes)
+                                {
+                                    <span class="booking-note @(note.VisibleToCustomer ? "booking-note--shared" : "")">
+                                        @note.Body
+                                        <span class="text-faint-sm">
+                                            @(note.VisibleToCustomer ? "shared with customer" : "internal")
+                                            &middot; @note.CreatedAt.ToString("d MMM")
+                                        </span>
+                                    </span>
+                                }
+                            </span>
+                        </div>
+                    }
+                    @if (b.Photos.Count > 0)
+                    {
+                        <div class="admin-card__detail-row">
+                            <span>Photos</span>
+                            <div class="admin-photo-thumbs">
+                                @foreach (var photo in b.Photos)
+                                {
+                                    @if (_photoUrls.TryGetValue(photo.Id, out var url))
+                                    {
+                                        <a href="@url" target="_blank" rel="noopener noreferrer" @onclick:stopPropagation="true">
+                                            <img src="@url" class="admin-photo-thumb" alt="Issue photo" />
+                                        </a>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    }
+                    <div class="admin-card__detail-row">
+                        <span>Price</span><span>@(b.ServicePrice > 0 ? $"From £{b.ServicePrice}" : "Quote")</span>
+                    </div>
+                    <div class="admin-card__detail-row">
+                        <span>Booked</span><span>@b.CreatedAt.ToString("d MMM, HH:mm")</span>
+                    </div>
+                    @if (Context.IsAdmin)
+                    {
+                        <div class="admin-card__detail-row">
+                            <span>Assign to</span>
+                            <select class="form-control form-control--compact"
+                                    value="@b.AssignedStaffId"
+                                    @onchange="e => Assign(b.Id, e.Value?.ToString())"
+                                    @onclick:stopPropagation="true">
+                                <option value="">— Unassigned —</option>
+                                @foreach (var s in _activeStaff)
+                                {
+                                    <option value="@s.Id">@s.FullName</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <BookingDangerZone Booking="b"
+                                       OpenPanelKey="@openPanelKey"
+                                       OpenPanelKeyChanged="k => openPanelKey = k"
+                                       OnChanged="OnBookingChanged" />
+                </div>
+            }
+
+            @if (BookingActions.HasActions(Context, b))
+            {
+                <div class="admin-card__actions" @onclick:stopPropagation="true">
+                    <BookingActions Booking="b"
+                                    OpenPanelKey="@openPanelKey"
+                                    OpenPanelKeyChanged="k => openPanelKey = k"
+                                    OnChanged="OnBookingChanged" />
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@* Explicit prev/next rather than infinite scroll: on a phone,
+   infinite scroll makes anything below the list unreachable. *@
+@if (TotalPages > 1)
+{
+    <nav class="pager" aria-label="Booking pages">
+        <button class="btn btn-outline pager__btn"
+                disabled="@(_page == 0)"
+                @onclick="() => GoToPage(_page - 1)">
+            <Icon Name="arrow-left" /> Previous
+        </button>
+        <span class="pager__status" aria-live="polite">
+            Page @(_page + 1) of @TotalPages &middot; @_totalMatches booking@(_totalMatches == 1 ? "" : "s")
+        </span>
+        <button class="btn btn-outline pager__btn"
+                disabled="@(_page >= TotalPages - 1)"
+                @onclick="() => GoToPage(_page + 1)">
+            Next <Icon Name="arrow-right" />
+        </button>
+    </nav>
+}
+
+<!-- DESKTOP: Table -->
+<div class="admin-table-wrapper admin-table-wrapper--desktop-only">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Reference</th>
+                <th>Customer</th>
+                <th>Service</th>
+                <th>Date &amp; Time</th>
+                <th>Status</th>
+                @if (Context.IsAdmin) { <th>Assigned To</th> }
+                @if (Context.CanManage || Context.CanSeeCustomerDetails) { <th class="col-actions">Actions</th> }
+            </tr>
+        </thead>
+        <tbody>
+            @if (_pageBookings.Count == 0)
+            {
+                <tr class="admin-table__empty-row">
+                    <td colspan="@ColumnCount">@EmptyMessage</td>
+                </tr>
+            }
+            @foreach (var booking in _pageBookings)
+            {
+                var b = booking;
+                <tr class="@(expandedId == b.Id ? "row-expanded" : "")" @onclick="() => ToggleExpand(b.Id)">
+                    <td><span class="ref-badge">@b.Reference</span></td>
+                    <td>
+                        <div class="customer-cell">
+                            <strong>@b.CustomerName</strong>
+                            @if (Context.CanSeeCustomerDetails)
+                            {
+                                <span>@b.CustomerEmail</span>
+                            }
+                        </div>
+                    </td>
+                    <td>
+                        <div class="service-cell">
+                            <strong>@b.ServiceName</strong>
+                            <span>@(b.ServicePrice > 0 ? $"£{b.ServicePrice}" : "Quote")</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="date-cell">
+                            <strong>@b.SlotDate.ToString("d MMM yyyy")</strong>
+                            <span>@b.SlotTime</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="status-badge status-badge--@b.Status.ToString().ToLower()">@b.Status</span>
+                        @if (IsLate(b))
+                        {
+                            <span class="status-badge status-badge--late">Not arrived</span>
+                        }
+                    </td>
+                    @if (Context.IsAdmin)
+                    {
+                        <td @onclick:stopPropagation="true">
+                            <select class="form-control form-control--compact form-control--assign"
+                                    value="@b.AssignedStaffId"
+                                    @onchange="e => Assign(b.Id, e.Value?.ToString())">
+                                <option value="">— Unassigned —</option>
+                                @foreach (var s in _activeStaff)
+                                {
+                                    <option value="@s.Id">@s.FullName</option>
+                                }
+                            </select>
+                        </td>
+                    }
+                    @if (Context.CanManage || Context.CanSeeCustomerDetails)
+                    {
+                        <td @onclick:stopPropagation="true">
+                            <div class="action-buttons">
+                                <BookingActions Booking="b"
+                                                OpenPanelKey="@openPanelKey"
+                                                OpenPanelKeyChanged="k => openPanelKey = k"
+                                                OnChanged="OnBookingChanged" />
+                            </div>
+                        </td>
+                    }
+                </tr>
+                @if (expandedId == b.Id && Context.CanSeeCustomerDetails)
+                {
+                    <tr class="row-detail">
+                        <td colspan="@ColumnCount">
+                            <div class="booking-detail">
+                                <div class="booking-detail__grid">
+                                    <div><strong>Phone</strong><span>@(string.IsNullOrWhiteSpace(b.CustomerPhone) ? "—" : b.CustomerPhone)</span></div>
+                                    <div><strong>Bike</strong><span>@(string.IsNullOrWhiteSpace(b.BikeDescription) ? "—" : b.BikeDescription)</span></div>
+                                    <div><strong>Booked</strong><span>@b.CreatedAt.ToString("d MMM yyyy, HH:mm")</span></div>
+                                    <div><strong>Notes</strong><span>@(string.IsNullOrWhiteSpace(b.Notes) ? "—" : b.Notes)</span></div>
+                                    <div>
+                                        <strong>Job notes</strong>
+                                        @if (_bookingNotes.TryGetValue(b.Id, out var rowNotes) && rowNotes.Count > 0)
+                                        {
+                                            <span class="booking-notes">
+                                                @foreach (var note in rowNotes)
+                                                {
+                                                    <span class="booking-note @(note.VisibleToCustomer ? "booking-note--shared" : "")">
+                                                        @note.Body
+                                                        <span class="text-faint-sm">
+                                                            @(note.VisibleToCustomer ? "shared with customer" : "internal")
+                                                            &middot; @note.CreatedAt.ToString("d MMM")
+                                                        </span>
+                                                    </span>
+                                                }
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span>—</span>
+                                        }
+                                    </div>
+                                </div>
+                                @if (b.Photos.Count > 0)
+                                {
+                                    <div class="booking-detail__photos">
+                                        <strong>Photos</strong>
+                                        <div class="admin-photo-thumbs">
+                                            @foreach (var photo in b.Photos)
+                                            {
+                                                @if (_photoUrls.TryGetValue(photo.Id, out var url))
+                                                {
+                                                    <a href="@url" target="_blank" rel="noopener noreferrer">
+                                                        <img src="@url" class="admin-photo-thumb" alt="Issue photo" />
+                                                    </a>
+                                                }
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                                <BookingDangerZone Booking="b"
+                                                   OpenPanelKey="@openPanelKey"
+                                                   OpenPanelKeyChanged="k => openPanelKey = k"
+                                                   OnChanged="OnBookingChanged" />
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [CascadingParameter] private AdminContext Context { get; set; } = default!;
+
+    /// Raised when a booking changes here, so anything outside this tab that depends
+    /// on bookings can refresh.
+    [Parameter] public EventCallback OnBookingsChanged { get; set; }
+
+    private const int PageSize = 25;
+
+    private static readonly string[] Filters =
+        ["All", "Today", "Pending", "Confirmed", "In Progress", "Completed", "Cancelled"];
+
+    private List<Booking> _pageBookings = [];
+    private List<Booking> _todayBookings = [];
+    private List<StaffMember> _activeStaff = [];
+    private int _totalMatches;
+    private int _page;
+    private string activeFilter = "All";
+    private string searchTerm = "";
+    private string sortMode = BookingService.SortUpcoming;
+    private string? expandedId;
+    private string? openPanelKey;
+    private (int total, int today, int pending, int confirmed) stats;
+
+    // Debounce so a burst of typing issues one query instead of one per character.
+    private CancellationTokenSource? _searchDebounce;
+
+    // BookingPhoto.Id -> signed URL, lazily filled the first time a booking with
+    // photos is expanded rather than signing every booking's photos up front.
+    private readonly Dictionary<string, string> _photoUrls = new();
+
+    // Booking.Id -> staff notes on that job, loaded on expand for the same reason.
+    private readonly Dictionary<string, List<CustomerNote>> _bookingNotes = new();
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_totalMatches / (double)PageSize));
+
+    // Reference, Customer, Service, Date & Time, Status — plus the two columns the
+    // header row adds conditionally. Drives the expanded detail row's colspan, so
+    // these conditions must stay in step with the <th> guards in the table header.
+    private int ColumnCount =>
+        5 + (Context.IsAdmin ? 1 : 0) + (Context.CanManage || Context.CanSeeCustomerDetails ? 1 : 0);
+
+    // Says which of the three reasons the list is empty for. The old text was a flat
+    // "No bookings match the current filter", which read as wrong after a search and
+    // as alarming on a brand-new install.
+    private string EmptyMessage =>
+        !string.IsNullOrWhiteSpace(searchTerm) ? $"No bookings match “{searchTerm.Trim()}”."
+        : activeFilter != "All"                ? $"No {activeFilter.ToLowerInvariant()} bookings."
+                                               : "No bookings yet.";
+
+    /// The slot has passed with the bike not booked in. Derived rather than stored, so
+    /// the badge is right the moment the page renders — MaintenanceJobs rings the bell
+    /// for the same condition, but this shouldn't wait on a tick.
+    private static bool IsLate(Booking booking) =>
+        booking.Status is BookingStatus.Pending or BookingStatus.Confirmed &&
+        ShopClock.Now - BookingService.SlotStart(booking) >= MaintenanceJobs.LateAfter;
+
+    protected override void OnInitialized()
+    {
+        Reload();
+        RefreshStats();
+        if (Context.IsAdmin)
+            _activeStaff = AuthService.GetAllStaff().Where(s => s.IsActive).ToList();
+    }
+
+    private void Reload()
+    {
+        var (items, total) = BookingService.GetBookingsPage(
+            Context.BookingScopeStaffId, activeFilter, searchTerm, _page, PageSize, sortMode);
+
+        // A delete or a status change can shrink the result set past the current page;
+        // step back rather than showing an empty list with a pager that says otherwise.
+        if (items.Count == 0 && _page > 0 && total > 0)
+        {
+            _page = Math.Max(0, (int)Math.Ceiling(total / (double)PageSize) - 1);
+            (items, total) = BookingService.GetBookingsPage(
+                Context.BookingScopeStaffId, activeFilter, searchTerm, _page, PageSize, sortMode);
+        }
+
+        _pageBookings = items;
+        _totalMatches = total;
+
+        // Today's schedule banner is only shown on the unfiltered view.
+        _todayBookings = activeFilter == "All"
+            ? BookingService.GetBookingsPage(Context.BookingScopeStaffId, "Today", null, 0, PageSize).items
+            : [];
+    }
+
+    private void RefreshStats() =>
+        stats = Context.CanViewAllBookings
+            ? BookingService.GetStats()
+            : BookingService.GetStatsForStaff(Context.Staff.Id);
+
+    private void GoToPage(int page)
+    {
+        _page = Math.Clamp(page, 0, TotalPages - 1);
+        expandedId = null;
+        openPanelKey = null;
+        Reload();
+    }
+
+    private void SetFilter(string filter)
+    {
+        activeFilter = filter;
+        expandedId = null;
+        openPanelKey = null;
+        _page = 0;          // a new filter starts at the first page
+        Reload();
+    }
+
+    private void SetSort(ChangeEventArgs e)
+    {
+        sortMode = e.Value?.ToString() ?? BookingService.SortUpcoming;
+        expandedId = null;
+        openPanelKey = null;
+        _page = 0;          // a re-sort starts at the first page
+        Reload();
+    }
+
+    // Debounced: the search box fires on every keystroke, and each one is a real
+    // database query rather than an in-memory filter. 250ms turns a typed word into
+    // one round trip instead of eight.
+    private async Task OnSearch(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+        _searchDebounce = new CancellationTokenSource();
+        var token = _searchDebounce.Token;
+
+        try
+        {
+            await Task.Delay(250, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;   // superseded by a later keystroke
+        }
+
+        _page = 0;
+        expandedId = null;
+        openPanelKey = null;
+        Reload();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleExpand(string id)
+    {
+        var opening = expandedId != id;
+        expandedId = opening ? id : null;
+        if (!opening) return;
+
+        var booking = _pageBookings.Find(b => b.Id == id);
+        if (booking is null) return;
+
+        // Photos are not eager-loaded with the list — only the row being opened needs
+        // them, so they're fetched here and then signed. Job notes ride along for the
+        // same reason.
+        if (booking.Photos.Count == 0)
+            booking.Photos = BookingService.GetPhotosForBooking(booking.Id);
+
+        _bookingNotes[booking.Id] = Customers.GetNotesForBooking(booking.Id);
+
+        foreach (var photo in booking.Photos)
+        {
+            if (_photoUrls.ContainsKey(photo.Id)) continue;
+            var url = await Storage.GetSignedPhotoUrlAsync(photo.StoragePath, TimeSpan.FromMinutes(15));
+            if (url is not null) _photoUrls[photo.Id] = url;
+        }
+    }
+
+    private void Assign(string bookingId, string? staffId)
+    {
+        if (!Context.IsAdmin) return;  // assignment is admin-only
+        BookingService.AssignStaff(bookingId, staffId);
+        Reload();
+    }
+
+    private async Task OnBookingChanged(Booking booking)
+    {
+        Reload();
+        RefreshStats();
+
+        // Re-read this job's notes. Reload refreshes the bookings but not the note
+        // cache, which is otherwise only filled by ToggleExpand — so on an already-open
+        // row a note just written stayed invisible until it was collapsed and reopened.
+        _bookingNotes[booking.Id] = Customers.GetNotesForBooking(booking.Id);
+
+        await OnBookingsChanged.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+    }
+}

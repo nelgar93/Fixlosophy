@@ -3041,14 +3041,14 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     font-size: var(--fs-caption);
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
     white-space: nowrap;
 }
 
 @media (hover: hover) and (pointer: fine) {
     .filter-tab:hover { border-color: var(--green); color: var(--white); }
 }
-.filter-tab.active { background: var(--green); border-color: var(--green); color: var(--dark); font-weight: 700; }
+.filter-tab.active { background: var(--green); border-color: var(--green); color: var(--dark); }
 
 .admin-search { width: 100%; }
 .admin-search .form-control { font-size: var(--fs-sm); }

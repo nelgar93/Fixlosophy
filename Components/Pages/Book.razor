@@ -179,15 +179,25 @@
                                 var isSelected = selectedDate.HasValue && selectedDate.Value.Date == date.Date;
                                 var isToday = date.Date == ShopClock.Today;
 
+                                @* Why the day is unavailable, when there's a reason worth
+                                   giving. "Closed — Bank holiday" and "fully booked" are
+                                   different disappointments: one means try tomorrow, the
+                                   other means try a different time today. A grey square
+                                   says neither. Null for an ordinary full day, which the
+                                   legend already explains. *@
+                                var closedLabel = isPast ? null : GetDayLabel(date);
+
                                 var css = "cal-day"
                                     + (isSelected ? " cal-day--selected" : "")
                                     + (isToday && !isSelected ? " cal-day--today" : "")
-                                    + (avail ? " cal-day--available" : " cal-day--disabled");
+                                    + (avail ? " cal-day--available" : " cal-day--disabled")
+                                    + (closedLabel is not null ? " cal-day--closed" : "");
 
                                 <button type="button" class="@css"
                                         disabled="@(!avail)"
                                         aria-pressed="@isSelected.ToString().ToLowerInvariant()"
-                                        aria-label="@date.ToString("dddd d MMMM yyyy")"
+                                        title="@closedLabel"
+                                        aria-label="@($"{date:dddd d MMMM yyyy}{(closedLabel is null ? "" : $" — {closedLabel}")}")"
                                         @onclick="() => OnDayClick(date, avail)">@day</button>
                             }
                         </div>
@@ -195,6 +205,7 @@
                             <span class="cal-legend__dot cal-legend__dot--available"></span> Available
                             <span class="cal-legend__dot cal-legend__dot--selected"></span> Selected
                             <span class="cal-legend__dot cal-legend__dot--disabled"></span> Unavailable
+                            <span class="cal-legend__closed">00</span> Closed
                         </div>
                     </div>
 
@@ -509,7 +520,7 @@
     private DateTime? selectedDate;
     private string? selectedTime;
     private List<string> availableSlots = new();
-    private Dictionary<DateTime, bool> _monthAvailability = new();
+    private Dictionary<DateTime, DayAvailability> _monthAvailability = new();
 
     // Step 3
     private string customerName = "";
@@ -585,11 +596,17 @@
     private bool AtBookingLimit => upcomingCount >= BookingService.MaxActiveBookingsPerEmail;
 
     private bool GetDateAvailable(DateTime date) =>
-        _monthAvailability.TryGetValue(date.Date, out var avail) && avail;
+        _monthAvailability.TryGetValue(date.Date, out var day) && day.IsBookable;
+
+    /// What to tell the customer about a day they can't book — "Closed — Bank
+    /// holiday" rather than a silently grey square. Null when the day is simply full,
+    /// which the calendar already communicates on its own.
+    private string? GetDayLabel(DateTime date) =>
+        _monthAvailability.TryGetValue(date.Date, out var day) ? day.CustomerLabel : null;
 
     private void LoadMonthAvailability()
     {
-        _monthAvailability = BookingService.GetDateAvailabilityForMonth(calendarMonth.Year, calendarMonth.Month);
+        _monthAvailability = BookingService.DescribeMonth(calendarMonth.Year, calendarMonth.Month);
     }
 
     private void SelectService(ServiceOption svc) => selectedService = svc;
@@ -654,8 +671,8 @@
         selectedTime = null;
         availableSlots = BookingService.GetAvailableSlots(date);
         // If all slots are now full (booked since month data was loaded), update the calendar
-        if (availableSlots.Count == 0)
-            _monthAvailability[date.Date] = false;
+        if (availableSlots.Count == 0 && _monthAvailability.TryGetValue(date.Date, out var day))
+            _monthAvailability[date.Date] = day with { HasFreeSlot = false };
     }
 
     private void PrevMonth()

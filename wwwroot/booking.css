@@ -488,6 +488,17 @@
     background: transparent;
 }
 
+/* Shut, as opposed to merely full. A struck-through number distinguishes the two at
+   a glance — "come back tomorrow" versus "try another time today" — without adding
+   colour the calendar doesn't otherwise use. The reason itself is on the title and
+   the aria-label, so it reaches a screen reader too. */
+.cal-day--closed {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    color: rgba(255,255,255,0.28);
+    cursor: not-allowed;
+}
+
 .cal-day--available {
     color: var(--white);
     background: var(--dark-3);
@@ -529,6 +540,15 @@
 .cal-legend__dot--available { background: var(--dark-4); border: 1px solid var(--border-dark); }
 .cal-legend__dot--selected { background: var(--green); }
 .cal-legend__dot--disabled { background: transparent; border: 1px solid var(--border-dark); opacity: 0.3; }
+
+/* The legend's "closed" marker mirrors the day itself rather than being a dot — a
+   struck-through swatch is what the calendar actually shows. */
+.cal-legend__closed {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    color: rgba(255,255,255,0.4);
+    margin-right: var(--space-1);
+}
 
 /* ---------- Time Slots ---------- */
 .timeslot-wrapper h4 {
@@ -1007,14 +1027,24 @@
     font-size: var(--fs-caption);
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s;
+    /* Named properties, not `all`. The active state used to also change font-weight,
+       and `all` happily animated the resulting width change — so selecting a tab made
+       it grow by ~3px over 150ms and shunt every tab after it sideways. Listing the
+       properties means a future style that affects layout can't quietly become an
+       animation. */
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
     white-space: nowrap;
 }
 
 @media (hover: hover) and (pointer: fine) {
     .filter-tab:hover { border-color: var(--green); color: var(--white); }
 }
-.filter-tab.active { background: var(--green); border-color: var(--green); color: var(--dark); font-weight: 700; }
+
+/* Deliberately no font-weight change. Bold text is wider, so it resized the button
+   and shifted its neighbours every time the selection moved. The weight was
+   redundant anyway: a solid green pill with near-black text on a dark bar is already
+   about as loud as an active state gets. */
+.filter-tab.active { background: var(--green); border-color: var(--green); color: var(--dark); }
 
 .admin-search { width: 100%; }
 .admin-search .form-control { font-size: var(--fs-sm); }
@@ -1178,6 +1208,10 @@
 .status-badge--inprogress { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
 .status-badge--completed  { background: rgba(107,114,128,0.15);color: #9ca3af; border: 1px solid rgba(107,114,128,0.3);}
 .status-badge--cancelled  { background: rgba(220,38,38,0.12);  color: #f87171; border: 1px solid rgba(220,38,38,0.25); }
+/* Not a booking status — a derived "the slot has passed and the bike isn't in".
+   Amber rather than red on purpose: most late arrivals turn up, so this is a prompt
+   to ring them, not a verdict. Distinct from --pending, which is a real status. */
+.status-badge--late       { background: rgba(249,115,22,0.15); color: #fb923c; border: 1px solid rgba(249,115,22,0.35); }
 
 /* Action buttons */
 .action-buttons { display: flex; gap: var(--space-2); flex-wrap: wrap; }
@@ -1270,6 +1304,121 @@
 }
 .staff-add-card h3 { margin: 0 0 var(--space-4); font-size: var(--fs-h3-compact); color: var(--white); }
 
+/* ── Availability tab ────────────────────────────────────────────────────────
+   Closures and staff absence, side by side above 900px. They're read together —
+   "are we shut, and who's in" is one question — but each is self-contained, so on a
+   phone they stack rather than interleave. */
+.availability-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-6);
+}
+
+@media (min-width: 900px) {
+    .availability-grid { grid-template-columns: 1fr 1fr; align-items: start; }
+}
+
+.availability-panel {
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius);
+    padding: var(--space-6);
+}
+
+.availability-panel h3 { margin: 0 0 var(--space-2); font-size: var(--fs-h3-compact); color: var(--white); }
+.availability-panel > .text-muted-sm { display: block; margin-bottom: var(--space-4); }
+
+/* The add form, separated from the list below it by a rule rather than only whitespace —
+   they're both lists of fields otherwise, and ran together. */
+.availability-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-bottom: var(--space-5);
+    margin-bottom: var(--space-5);
+    border-bottom: 1px solid var(--border-dark);
+}
+
+.availability-form .form-group { margin: 0; }
+.availability-form .btn { align-self: flex-start; }
+
+.availability-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.availability-list__item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    background: var(--dark-3);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3) var(--space-4);
+}
+
+.availability-list__item strong { color: var(--white); }
+
+/* Bookings a closure has just stranded. Amber, above both panels, and deliberately
+   loud: this is the screen's real job — the shop said "close that week", and the
+   thing that matters next is the people who had booked into it. */
+.availability-affected {
+    background: rgba(234,179,8,0.08);
+    border: 1px solid rgba(234,179,8,0.35);
+    border-radius: var(--radius);
+    padding: var(--space-5);
+    margin-bottom: var(--space-6);
+}
+
+.availability-affected h3 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-2);
+    font-size: var(--fs-h3-compact);
+    color: #eab308;
+}
+
+.availability-affected > .text-muted-sm { display: block; margin-bottom: var(--space-4); }
+
+.availability-affected__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    background: var(--dark-2);
+    border: 1px solid var(--border-dark);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3) var(--space-4);
+}
+
+.availability-affected__row + .availability-affected__row { margin-top: var(--space-2); }
+
+.availability-affected__info {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+/* Wraps rather than squeezing the inputs to nothing on a narrow window — the date
+   and time pickers have a floor below which they stop being usable. */
+.availability-affected__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.availability-affected__actions .form-control { width: auto; min-width: 8.5rem; }
+
 /* Admin utility: success banner & info banner */
 .admin-success {
     background: rgba(61,187,72,0.10);
@@ -1278,6 +1427,39 @@
     padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-sm);
     margin-bottom: var(--space-6);
+    font-size: var(--fs-sm);
+}
+
+/* Amber counterpart to .admin-success — something that needs attention but isn't an
+   error, like nobody being marked as a mechanic. */
+.admin-inline-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    background: rgba(234,179,8,0.10);
+    border: 1px solid rgba(234,179,8,0.3);
+    color: #eab308;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-6);
+    font-size: var(--fs-sm);
+}
+
+.admin-inline-warning strong { color: inherit; }
+
+/* Why the day isn't bookable, above the slot list on the Calendar tab. Wraps rather
+   than truncates: the closure reason is the whole point of it. */
+.day-cal__notice {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    background: rgba(234,179,8,0.10);
+    border: 1px solid rgba(234,179,8,0.3);
+    color: #eab308;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-4);
     font-size: var(--fs-sm);
 }
 

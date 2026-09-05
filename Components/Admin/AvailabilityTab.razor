@@ -1,0 +1,508 @@
+@inject AvailabilityService Availability
+@inject BookingService BookingService
+@inject AuthService AuthService
+@inject IEmailSender EmailSender
+@inject IConfiguration Config
+@inject ILogger<AvailabilityTab> Logger
+
+@*
+    Days the shop is shut, and mechanics being away. Admin-only.
+
+    Two lists rather than one, because they answer different questions and only one is
+    any of a customer's business: a closure shows its reason on the public calendar,
+    an absence never does.
+
+    The important part of this screen isn't adding a row — it's the warning that comes
+    with it. Closing a week that already has bookings in it, without noticing, is how
+    somebody turns up to a locked door.
+*@
+
+@if (!Availability.MechanicRuleApplies)
+{
+    <div class="admin-inline-warning">
+        <Icon Name="alert" />
+        <span>
+            Nobody is marked as working on bikes, so holidays won't close any days.
+            Tick <strong>Works on bikes</strong> for whoever is in the workshop, on the
+            Staff Management tab.
+        </span>
+    </div>
+}
+
+@if (error is not null)
+{
+    <div class="booking-error admin-inline-error">@error</div>
+}
+@if (success is not null)
+{
+    <div class="admin-success"><Icon Name="check" /> @success</div>
+}
+
+<!-- ── Displaced bookings ───────────────────────────────────────────────── -->
+@* Everyone currently booked into a day the shop can't serve — not just whoever the
+   last change stranded. It stays here until each one is dealt with, because a warning
+   you can navigate away from is a warning you will miss.
+
+   Nothing happens to them automatically: cancelling somebody's appointment is a
+   decision, and the shop may well want to ring them instead. *@
+@if (_affected.Count > 0)
+{
+    <div class="availability-affected">
+        <h3>
+            <Icon Name="alert" />
+            @_affected.Count booking@(_affected.Count == 1 ? "" : "s") on days you're closed
+        </h3>
+        <p class="text-muted-sm">
+            These are still live — the customers haven't been told. Move each one to a
+            time that works, or cancel it and invite them to rebook; either way they get
+            an email.
+        </p>
+
+        @foreach (var booking in _affected)
+        {
+            var b = booking;
+            <div class="availability-affected__row">
+                <div class="availability-affected__info">
+                    <strong>@b.CustomerName</strong>
+                    <span class="ref-badge">@b.Reference</span>
+                    <span class="text-muted-sm">
+                        @b.ServiceName &middot; @b.SlotDate.ToString("ddd d MMM") at @b.SlotTime
+                    </span>
+                </div>
+
+                <div class="availability-affected__actions">
+                    <label class="sr-only" for="move-date-@b.Id">New date</label>
+                    <input id="move-date-@b.Id" type="date" class="form-control form-control--compact"
+                           min="@ShopClock.Today.ToString("yyyy-MM-dd")"
+                           max="@BookingService.LatestBookableDate.ToString("yyyy-MM-dd")"
+                           value="@MoveDateFor(b.Id)"
+                           @onchange="e => SetMoveDate(b.Id, e.Value?.ToString())" />
+
+                    <label class="sr-only" for="move-slot-@b.Id">New time</label>
+                    <select id="move-slot-@b.Id" class="form-control form-control--compact"
+                            value="@MoveSlotFor(b.Id)"
+                            @onchange="e => SetMoveSlot(b.Id, e.Value?.ToString())">
+                        <option value="">— pick a time —</option>
+                        @foreach (var slot in SlotsForMove(b.Id))
+                        {
+                            <option value="@slot">@slot</option>
+                        }
+                    </select>
+
+                    <button class="action-btn action-btn--primary"
+                            disabled="@(string.IsNullOrEmpty(MoveSlotFor(b.Id)))"
+                            @onclick="() => Move(b)">Move &amp; email</button>
+
+                    <button class="action-btn action-btn--cancel"
+                            @onclick="() => CancelAndInvite(b)">Cancel &amp; invite rebooking</button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<div class="availability-grid">
+
+    <!-- ── Closures ─────────────────────────────────────────────────────── -->
+    <section class="availability-panel">
+        <h3>Shop closures</h3>
+        <p class="text-muted-sm">
+            Customers see the reason on the booking calendar, so keep it short and true —
+            “Bank holiday”, “Staff training”.
+        </p>
+
+        <div class="availability-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="closure-from">First day closed</label>
+                    <input id="closure-from" type="date" class="form-control"
+                           value="@newClosureFrom.ToString("yyyy-MM-dd")"
+                           @onchange="e => { if (DateTime.TryParse(e.Value?.ToString(), out var d)) { newClosureFrom = d; if (newClosureTo < d) newClosureTo = d; } }" />
+                </div>
+                <div class="form-group">
+                    <label for="closure-to">Last day closed</label>
+                    <input id="closure-to" type="date" class="form-control"
+                           value="@newClosureTo.ToString("yyyy-MM-dd")"
+                           @onchange="e => { if (DateTime.TryParse(e.Value?.ToString(), out var d)) newClosureTo = d; }" />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="closure-reason">Reason</label>
+                <input id="closure-reason" class="form-control" @bind="newClosureReason"
+                       placeholder="e.g. Christmas Day" maxlength="80" />
+            </div>
+
+            @* Part-day is the exception, so it's behind a toggle rather than two more
+               fields everyone has to skip past. *@
+            <label class="admin-toggle">
+                <span>Only part of the day</span>
+                <input type="checkbox" @bind="newClosurePartDay" />
+            </label>
+
+            @if (newClosurePartDay)
+            {
+                @* Selects rather than <input type="time">: appointments start on the
+                   hour, so a free-text time could name a window that clips no slot at
+                   all. It also keeps the stored value in the "HH:mm" form
+                   Closure.CoversSlot parses. *@
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="closure-start">Closed from</label>
+                        <select id="closure-start" class="form-control" @bind="newClosureStart">
+                            @foreach (var t in HourOptions)
+                            {
+                                <option value="@t">@t</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="closure-end">Until</label>
+                        <select id="closure-end" class="form-control" @bind="newClosureEnd">
+                            @foreach (var t in HourOptions)
+                            {
+                                <option value="@t">@t</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <p class="text-faint-sm">
+                    Slots starting inside that window go; the rest of the day stays bookable.
+                </p>
+            }
+
+            <button class="btn btn-primary" @onclick="AddClosure">Add closure</button>
+        </div>
+
+        @if (_closures.Count == 0)
+        {
+            <div class="admin-empty"><p>No closures coming up.</p></div>
+        }
+        else
+        {
+            <ul class="availability-list">
+                @foreach (var closure in _closures)
+                {
+                    var c = closure;
+                    <li class="availability-list__item">
+                        <div>
+                            <strong>@c.DescribeDates()</strong>
+                            @if (!c.IsAllDay)
+                            {
+                                <span class="status-badge status-badge--pending">@c.StartTime–@c.EndTime</span>
+                            }
+                            <div class="text-muted-sm">@c.Reason</div>
+                        </div>
+                        <button class="action-btn action-btn--keep" @onclick="() => RemoveClosure(c.Id)">Remove</button>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <!-- ── Staff absence ────────────────────────────────────────────────── -->
+    <section class="availability-panel">
+        <h3>Staff away</h3>
+        <p class="text-muted-sm">
+            Internal only — customers never see who's off. A day with no mechanic in
+            stops taking bookings on its own.
+        </p>
+
+        <div class="availability-form">
+            <div class="form-group">
+                <label for="absence-staff">Who</label>
+                <select id="absence-staff" class="form-control" @bind="newAbsenceStaffId">
+                    <option value="">— pick someone —</option>
+                    @foreach (var s in _staff)
+                    {
+                        <option value="@s.Id">@s.FullName@(s.IsMechanic ? "" : " (not a mechanic)")</option>
+                    }
+                </select>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="absence-from">First day away</label>
+                    <input id="absence-from" type="date" class="form-control"
+                           value="@newAbsenceFrom.ToString("yyyy-MM-dd")"
+                           @onchange="e => { if (DateTime.TryParse(e.Value?.ToString(), out var d)) { newAbsenceFrom = d; if (newAbsenceTo < d) newAbsenceTo = d; } }" />
+                </div>
+                <div class="form-group">
+                    <label for="absence-to">Last day away</label>
+                    <input id="absence-to" type="date" class="form-control"
+                           value="@newAbsenceTo.ToString("yyyy-MM-dd")"
+                           @onchange="e => { if (DateTime.TryParse(e.Value?.ToString(), out var d)) newAbsenceTo = d; }" />
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="absence-type">Type</label>
+                    <select id="absence-type" class="form-control" @bind="newAbsenceType">
+                        @foreach (var t in Enum.GetValues<AbsenceType>())
+                        {
+                            <option value="@t">@t</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="absence-note">Note (optional)</label>
+                    <input id="absence-note" class="form-control" @bind="newAbsenceNote" maxlength="120" />
+                </div>
+            </div>
+
+            <button class="btn btn-primary" @onclick="AddAbsence">Add absence</button>
+        </div>
+
+        @if (_absences.Count == 0)
+        {
+            <div class="admin-empty"><p>Nobody booked off.</p></div>
+        }
+        else
+        {
+            <ul class="availability-list">
+                @foreach (var absence in _absences)
+                {
+                    var a = absence;
+                    <li class="availability-list__item">
+                        <div>
+                            <strong>@(a.Staff?.FullName ?? "Unknown")</strong>
+                            <span class="status-badge status-badge--pending">@a.Type</span>
+                            <div class="text-muted-sm">
+                                @a.DescribeDates()@(string.IsNullOrWhiteSpace(a.Note) ? "" : $" · {a.Note}")
+                            </div>
+                        </div>
+                        <button class="action-btn action-btn--keep" @onclick="() => RemoveAbsence(a.Id)">Remove</button>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>
+
+@code {
+    [CascadingParameter] private AdminContext Context { get; set; } = default!;
+
+    /// Raised when availability changes, so other views re-read.
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<Closure> _closures = [];
+    private List<StaffAbsence> _absences = [];
+    private List<StaffMember> _staff = [];
+    private List<Booking> _affected = [];
+
+    private string? error;
+    private string? success;
+
+    // New closure
+    private DateTime newClosureFrom = ShopClock.Today;
+    private DateTime newClosureTo = ShopClock.Today;
+    private string newClosureReason = "";
+    private bool newClosurePartDay;
+    private string newClosureStart = "13:00";
+    private string newClosureEnd = "19:00";
+
+    /// Every hour the shop could plausibly open or shut, widest trading day plus a
+    /// margin. Kept as "HH:mm" strings because that is the form Closure stores and
+    /// compares slots in.
+    private static readonly string[] HourOptions =
+        [.. Enumerable.Range(7, 15).Select(h => $"{h:00}:00")];
+
+    // New absence
+    private string newAbsenceStaffId = "";
+    private DateTime newAbsenceFrom = ShopClock.Today;
+    private DateTime newAbsenceTo = ShopClock.Today;
+    private AbsenceType newAbsenceType = AbsenceType.Holiday;
+    private string newAbsenceNote = "";
+
+    // Booking.Id -> the date/slot chosen for it in the displaced-bookings list.
+    private readonly Dictionary<string, (DateTime Date, string Slot)> _moves = new();
+
+    protected override void OnInitialized() => Reload();
+
+    private void Reload()
+    {
+        _closures = Availability.GetClosures();
+        _absences = Availability.GetAbsences();
+        _staff = AuthService.GetAllStaff().Where(s => s.IsActive).ToList();
+
+        // The standing list of people stranded by whatever is currently in place —
+        // not just by the change someone made a moment ago. Recomputed on every
+        // reload so it clears itself as each one is dealt with.
+        _affected = Availability.FindStrandedBookings();
+    }
+
+    private async Task AddClosure()
+    {
+        if (!Context.IsAdmin) return;  // server-side guard
+        error = success = null;
+
+        var closure = new Closure
+        {
+            StartDate = newClosureFrom,
+            EndDate = newClosureTo,
+            Reason = newClosureReason,
+            StartTime = newClosurePartDay ? newClosureStart : null,
+            EndTime = newClosurePartDay ? newClosureEnd : null,
+            CreatedByStaffId = Context.Staff.Id
+        };
+
+        var (saved, failure) = Availability.AddClosure(closure);
+        if (failure is not null) { error = failure; return; }
+
+        success = $"Closed {saved!.DescribeDates()}.";
+        newClosureReason = "";
+        newClosurePartDay = false;
+
+        // Reload recomputes the stranded list, so anyone this closure just displaced
+        // appears above — along with anyone displaced by an earlier one who still
+        // hasn't been dealt with.
+        Reload();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task AddAbsence()
+    {
+        if (!Context.IsAdmin) return;  // server-side guard
+        error = success = null;
+
+        if (string.IsNullOrWhiteSpace(newAbsenceStaffId)) { error = "Pick who's away."; return; }
+
+        var (saved, failure) = Availability.AddAbsence(new StaffAbsence
+        {
+            StaffId = newAbsenceStaffId,
+            StartDate = newAbsenceFrom,
+            EndDate = newAbsenceTo,
+            Type = newAbsenceType,
+            Note = newAbsenceNote
+        });
+        if (failure is not null) { error = failure; return; }
+
+        success = $"{saved!.Staff?.FullName ?? "Away"} booked off {saved.DescribeDates()}.";
+        newAbsenceNote = "";
+
+        Reload();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RemoveClosure(string id)
+    {
+        if (!Context.IsAdmin) return;
+        error = success = null;
+        Availability.RemoveClosure(id);
+        Reload();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RemoveAbsence(string id)
+    {
+        if (!Context.IsAdmin) return;
+        error = success = null;
+        Availability.RemoveAbsence(id);
+        Reload();
+        await OnChanged.InvokeAsync();
+    }
+
+    // ── Dealing with a displaced booking ─────────────────────────────────────
+
+    private string MoveDateFor(string bookingId) =>
+        (_moves.TryGetValue(bookingId, out var m) ? m.Date : ShopClock.Today).ToString("yyyy-MM-dd");
+
+    private string MoveSlotFor(string bookingId) =>
+        _moves.TryGetValue(bookingId, out var m) ? m.Slot : "";
+
+    private void SetMoveDate(string bookingId, string? value)
+    {
+        if (!DateTime.TryParse(value, out var date)) return;
+        // Changing the date clears the slot: the times available on the new day are
+        // not the times that were available on the old one.
+        _moves[bookingId] = (date, "");
+    }
+
+    private void SetMoveSlot(string bookingId, string? value)
+    {
+        var date = _moves.TryGetValue(bookingId, out var m) ? m.Date : ShopClock.Today;
+        _moves[bookingId] = (date, value ?? "");
+    }
+
+    private List<string> SlotsForMove(string bookingId)
+    {
+        var date = _moves.TryGetValue(bookingId, out var m) ? m.Date : ShopClock.Today;
+        return BookingService.GetAvailableSlots(date);
+    }
+
+    private async Task Move(Booking booking)
+    {
+        if (!Context.IsAdmin) return;
+        error = success = null;
+
+        if (!_moves.TryGetValue(booking.Id, out var move) || string.IsNullOrEmpty(move.Slot))
+        {
+            error = "Pick a new date and time first.";
+            return;
+        }
+
+        var previousDate = booking.SlotDate;
+        var previousSlot = booking.SlotTime;
+
+        var (moved, failure) = BookingService.RescheduleBooking(booking.Id, move.Date, move.Slot);
+        if (failure is not null) { error = failure; return; }
+
+        // RescheduleBooking returns a non-null booking whenever it returns no error.
+        var rescheduled = moved!;
+
+        await EmailCustomerAsync(() => EmailSender.SendBookingRescheduledAsync(
+            rescheduled, previousDate, previousSlot, ClosureReasonFor(previousDate), ManageLink(rescheduled)));
+
+        success = $"{rescheduled.Reference} moved to {rescheduled.SlotDate:ddd d MMM} at {rescheduled.SlotTime}, and {rescheduled.CustomerName} has been emailed.";
+        _affected.RemoveAll(b => b.Id == booking.Id);
+        _moves.Remove(booking.Id);
+
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task CancelAndInvite(Booking booking)
+    {
+        if (!Context.IsAdmin) return;
+        error = success = null;
+
+        var reason = ClosureReasonFor(booking.SlotDate);
+        BookingService.UpdateStatus(booking.Id, BookingStatus.Cancelled);
+
+        await EmailCustomerAsync(() => EmailSender.SendBookingCancelledByShopAsync(
+            booking, reason, BookAgainLink()));
+
+        success = $"{booking.Reference} cancelled, and {booking.CustomerName} has been invited to rebook.";
+        _affected.RemoveAll(b => b.Id == booking.Id);
+
+        await OnChanged.InvokeAsync();
+    }
+
+    /// The customer-facing reason for a day being shut, if there is one. An absence
+    /// deliberately yields nothing — whose holiday it is isn't a customer's business.
+    private string? ClosureReasonFor(DateTime date) => Availability.AllDayClosureOn(date)?.Reason;
+
+    // Built from configuration: this can be reached from a background-free circuit but
+    // an email needs an absolute URL, and App:BaseUrl is the only reliable source.
+    private string? BaseUrl => Config["App:BaseUrl"]?.TrimEnd('/');
+
+    private string? ManageLink(Booking booking) =>
+        booking.CustomerId is null || string.IsNullOrWhiteSpace(BaseUrl) ? null : $"{BaseUrl}/account";
+
+    private string? BookAgainLink() =>
+        string.IsNullOrWhiteSpace(BaseUrl) ? null : $"{BaseUrl}/book";
+
+    /// Mail is best-effort here as everywhere else: the booking has already been moved
+    /// or cancelled, so a failure costs the notification and nothing else.
+    private async Task EmailCustomerAsync(Func<Task> send)
+    {
+        try
+        {
+            await send();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not email a customer about a displaced booking.");
+        }
+    }
+}

@@ -87,6 +87,17 @@ public class EnquiryService(
           .OrderByDescending(e => e.CreatedAt)
           .ToList();
 
+    /// <summary>
+    /// How many messages are still outstanding. Drives the badge on the dashboard's
+    /// tab bar.
+    /// </summary>
+    /// <remarks>
+    /// A count query rather than <c>GetEnquiries().Count</c>: the badge is wanted on
+    /// every dashboard load, including by someone who never opens the tab, and there
+    /// is no reason to pull every message body across to draw a number.
+    /// </remarks>
+    public int CountUnhandled() => db.Enquiries.Count(e => e.HandledAt == null);
+
     public bool MarkHandled(string id, bool handled)
     {
         var enquiry = db.Enquiries.Find(id);

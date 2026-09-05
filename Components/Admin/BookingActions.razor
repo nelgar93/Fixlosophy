@@ -1,0 +1,276 @@
+@inject BookingService BookingService
+@inject CustomerService Customers
+@inject NotificationService Notifications
+@inject IEmailSender EmailSender
+@inject ILogger<BookingActions> Logger
+
+@*
+    The controls for one booking: advance it, reach the customer, call it off.
+
+    Shared by the Bookings cards, the Bookings table and the Calendar, so all three
+    offer exactly the same set — they used to, via a RenderFragment on a 2,000-line
+    page, and this is that fragment with the state it needs travelling alongside it.
+
+    Which confirm panel is open is coordinated by the PARENT rather than held here, so
+    opening one closes any other on the page. Two confirms open at once is how a single
+    row ended up showing twelve controls.
+*@
+
+<div class="booking-actions">
+    @* ── Tier 1: the one thing you came here to do ────────────────────
+       Confirm / In Progress / Complete were three differently-coloured
+       buttons for what is really one control — they were already mutually
+       exclusive, so only ever one showed. Now they share the primary slot
+       and read as the next step rather than the state they set.
+
+       The else-if is Reopen, which is what makes a mis-tap survivable: without
+       it the only way back from a wrong Cancel was to delete the booking and
+       re-key it, which is why Delete got reached for far more often than it
+       should have been. A cancelled or completed booking has no next stage —
+       the primary slot is free, and reopening is the only thing left to do with
+       it. CanTransition is the whole condition: those two statuses are exactly
+       the ones that can go back to Confirmed. *@
+    @if (Context.CanManage && BookingService.NextStage(Booking.Status) is { } next)
+    {
+        <button class="action-btn action-btn--primary booking-actions__primary"
+                @onclick="() => AdvanceStage(next)">@StageLabel(next)</button>
+    }
+    else if (Context.CanManage && BookingService.CanTransition(Booking.Status, BookingStatus.Confirmed))
+    {
+        <button class="action-btn action-btn--primary booking-actions__primary"
+                @onclick="Reopen">
+            <Icon Name="undo" /> Reopen booking
+        </button>
+    }
+
+    @* ── Tier 2: reaching the customer, and calling the job off ───────
+       Cancel spent a release behind a "…" menu — three taps for the second
+       most common thing done to a booking, and invisible until you went
+       looking. It is back on the row and red. The two contact links take the
+       larger share of the width because they are used far more often; Cancel
+       is deliberately the narrow one. It still asks before it fires. *@
+    @if (ShowContact || ShowCancel)
+    {
+        <div class="booking-actions__row">
+            @* The booking form has required a phone since Book.razor started
+               validating it, so in practice both links always render. The check
+               is IsValidPhone rather than a blank test because older rows
+               predate that, and a value with no dialable digits produced a
+               WhatsApp link to wa.me/ with no number and an empty tel: link. *@
+            @if (ShowContact)
+            {
+                <a class="action-btn action-btn--whatsapp"
+                   href="@ContactLinks.WhatsApp(Booking)" target="_blank" rel="noopener"
+                   title="WhatsApp @Booking.CustomerName">
+                    <Icon Name="whatsapp" /> <span class="action-btn__label">WhatsApp</span>
+                </a>
+                <a class="action-btn action-btn--call"
+                   href="@ContactLinks.Tel(Booking.CustomerPhone)"
+                   title="Call @Booking.CustomerName">
+                    <Icon Name="phone" /> <span class="action-btn__label">Call</span>
+                </a>
+            }
+
+            @if (ShowCancel)
+            {
+                <button class="action-btn action-btn--cancel"
+                        @onclick="() => OpenPanel(PanelCancel)">Cancel</button>
+            }
+        </div>
+    }
+</div>
+
+@* Cancel emails the customer and cannot be undone except by Reopen, so it gets the
+   same two-step confirm Delete has always had. It used to fire on a single click. *@
+@if (IsOpen(PanelCancel))
+{
+    <div class="booking-confirm" @onclick:stopPropagation="true">
+        <p class="booking-confirm__text">
+            Cancel <strong>@Booking.Reference</strong> and free the slot?
+            @if (!string.IsNullOrWhiteSpace(Booking.CustomerEmail))
+            {
+                <span>@Booking.CustomerName will be emailed.</span>
+            }
+        </p>
+        <div class="booking-confirm__actions">
+            <button class="action-btn action-btn--danger"
+                    @onclick="Cancel">Yes, cancel it</button>
+            <button class="action-btn action-btn--keep"
+                    @onclick="() => OpenPanel(null)">Keep booking</button>
+        </div>
+    </div>
+}
+
+@* Sits on its own line below the buttons, so it reads as a step rather than another
+   control crammed into the row. *@
+@if (IsOpen(PanelNote))
+{
+    <div class="complete-note" @onclick:stopPropagation="true">
+        @* Per-booking id: the mobile cards and the desktop table are BOTH always
+           in the DOM (CSS swaps them at 768px), so a literal id here put two
+           elements with the same id on the page and bound the label to the
+           wrong one. *@
+        <label class="complete-note__label" for="@($"complete-note-{Booking.Id}")">
+            Add a note about this job <span class="complete-note__optional">(optional)</span>
+        </label>
+        <textarea id="@($"complete-note-{Booking.Id}")" class="form-control" rows="3"
+                  placeholder="e.g. rear hub has play — worth replacing next service"
+                  @bind="noteBody" @bind:event="oninput"></textarea>
+
+        <label class="complete-note__share">
+            <input type="checkbox" @bind="noteVisibleToCustomer" />
+            <span>Share this with the customer</span>
+        </label>
+        <p class="complete-note__hint">
+            @(noteVisibleToCustomer
+                ? "They'll see it on this booking in their account."
+                : "Staff only — not shown to the customer.")
+        </p>
+
+        <div class="complete-note__actions">
+            <button class="action-btn action-btn--primary" @onclick="CompleteWithNote">
+                @(string.IsNullOrWhiteSpace(noteBody) ? "Complete without a note" : "Save note & complete")
+            </button>
+            <button class="action-btn action-btn--keep" @onclick="() => OpenPanel(null)">Back</button>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private AdminContext Context { get; set; } = default!;
+
+    [Parameter, EditorRequired] public Booking Booking { get; set; } = default!;
+
+    /// <summary>
+    /// Which confirm panel is open anywhere on the page, as "<kind>:<bookingId>".
+    /// Held by the parent so only one is ever open across every row and every view.
+    /// </summary>
+    [Parameter] public string? OpenPanelKey { get; set; }
+    [Parameter] public EventCallback<string?> OpenPanelKeyChanged { get; set; }
+
+    /// Raised after anything that changes the booking, so the parent re-reads.
+    [Parameter] public EventCallback<Booking> OnChanged { get; set; }
+
+    private const string PanelCancel = "cancel";
+    private const string PanelNote = "note";
+
+    private string noteBody = "";
+    private bool noteVisibleToCustomer;
+
+    private bool IsOpen(string kind) => OpenPanelKey == $"{kind}:{Booking.Id}";
+
+    private Task OpenPanel(string? kind) =>
+        OpenPanelKeyChanged.InvokeAsync(kind is null ? null : $"{kind}:{Booking.Id}");
+
+    // Both the wrapper below and the parent's "does this row have any actions at all"
+    // check ask these, so they're here rather than inline: an empty wrapper still
+    // draws the gap above it.
+    private bool ShowContact =>
+        Context.CanSeeCustomerDetails && AuthService.IsValidPhone(Booking.CustomerPhone);
+
+    private bool ShowCancel =>
+        Context.CanManage && BookingService.CanTransition(Booking.Status, BookingStatus.Cancelled);
+
+    /// Whether a booking has any actionable controls for the current user — used by
+    /// the parent to decide whether to render the action area at all. CanManage always
+    /// yields at least the primary button: every status either has a next stage or can
+    /// be reopened.
+    public static bool HasActions(AdminContext context, Booking booking) =>
+        context.CanManage ||
+        (context.CanSeeCustomerDetails && AuthService.IsValidPhone(booking.CustomerPhone));
+
+    /// Label for the primary button: the step being taken, not the state it lands in.
+    private static string StageLabel(BookingStatus next) => next switch
+    {
+        BookingStatus.Confirmed  => "Confirm booking",
+        BookingStatus.InProgress => "Start work",
+        BookingStatus.Completed  => "Mark complete",
+        _                        => next.ToString()
+    };
+
+    /// The one primary action. Completing is the exception — it opens the note panel
+    /// rather than finishing outright, so the mechanic can record what they found.
+    private async Task AdvanceStage(BookingStatus next)
+    {
+        if (!Context.CanManage) return;  // server-side guard; hidden buttons aren't security
+
+        if (next == BookingStatus.Completed)
+        {
+            noteBody = "";
+            noteVisibleToCustomer = false;   // staff-only unless they say otherwise
+            await OpenPanel(PanelNote);
+            return;
+        }
+
+        BookingService.UpdateStatus(Booking.Id, next);
+        await OpenPanel(null);
+        await OnChanged.InvokeAsync(Booking);
+
+        // Confirming is the moment the customer's booking becomes real to them, so it
+        // is the one stage change worth an email. Starting work isn't — they are
+        // already in the diary. Best-effort: the status is committed either way.
+        if (next == BookingStatus.Confirmed)
+            await NotifyCustomerAsync(isCancellation: false);
+    }
+
+    private async Task Reopen()
+    {
+        if (!Context.CanManage) return;
+        BookingService.UpdateStatus(Booking.Id, BookingStatus.Confirmed);
+        await OpenPanel(null);
+        await OnChanged.InvokeAsync(Booking);
+    }
+
+    private async Task Cancel()
+    {
+        if (!Context.CanManage) return;
+
+        BookingService.UpdateStatus(Booking.Id, BookingStatus.Cancelled);
+        await OpenPanel(null);
+        await OnChanged.InvokeAsync(Booking);
+
+        // Lights the bell on any other open dashboard. RaiseBookingCancelled existed
+        // but had no production caller at all, so the bell never showed a cancellation
+        // from either side.
+        Notifications.RaiseBookingCancelled(Booking);
+        await NotifyCustomerAsync(isCancellation: true);
+    }
+
+    private async Task CompleteWithNote()
+    {
+        if (!Context.CanManage) return;  // server-side guard
+
+        // The note is recorded first: if it fails, the job hasn't been marked done, so
+        // a retry is the obvious thing to do. The other order would leave a completed
+        // booking whose note silently vanished.
+        // AddNote no-ops on an empty body, which is what makes the note optional.
+        Customers.AddNote(
+            customerId: Booking.CustomerId,
+            bookingId: Booking.Id,
+            authorStaffId: Context.Staff.Id,
+            body: noteBody,
+            visibleToCustomer: noteVisibleToCustomer);
+
+        noteBody = "";
+        BookingService.UpdateStatus(Booking.Id, BookingStatus.Completed);
+        await OpenPanel(null);
+        await OnChanged.InvokeAsync(Booking);
+    }
+
+    /// Best-effort, exactly like the booking confirmation on Book.razor: the status
+    /// change is already committed and the slot already freed, so a mail failure must
+    /// not undo it or surface as an error on an action that did succeed.
+    private async Task NotifyCustomerAsync(bool isCancellation)
+    {
+        if (string.IsNullOrWhiteSpace(Booking.CustomerEmail)) return;
+        try
+        {
+            await EmailSender.SendBookingStatusChangedAsync(Booking, isCancellation);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not email {Email} about booking {Reference}",
+                Booking.CustomerEmail, Booking.Reference);
+        }
+    }
+}

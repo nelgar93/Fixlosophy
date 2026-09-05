@@ -1,0 +1,156 @@
+@inject EnquiryService Enquiries
+
+@*
+    Messages from the form on /about. They were stored, they raised a bell and they
+    emailed the shop — and then there was no screen in here that could read one back.
+    GetEnquiries and MarkHandled had existed since the form was written, with only the
+    test suite calling them.
+
+    Gated on CanSeeCustomerDetails: an enquiry is a name, an email and a phone number
+    typed in by a member of the public, so reaching them here mustn't be a way round
+    the same gate that governs seeing them on a booking.
+*@
+
+<div class="admin-filters">
+    <button class="btn btn-outline" @onclick="ToggleShowHandled">
+        @(showHandled ? "Hide handled" : "Show handled too")
+    </button>
+</div>
+
+<div class="admin-mobile-cards">
+    @if (_enquiries.Count == 0)
+    {
+        <div class="admin-empty"><p>@EmptyMessage</p></div>
+    }
+    @foreach (var enquiry in _enquiries)
+    {
+        var e = enquiry;
+        <div class="admin-card admin-card--static @(e.HandledAt is null ? "" : "admin-card--handled")">
+            <div class="admin-card__header">
+                <span class="text-muted-sm">@e.CreatedAt.ToString("d MMM yyyy, HH:mm")</span>
+                <span class="status-badge @(e.HandledAt is null ? "status-badge--pending" : "status-badge--completed")">
+                    @(e.HandledAt is null ? "New" : "Handled")
+                </span>
+            </div>
+            <div class="admin-card__name">@e.Name</div>
+            <div class="admin-card__meta">
+                <span>@e.Email</span>
+                <span>@(string.IsNullOrWhiteSpace(e.BikeDescription) ? "" : e.BikeDescription)</span>
+            </div>
+            <div class="admin-card__detail">
+                <p class="enquiry-message">@e.Message</p>
+                @Actions(e)
+            </div>
+        </div>
+    }
+</div>
+
+<div class="admin-table-wrapper admin-table-wrapper--desktop-only">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Received</th>
+                <th>From</th>
+                <th>Bike</th>
+                <th>Message</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_enquiries.Count == 0)
+            {
+                <tr class="admin-table__empty-row">
+                    <td colspan="5">@EmptyMessage</td>
+                </tr>
+            }
+            @foreach (var enquiry in _enquiries)
+            {
+                var e = enquiry;
+                <tr class="@(e.HandledAt is null ? "" : "admin-table__row--handled")">
+                    <td class="text-muted-sm">@e.CreatedAt.ToString("d MMM yyyy, HH:mm")</td>
+                    <td>
+                        <strong>@e.Name</strong>
+                        <span class="status-badge @(e.HandledAt is null ? "status-badge--pending" : "status-badge--completed")">
+                            @(e.HandledAt is null ? "New" : "Handled")
+                        </span>
+                    </td>
+                    <td class="text-muted-sm">@(string.IsNullOrWhiteSpace(e.BikeDescription) ? "—" : e.BikeDescription)</td>
+                    <td><p class="enquiry-message">@e.Message</p></td>
+                    <td>@Actions(e)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [CascadingParameter] private AdminContext Context { get; set; } = default!;
+
+    /// Raised when the unhandled count changes, so the badge on the tab bar keeps up.
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<Enquiry> _enquiries = [];
+    private bool showHandled;
+
+    private string EmptyMessage => showHandled
+        ? "No messages yet. They arrive from the form on the About Us page."
+        : "Nothing outstanding — every message has been marked handled.";
+
+    protected override void OnInitialized() => Reload();
+
+    private void Reload() => _enquiries = Enquiries.GetEnquiries(includeHandled: showHandled);
+
+    private void ToggleShowHandled()
+    {
+        showHandled = !showHandled;
+        Reload();
+    }
+
+    private async Task SetHandled(string id, bool handled)
+    {
+        if (!Context.CanManage) return;  // server-side guard
+        Enquiries.MarkHandled(id, handled);
+        // Re-read rather than patching the row: with "show handled" off, marking one
+        // handled should take it off the list, which only a reload gets right.
+        Reload();
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Reaching the person who wrote in, and marking the message dealt with.
+    ///
+    /// There is no compose box: the enquiry already lands in the shop's own inbox with
+    /// reply-to set to the sender, so replying happens there. These are the two things
+    /// this screen can do that the inbox can't — dial the number, and record that the
+    /// message is done so the next person doesn't answer it twice.
+    /// </summary>
+    private RenderFragment<Enquiry> Actions => enquiry => @<text>
+        @* Not .booking-actions__row: above 768px that collapses .action-btn--call to a
+           32px icon square and clips the label inside it. That works for a booking,
+           where the label is the word "Call" and the number is in the row already —
+           but here the address is the content, and it painted over the button next to
+           it. See .enquiry-actions. *@
+        <div class="enquiry-actions">
+            <a class="action-btn action-btn--call enquiry-actions__contact"
+               href="mailto:@enquiry.Email" title="@enquiry.Email">
+                <Icon Name="mail" /> <span class="enquiry-actions__text">@enquiry.Email</span>
+            </a>
+            @if (AuthService.IsValidPhone(enquiry.Phone))
+            {
+                <a class="action-btn action-btn--call enquiry-actions__contact"
+                   href="@ContactLinks.Tel(enquiry.Phone)" title="@enquiry.Phone">
+                    <Icon Name="phone" /> <span class="enquiry-actions__text">@enquiry.Phone</span>
+                </a>
+                <a class="action-btn action-btn--whatsapp" href="https://wa.me/@ContactLinks.WhatsAppNumber(enquiry.Phone)"
+                   target="_blank" rel="noopener">WhatsApp</a>
+            }
+            @if (Context.CanManage)
+            {
+                <button class="action-btn @(enquiry.HandledAt is null ? "action-btn--primary" : "action-btn--keep")"
+                        @onclick="() => SetHandled(enquiry.Id, enquiry.HandledAt is null)">
+                    @(enquiry.HandledAt is null ? "Mark handled" : "Reopen")
+                </button>
+            }
+        </div>
+    </text>;
+}
