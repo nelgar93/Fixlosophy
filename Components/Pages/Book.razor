@@ -41,6 +41,29 @@
             </div>
         }
 
+        @* Said here rather than at the final Confirm click, which is where it used to
+           appear — after a service, a slot, five fields and any photos. *@
+        @if (step < 5 && AtBookingLimit)
+        {
+            <div class="booking-limit-notice">
+                <h2>You already have @upcomingCount upcoming bookings</h2>
+                <p>
+                    That's the most we hold for one email at a time, so slots stay free for
+                    everyone. Cancel one and you can book again straight away.
+                </p>
+                @if (loggedInCustomer is not null)
+                {
+                    <a href="/account" class="btn btn-primary">View my bookings</a>
+                }
+                else
+                {
+                    <a href="tel:@SiteContent.PhoneE164" class="btn btn-primary">
+                        <Icon Name="phone" /> Call us on @SiteContent.PhoneDisplay
+                    </a>
+                }
+            </div>
+        }
+
         @if (step < 5)
         {
             <!-- Step indicator -->
@@ -106,7 +129,8 @@
 
                 <div class="booking-nav">
                     <span></span>
-                    <button class="btn btn-primary btn-lg" @onclick="GoToStep2" disabled="@(selectedService == null)">
+                    <button class="btn btn-primary btn-lg" @onclick="GoToStep2"
+                            disabled="@(selectedService == null || AtBookingLimit)">
                         Continue <Icon Name="arrow-right" />
                     </button>
                 </div>
@@ -210,7 +234,10 @@
                 </div>
 
                 <div class="booking-nav">
-                    <button class="btn btn-outline" @onclick="() => GoToStep(1)"><Icon Name="arrow-left" /> Back</button>
+                    <div class="booking-nav__left">
+                        <button class="btn btn-outline" @onclick="() => GoToStep(1)"><Icon Name="arrow-left" /> Back</button>
+                        <button class="btn btn-ghost" @onclick="ResetBooking">Start over</button>
+                    </div>
                     <button class="btn btn-primary btn-lg" @onclick="GoToStep3" disabled="@(selectedDate == null || selectedTime == null)">
                         Continue <Icon Name="arrow-right" />
                     </button>
@@ -311,7 +338,10 @@
                 </div>
 
                 <div class="booking-nav">
-                    <button class="btn btn-outline" @onclick="() => GoToStep(2)"><Icon Name="arrow-left" /> Back</button>
+                    <div class="booking-nav__left">
+                        <button class="btn btn-outline" @onclick="() => GoToStep(2)"><Icon Name="arrow-left" /> Back</button>
+                        <button class="btn btn-ghost" @onclick="ResetBooking">Start over</button>
+                    </div>
                     <button class="btn btn-primary btn-lg" @onclick="GoToStep4">Continue <Icon Name="arrow-right" /></button>
                 </div>
             </div>
@@ -389,8 +419,11 @@
                 </p>
 
                 <div class="booking-nav">
-                    <button class="btn btn-outline" @onclick="() => GoToStep(3)"><Icon Name="arrow-left" /> Back</button>
-                    <button class="btn btn-primary btn-lg" @onclick="ConfirmBooking" disabled="@submitting">
+                    <div class="booking-nav__left">
+                        <button class="btn btn-outline" @onclick="() => GoToStep(3)"><Icon Name="arrow-left" /> Back</button>
+                        <button class="btn btn-ghost" @onclick="ResetBooking" disabled="@submitting">Start over</button>
+                    </div>
+                    <button class="btn btn-primary btn-lg" @onclick="ConfirmBooking" disabled="@(submitting || AtBookingLimit)">
                         @(submitting ? "Confirming…" : "Confirm Booking ✓")
                     </button>
                 </div>
@@ -511,6 +544,10 @@
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private Customer? loggedInCustomer;
 
+    /// Upcoming bookings already held by this email, against MaxActiveBookingsPerEmail.
+    /// Filled as soon as the email is known so the wizard can say so up front.
+    private int upcomingCount;
+
     // Calendar helpers
     private int CalDaysInMonth => DateTime.DaysInMonth(calendarMonth.Year, calendarMonth.Month);
     private int CalFirstDayOffset
@@ -535,9 +572,17 @@
                 var id = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 loggedInCustomer = id is null ? null : AuthService.GetCustomerById(id);
                 PrefillCustomerDetails();
+                // Their email is known before they touch anything, so the cap can be
+                // answered here rather than at the final click.
+                if (loggedInCustomer is not null)
+                    upcomingCount = BookingService.CountUpcomingForEmail(loggedInCustomer.Email);
             }
         }
     }
+
+    /// Guests only reach this once they've typed an email on step 3; a signed-in
+    /// customer knows from step 1. Either way it's before the review screen.
+    private bool AtBookingLimit => upcomingCount >= BookingService.MaxActiveBookingsPerEmail;
 
     private bool GetDateAvailable(DateTime date) =>
         _monthAvailability.TryGetValue(date.Date, out var avail) && avail;
@@ -583,6 +628,22 @@
         // reach the admin panel as a Call/WhatsApp button that goes nowhere.
         if (!AuthService.IsValidPhone(customerPhone))
         { validationError = "Please enter a phone number we can reach you on."; return; }
+
+        // A guest's email is only known here, so this is the earliest their cap can be
+        // asked about — still ahead of the review screen and the photo upload. Left on
+        // this step rather than advancing, so a mistyped address can be corrected.
+        if (loggedInCustomer is null)
+        {
+            upcomingCount = BookingService.CountUpcomingForEmail(customerEmail);
+            if (AtBookingLimit)
+            {
+                validationError =
+                    $"This email already has {BookingService.MaxActiveBookingsPerEmail} upcoming bookings. " +
+                    $"Cancel one from your account, or call us on {SiteContent.PhoneDisplay}.";
+                return;
+            }
+        }
+
         step = 4;
     }
 
@@ -779,7 +840,16 @@
         pendingPhotos = new();
         photoError = null;
         photoUploadWarning = null;
-        // Keep the customer logged in between bookings
+        // A guest's count belongs to the email they just cleared; a signed-in
+        // customer's is theirs whatever they do here, so it's re-read below.
+        upcomingCount = 0;
+        // Keep the customer logged in between bookings, and put their details back.
+        // "Book Another" reaches this through a navigation that re-runs OnInitialized,
+        // but "Start over" is a plain button — without this it would sign-in-strip a
+        // customer whose name and number the page already knows.
+        PrefillCustomerDetails();
+        if (loggedInCustomer is not null)
+            upcomingCount = BookingService.CountUpcomingForEmail(loggedInCustomer.Email);
     }
 
     private void PrefillCustomerDetails()

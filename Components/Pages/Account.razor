@@ -53,6 +53,9 @@
                         @foreach (var booking in UpcomingBookings)
                         {
                             var b = booking;
+                            // Null when they can still cancel it themselves; otherwise the
+                            // reason, which decides both the control and the line under it.
+                            var cancelBlocked = BookingService.SelfCancelBlockedReason(b);
                             <div class="account-booking-row">
                                 <span class="ref-badge">@b.Reference</span>
                                 <div class="account-booking-row__info">
@@ -74,6 +77,12 @@
                                             Keep
                                         </button>
                                     }
+                                    else if (cancelBlocked is not null)
+                                    {
+                                        <a class="action-btn action-btn--call" href="tel:@SiteContent.PhoneE164">
+                                            <Icon Name="phone" /> Call to cancel
+                                        </a>
+                                    }
                                     else
                                     {
                                         <button class="action-btn action-btn--delete" @onclick="() => StartCancel(b.Id)">
@@ -81,6 +90,10 @@
                                         </button>
                                     }
                                 </div>
+                                @if (cancelBlocked is not null)
+                                {
+                                    <p class="account-booking-row__blocked">@cancelBlocked</p>
+                                }
                                 @JobNotes(b)
                             </div>
                         }

@@ -38,6 +38,27 @@ public class NotificationService(AppDbContext db, NotificationHub hub, ILogger<N
         TargetStaffId = booking.AssignedStaffId
     });
 
+    /// <summary>
+    /// A slot has passed with the bike not booked in. Raised once per booking by
+    /// MaintenanceJobs, so the person on the floor doesn't have to be watching the
+    /// clock to notice.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not phrased as a no-show. Most late arrivals turn up — the shop's
+    /// stance is that running late is fine — so this is a prompt to give them a ring,
+    /// not a verdict.
+    /// </remarks>
+    public void RaiseLateArrival(Booking booking) => Raise(new Notification
+    {
+        Type = NotificationType.LateArrival,
+        Title = $"Not arrived — {booking.CustomerName}",
+        Body = $"{booking.ServiceName} was due at {booking.SlotTime}. " +
+               $"{(string.IsNullOrWhiteSpace(booking.CustomerPhone) ? "No phone number on the booking." : booking.CustomerPhone)}",
+        LinkUrl = "/admin",
+        // Whoever the job is assigned to is the one whose bench is sitting empty.
+        TargetStaffId = booking.AssignedStaffId
+    });
+
     public void RaiseNewEnquiry(Enquiry enquiry) => Raise(new Notification
     {
         Type = NotificationType.NewEnquiry,

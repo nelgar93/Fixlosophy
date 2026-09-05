@@ -22,6 +22,21 @@ public static class SiteContent
     public const string ShopName  = "Fixlosophy";
     public const string LegalName = "Fixlosophy Ltd";
 
+    // ── Company registration ─────────────────────────────────────────────────
+    // Verified against the Companies House register (company 14043865, incorporated
+    // 13 April 2022, status active). These appear on the Privacy Policy and Terms,
+    // where a UK business is expected to identify itself precisely.
+    //
+    // Note the registered office is NOT the same string as the trading address above:
+    // Companies House has "Unit 9, 5a River Park Road" where the site says
+    // "5 River Park Rd". Both are kept because they answer different questions —
+    // where to bring your bike, and where to serve legal notice.
+    public const string CompanyNumber = "14043865";
+
+    /// Registered office, exactly as it appears on the Companies House register.
+    public const string RegisteredOffice =
+        "Blue House Yard, Unit 9, 5a River Park Road, London, England, N22 7TB";
+
     // ── Address ──────────────────────────────────────────────────────────────
     public const string AddressVenue    = "Blue House Yard";
     public const string AddressStreet   = "5 River Park Rd";

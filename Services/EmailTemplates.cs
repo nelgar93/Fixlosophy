@@ -105,11 +105,18 @@ public static class EmailTemplates
         if (!string.IsNullOrWhiteSpace(b.BikeDescription))
             rows.Add(Row("Bike", b.BikeDescription));
 
+        // Says up front what the account page will and won't let them do, so the two
+        // limits on self-cancelling aren't discovered at the moment they're hit.
+        var cancelHours = BookingService.SelfCancelCutoff.TotalHours.ToString("0", CultureInfo.InvariantCulture);
+
         // Account holders get a link to their bookings list; guests have nowhere to
         // manage it themselves yet, so they're pointed at the shop instead.
         var (linkLabel, linkNote) = b.CustomerId is null
             ? ("Get in touch", $"Need to change or cancel? Call us on {SiteContent.PhoneDisplay}.")
-            : ("View my bookings", $"You can cancel from your account, or call us on {SiteContent.PhoneDisplay}.");
+            : ("View my bookings",
+               $"You can cancel from your account up to {cancelHours} hours before your slot. " +
+               $"After that, or once we've started work on your bike, call us on {SiteContent.PhoneDisplay} " +
+               "and we'll sort it out with you.");
 
         var html = Shell("Your booking is confirmed",
             Para($"Hi {b.CustomerName},") +
@@ -128,7 +135,149 @@ public static class EmailTemplates
             $"Where:     {SiteContent.AddressOneLine}\n\n" +
             "Please arrive about five minutes early. The final price is confirmed after assessment.\n\n" +
             $"{linkLabel}: {manageLink}\n" +
+            $"{linkNote}\n" +
             $"Questions: {SiteContent.PhoneDisplay}\n";
+
+        return (html, text);
+    }
+
+    // ── Appointment reminder (to the customer, the day before) ───────────────
+    /// <summary>
+    /// The day-before nudge. Deliberately short — the confirmation already carried the
+    /// full detail, and this one is read on a phone the evening before.
+    /// </summary>
+    /// <param name="manageLink">
+    /// Link to the customer's bookings, or null. Null covers two cases that want the
+    /// same treatment: a guest booking, which has no account page to send them to, and
+    /// a shop whose App:BaseUrl isn't configured, where no absolute URL can be built
+    /// from a background job with no request to borrow a host from. Either way they get
+    /// the phone number instead of a button that goes nowhere.
+    /// </param>
+    public static (string html, string text) AppointmentReminder(Booking b, string? manageLink)
+    {
+        var when = $"{b.SlotDate.ToString("dddd d MMMM", CultureInfo.GetCultureInfo("en-GB"))} at {b.SlotTime}";
+
+        var rows = new List<string>
+        {
+            Row("Reference", b.Reference),
+            Row("Service",   b.ServiceName),
+            Row("When",      when),
+            Row("Where",     SiteContent.AddressOneLine)
+        };
+        if (!string.IsNullOrWhiteSpace(b.BikeDescription))
+            rows.Add(Row("Bike", b.BikeDescription));
+
+        var closing = $"Can't make it? Call us on {SiteContent.PhoneDisplay} and we'll move it — " +
+                      "it frees the slot for someone else.";
+
+        var html = Shell("See you tomorrow",
+            Para($"Hi {b.CustomerName},") +
+            Para($"A quick reminder that your bike is booked in tomorrow, {when}.") +
+            Table([.. rows]) +
+            Para("Please arrive about five minutes early.") +
+            (manageLink is null ? "" : Button(manageLink, "View my bookings")) +
+            Para(closing));
+
+        var text =
+            $"Hi {b.CustomerName},\n\nA quick reminder — your bike is booked in tomorrow.\n\n" +
+            $"Reference: {b.Reference}\n" +
+            $"Service:   {b.ServiceName}\n" +
+            $"When:      {when}\n" +
+            $"Where:     {SiteContent.AddressOneLine}\n\n" +
+            "Please arrive about five minutes early.\n\n" +
+            (manageLink is null ? "" : $"View my bookings: {manageLink}\n") +
+            $"{closing}\n";
+
+        return (html, text);
+    }
+
+    // ── Booking moved by the shop ────────────────────────────────────────────
+    /// <summary>
+    /// "We've moved you" — sent when staff reschedule a booking, usually because a
+    /// closure landed on top of it.
+    /// </summary>
+    /// <remarks>
+    /// Leads with the new time and states the old one plainly underneath. The customer
+    /// has the original in their inbox and their calendar, so the email has to make it
+    /// unmistakable which of the two now applies.
+    /// </remarks>
+    public static (string html, string text) BookingRescheduled(
+        Booking b, DateTime previousDate, string previousSlot, string? reason, string? manageLink)
+    {
+        var gb = CultureInfo.GetCultureInfo("en-GB");
+        var newWhen = $"{b.SlotDate.ToString("dddd d MMMM yyyy", gb)} at {b.SlotTime}";
+        var oldWhen = $"{previousDate.ToString("dddd d MMMM", gb)} at {previousSlot}";
+
+        var why = string.IsNullOrWhiteSpace(reason)
+            ? "We've had to move your booking."
+            : $"We've had to move your booking — {reason}.";
+
+        var html = Shell("Your booking has moved",
+            Para($"Hi {b.CustomerName},") +
+            Para($"{why} Sorry for the inconvenience.") +
+            Table([
+                Row("Reference", b.Reference),
+                Row("Service",   b.ServiceName),
+                Row("New time",  newWhen),
+                Row("Was",       oldWhen),
+                Row("Where",     SiteContent.AddressOneLine)
+            ]) +
+            Para($"If the new time doesn't work, call us on {SiteContent.PhoneDisplay} and we'll find one that does.") +
+            (manageLink is null ? "" : Button(manageLink, "View my bookings")));
+
+        var text =
+            $"Hi {b.CustomerName},\n\n{why} Sorry for the inconvenience.\n\n" +
+            $"Reference: {b.Reference}\n" +
+            $"Service:   {b.ServiceName}\n" +
+            $"NEW TIME:  {newWhen}\n" +
+            $"(was:      {oldWhen})\n" +
+            $"Where:     {SiteContent.AddressOneLine}\n\n" +
+            $"If the new time doesn't work, call us on {SiteContent.PhoneDisplay}.\n" +
+            (manageLink is null ? "" : $"View my bookings: {manageLink}\n");
+
+        return (html, text);
+    }
+
+    // ── Booking cancelled by the shop ────────────────────────────────────────
+    /// <summary>
+    /// "We've had to cancel, please rebook" — sent when a closure displaces a booking
+    /// and there's no obvious slot to move it to.
+    /// </summary>
+    /// <remarks>
+    /// The rebooking link is the point of this email. A cancellation notice that
+    /// leaves the customer to work out what to do next is how a displaced booking
+    /// becomes a lost one.
+    /// </remarks>
+    public static (string html, string text) BookingCancelledByShop(
+        Booking b, string? reason, string? bookAgainLink)
+    {
+        var gb = CultureInfo.GetCultureInfo("en-GB");
+        var when = $"{b.SlotDate.ToString("dddd d MMMM", gb)} at {b.SlotTime}";
+
+        var why = string.IsNullOrWhiteSpace(reason)
+            ? "we've had to cancel it"
+            : $"we've had to cancel it — {reason}";
+
+        var html = Shell("We've had to cancel your booking",
+            Para($"Hi {b.CustomerName},") +
+            Para($"You were booked in for {when}, and {why}. We're sorry — we know that's a nuisance.") +
+            Table([
+                Row("Reference", b.Reference),
+                Row("Service",   b.ServiceName),
+                Row("Was",       when)
+            ]) +
+            Para("Please pick another time that suits you — it only takes a minute, and your details will be ready to go.") +
+            (bookAgainLink is null ? "" : Button(bookAgainLink, "Book another time")) +
+            Para($"Rather sort it out over the phone? Call us on {SiteContent.PhoneDisplay}."));
+
+        var text =
+            $"Hi {b.CustomerName},\n\n" +
+            $"You were booked in for {when}, and {why}. We're sorry.\n\n" +
+            $"Reference: {b.Reference}\n" +
+            $"Service:   {b.ServiceName}\n\n" +
+            "Please pick another time that suits you.\n" +
+            (bookAgainLink is null ? "" : $"Book another time: {bookAgainLink}\n") +
+            $"Or call us on {SiteContent.PhoneDisplay}.\n";
 
         return (html, text);
     }

@@ -28,7 +28,7 @@
                         <img src="@Images.Url(photo.Path)" alt="@photo.Alt"
                              width="@photo.Width" height="@photo.Height"
                              loading="@(i == 0 ? null : "lazy")" decoding="async"
-                             onerror="this.closest('figure').style.display='none'" />
+                             data-hide-on-error="figure" />
                     </button>
                 </figure>
             }

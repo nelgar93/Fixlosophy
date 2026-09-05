@@ -15,7 +15,18 @@
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["booking.css"]" />
     <link rel="stylesheet" href="@Assets["Fixlosophy.styles.css"]" />
-    <ImportMap />
+
+    @* <ImportMap /> deliberately removed. It renders an inline <script type="importmap">,
+       and an import map is the one inline script that cannot carry a nonce — which made
+       it the single thing forcing 'unsafe-inline' into the CSP's script-src.
+
+       Nothing here needs it: the only JS module in the app is ReconnectModal.razor.js,
+       loaded by <script type="module" src="@@Assets[...]"> — a fingerprinted URL resolved
+       at render time, not a bare specifier resolved by an import map. It imports nothing.
+
+       If a future collocated .razor.js needs a bare-specifier import, put it back and
+       the CSP goes back to 'unsafe-inline' with it. Import the fingerprinted URL from
+       @@Assets instead and it won't come to that. *@
     <link rel="icon" type="image/svg+xml" href="@SupabaseImageUrls.FaviconSvg" />
     <link rel="icon" type="image/png" href="@SupabaseImageUrls.FaviconPng" />
     <link rel="apple-touch-icon" href="@SupabaseImageUrls.FaviconPng" />
@@ -25,7 +36,10 @@
        than per page so it can't drift between them. Serialized rather than
        hand-written so the address and hours come from SiteContent and stay in step
        with the booking slots. *@
-    <script type="application/ld+json">@((MarkupString)LocalBusinessJsonLd)</script>
+    @* The nonce comes from the CSP middleware in Program.cs. Browsers apply script-src
+       to <script> elements by type, ld+json included, so without it this block is
+       dropped and the shop disappears from Google's structured data. *@
+    <script type="application/ld+json" nonce="@CspNonce">@((MarkupString)LocalBusinessJsonLd)</script>
 
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
@@ -42,6 +56,16 @@
 
 @code {
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    // Set per response by the security-headers middleware in Program.cs, which puts
+    // the same value in the Content-Security-Policy header. Null would mean the
+    // middleware didn't run, which can't happen for a rendered page — but an empty
+    // attribute is the safe failure, not a crash.
+    private string? CspNonce => HttpContext.Items[CspNonceKey] as string;
+
+    /// The key the middleware stores the nonce under. Public so there is one spelling
+    /// of it rather than a string literal at each end.
+    public const string CspNonceKey = "csp-nonce";
 
     // JsonSerializer rather than a hand-written string: it escapes the values, so a
     // future apostrophe in the shop name can't break out of the JSON and turn the

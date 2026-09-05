@@ -45,7 +45,7 @@ falls back to those bucket URLs and looks the same.
 ## What it stands in for
 
 The business rules are ports of the real ones, so what the demo refuses the real site
-refuses too: slot times derived from `SiteContent`'s trading hours, two bookings per
+refuses too: slot times derived from `SiteContent`'s trading hours, one booking per
 slot, three active bookings per email address, a two-hour cutoff on cancelling your own
 booking, and the staff permission matrix (`CanViewAllBookings`, `CanManageBookings`,
 `CanViewCustomerDetails`) gating what each dashboard shows.
@@ -70,8 +70,8 @@ The two stylesheets are copied in byte for byte, so after a CSS change re-copy t
 confirm the copy is exact:
 
 ```bash
-sed -n '5,1968p'    demo/index.html | diff --strip-trailing-cr - wwwroot/app.css
-sed -n '1969,4418p' demo/index.html | diff --strip-trailing-cr - wwwroot/booking.css
+sed -n '5,2034p'    demo/index.html | diff --strip-trailing-cr - wwwroot/app.css
+sed -n '2035,4660p' demo/index.html | diff --strip-trailing-cr - wwwroot/booking.css
 ```
 
 (The line ranges move when the stylesheets grow — they start after `<style>` and end at

@@ -1488,9 +1488,11 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
 }
 
+/* Colour-change only, deliberately without the translateY lift the other cards use:
+   the Home teaser shares this class, and shifting a photo under the cursor meant
+   chasing it. The border was always 1px — only its colour moves. */
 @media (hover: hover) and (pointer: fine) {
     .gallery-item:hover {
-        transform: translateY(-3px);
         border-color: var(--green);
         box-shadow: var(--shadow);
     }
@@ -1540,14 +1542,17 @@ textarea.form-control { resize: vertical; min-height: 130px; }
 
 .lightbox:focus { outline: none; }
 
+/* The arrows are pinned to the viewport edges (below), so the photo keeps clear of
+   them by reserving a gutter each side: 44px control + 1.25rem offset + breathing
+   room. Without this a wide landscape shot slides underneath them. */
 .lightbox__figure {
-    max-width: 92vw;
+    max-width: min(92vw, calc(100vw - 176px));
     max-height: 88vh;
     cursor: default;
 }
 
 .lightbox__figure img {
-    max-width: 92vw;
+    max-width: min(92vw, calc(100vw - 176px));
     max-height: 88vh;
     width: auto;
     height: auto;
@@ -1595,6 +1600,19 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     right: calc(1rem + env(safe-area-inset-right));
 }
 
+/* Pinned to the viewport rather than sitting in the flex row beside the photo.
+   In flow they moved on every click: the figure is width:auto, so a portrait shot
+   is far narrower than a landscape one, and centring the row slid both arrows in
+   and out under the cursor. Anchoring them means only the photo changes size. */
+.lightbox__nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.lightbox__nav--prev { left: calc(1.25rem + env(safe-area-inset-left)); }
+.lightbox__nav--next { right: calc(1.25rem + env(safe-area-inset-right)); }
+
 .lightbox__count {
     position: absolute;
     bottom: 1rem;
@@ -1608,7 +1626,8 @@ textarea.form-control { resize: vertical; min-height: 130px; }
    bottom corners and the photo gets the full width. */
 @media (max-width: 639px) {
     .lightbox__nav {
-        position: absolute;
+        top: auto;
+        transform: none;
         bottom: calc(1rem + env(safe-area-inset-bottom));
     }
     .lightbox__nav--prev { left: calc(1rem + env(safe-area-inset-left)); }
@@ -2162,6 +2181,18 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     justify-content: flex-end;
 }
 
+/* Why the Cancel button isn't there — work already started, or the two-hour cutoff
+   passed. Its own full-width line, like the job notes below it, and order 3 so it
+   still lands under the actions once the row reorders on a phone. Said on the page
+   rather than in a title attribute: the reason is the whole point of the change. */
+.account-booking-row__blocked {
+    flex: 1 1 100%;
+    order: 3;
+    margin: 0;
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.5);
+}
+
 @media (max-width: 479px) {
     .account-booking-row {
         flex-wrap: wrap;
@@ -2221,6 +2252,42 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     border-top: 1px solid var(--border-dark);
     gap: var(--space-4);
     flex-wrap: wrap;
+}
+
+/* Back and Start over travel together, so the primary action keeps the right-hand
+   end of the row to itself and "Start over" never reads as the way forward. */
+.booking-nav__left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+/* Says the booking cap has been reached before any of the wizard is filled in, so
+   it can't be discovered at the Confirm click. Amber rather than red: nothing has
+   gone wrong, there's just a limit and a way past it. */
+.booking-limit-notice {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+    padding: var(--space-5);
+    background: rgba(234,179,8,0.08);
+    border: 1px solid rgba(234,179,8,0.28);
+    border-radius: var(--radius);
+}
+
+.booking-limit-notice h2 {
+    margin: 0;
+    font-size: var(--fs-lg);
+    color: #fbbf24;
+}
+
+.booking-limit-notice p {
+    margin: 0;
+    color: rgba(255,255,255,0.72);
+    line-height: 1.55;
 }
 
 /* ---------- Customer Auth Strip ---------- */
@@ -2819,6 +2886,9 @@ textarea.form-control { resize: vertical; min-height: 130px; }
     .booking-nav { flex-direction: column-reverse; }
     .booking-nav .btn { width: 100%; justify-content: center; }
     .booking-nav > span { display: none; }
+    /* The grouped Back/Start over pair stacks too, rather than trying to sit two
+       full-width buttons side by side. */
+    .booking-nav__left { width: 100%; flex-direction: column; gap: var(--space-2); }
 
     /* Calendar: tighten up */
     .cal-day { font-size: var(--fs-caption); border-radius: var(--radius-sm); }
@@ -3822,6 +3892,53 @@ a.action-btn { text-decoration: none; }
         clip-path: inset(50%);
         white-space: nowrap;
     }
+}
+
+/* ── An enquiry's controls ───────────────────────────────────────────────────
+   Their own row rather than .booking-actions__row, which above 768px squeezes
+   .action-btn--call to a 32px icon square and visually hides the label inside it.
+   A booking survives that: the label is the word "Call" and the number is already
+   in the row. An enquiry doesn't — the sender's address appears nowhere else, so
+   there is nothing to hide it in favour of, and unhidden text in a 32px box with
+   zero inline padding simply overprinted the button beside it. */
+.enquiry-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.enquiry-actions .action-btn {
+    min-height: var(--touch-min);
+    gap: var(--space-1);
+}
+
+/* An address can be arbitrarily long, and the Actions cell sits inside the table's
+   overflow-x wrapper — so it truncates here rather than pushing a scrollbar under
+   the whole dashboard. The full value stays in the title and in the mailto:. */
+.enquiry-actions__contact { min-width: 0; }
+
+.enquiry-actions__text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+    /* Same reasoning as .booking-actions__row: a mouse doesn't need 44px, and the
+       table cell has less room than a card. */
+    .enquiry-actions {
+        gap: var(--space-1);
+        flex-wrap: nowrap;
+    }
+    .enquiry-actions .action-btn { min-height: 28px; }
+    /* The contact pills give up width first; WhatsApp and Mark handled keep theirs,
+       because a truncated verb is useless where a truncated address still reads. */
+    .enquiry-actions__contact { flex: 0 1 auto; }
+    .enquiry-actions .action-btn--whatsapp,
+    .enquiry-actions .action-btn--primary,
+    .enquiry-actions .action-btn--keep { flex: 0 0 auto; }
 }
 
 /* The confirm step for Cancel. It used to fire on a single click, despite being
@@ -4889,7 +5006,10 @@ const HOURS = {
     6: { open: 9, close: 18 }
 };
 const LUNCH_START = 13;
-const MAX_PER_SLOT = 2;
+// One booking per slot: one bike, one customer, one mechanic. The real site backs this
+// with a unique index over (SlotDate, SlotTime), which is the part a browser-only build
+// can't stand in for — here the check is all there is.
+const MAX_PER_SLOT = 1;
 const MAX_ACTIVE_BOOKINGS_PER_EMAIL = 3;
 const SELF_CANCEL_CUTOFF_HOURS = 2;
 const MIN_PASSWORD_LENGTH = 8;
@@ -5258,7 +5378,7 @@ function seedBookings() {
     const activeStaff = DB.staff.filter((s) => s.isActive);
     const rows = [];
 
-    // Seeded data has to obey the same two-per-slot cap the booking wizard enforces,
+    // Seeded data has to obey the same one-per-slot cap the booking wizard enforces,
     // or the calendar shows a slot the app itself would refuse to create. Occupancy
     // is tracked across the random pass and the fixtures alike: a fixture whose
     // preferred slot is full slides to the next free one on the same day.
@@ -5765,25 +5885,35 @@ const isValidPhone = (phone) => {
 const isValidEmail = (email) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((email || '').trim());
 
 // BookingService.CreateBooking, validation and all.
+// BookingService.CountUpcomingForEmail. Shared with the wizard, which asks it before
+// anything is filled in — the cap used to surface only at the final Confirm click.
+function countUpcomingForEmail(email) {
+    const norm = (email || '').trim().toLowerCase();
+    if (!norm) return 0;
+    const t = today();
+    return DB.bookings.filter((b) =>
+        b.customerEmail.toLowerCase() === norm &&
+        dateOnly(b.slotDate) >= t && b.status !== STATUS.Cancelled).length;
+}
+
 function createBooking(input) {
     const email = (input.customerEmail || '').trim().toLowerCase();
-    const t = today();
 
-    const taken = DB.bookings.filter((b) =>
-        sameDay(b.slotDate, input.slotDate) && b.slotTime === input.slotTime &&
-        b.status !== STATUS.Cancelled).length;
-    if (taken >= MAX_PER_SLOT)
-        return { error: 'Sorry, this time slot has just filled up. Please pick another time.' };
-
+    // Their own duplicate first: at one booking per slot the two conditions coincide,
+    // and this is the more useful of the two answers when the clash is with themselves.
     const duplicate = DB.bookings.some((b) =>
         b.customerEmail.toLowerCase() === email &&
         sameDay(b.slotDate, input.slotDate) && b.slotTime === input.slotTime &&
         b.status !== STATUS.Cancelled);
     if (duplicate) return { error: 'You already have a booking at this time.' };
 
-    const upcoming = DB.bookings.filter((b) =>
-        b.customerEmail.toLowerCase() === email &&
-        dateOnly(b.slotDate) >= t && b.status !== STATUS.Cancelled).length;
+    const taken = DB.bookings.filter((b) =>
+        sameDay(b.slotDate, input.slotDate) && b.slotTime === input.slotTime &&
+        b.status !== STATUS.Cancelled).length;
+    if (taken >= MAX_PER_SLOT)
+        return { error: 'Sorry, this time slot has just been taken. Please pick another time.' };
+
+    const upcoming = countUpcomingForEmail(email);
     if (upcoming >= MAX_ACTIVE_BOOKINGS_PER_EMAIL)
         return { error: 'You already have ' + MAX_ACTIVE_BOOKINGS_PER_EMAIL +
                         ' upcoming bookings — please contact us if you need to change one.' };
@@ -5825,17 +5955,35 @@ function createBooking(input) {
 
 // BookingService.CancelOwnBooking — the customer id is part of the lookup, so one
 // customer can never cancel another's booking.
+// BookingService.CanCustomerCancel. Deliberately narrower than ALLOWED_TRANSITIONS,
+// which is what *staff* may do: staff can cancel a job mid-repair because they're
+// holding the bike, and a customer can't.
+function canCustomerCancel(status) {
+    return status === STATUS.Pending || status === STATUS.Confirmed;
+}
+
+// BookingService.SelfCancelBlockedReason. One rule read by both sides — the account
+// page picks its control from it, cancelOwnBooking decides from it — so the button
+// can't offer what the call behind it refuses.
+function selfCancelBlockedReason(booking) {
+    if (booking.status === STATUS.Cancelled) return 'That booking is already cancelled.';
+    if (booking.status === STATUS.Completed) return 'That booking is already completed.';
+    if (!canCustomerCancel(booking.status))
+        return 'We’ve already started work on this one — please call us on ' +
+               SITE.phoneDisplay + ' and we’ll sort it out with you.';
+    if ((slotStart(booking) - now()) / 36e5 < SELF_CANCEL_CUTOFF_HOURS)
+        return 'This booking is less than ' + SELF_CANCEL_CUTOFF_HOURS +
+               ' hours away — please call us on ' + SITE.phoneDisplay +
+               ' so we can free the slot properly.';
+    return null;
+}
+
 function cancelOwnBooking(customerId, bookingId) {
     const booking = DB.bookings.find((b) => b.id === bookingId && b.customerId === customerId);
     if (!booking) return { error: 'We couldn’t find that booking.' };
-    if (booking.status === STATUS.Cancelled) return { error: 'That booking is already cancelled.' };
-    if (booking.status === STATUS.Completed) return { error: 'That booking is already completed.' };
 
-    const hoursAway = (slotStart(booking) - now()) / 36e5;
-    if (hoursAway < SELF_CANCEL_CUTOFF_HOURS)
-        return { error: 'This booking is less than ' + SELF_CANCEL_CUTOFF_HOURS +
-                        ' hours away — please call us on ' + SITE.phoneDisplay +
-                        ' so we can free the slot properly.' };
+    const blocked = selfCancelBlockedReason(booking);
+    if (blocked) return { error: blocked };
 
     booking.status = STATUS.Cancelled;
     raiseNotification({
@@ -6290,6 +6438,8 @@ function freshUiState() {
             time: null,
             name: '', email: '', phone: '', bike: '', notes: '',
             photos: [],
+            // Upcoming bookings held by this email, against MAX_ACTIVE_BOOKINGS_PER_EMAIL.
+            upcomingCount: 0,
             error: null,
             photoError: null,
             confirmed: null
@@ -7361,18 +7511,35 @@ function viewBook() {
         b.bike = customer.bikes.length === 1 ? customer.bikes[0].makeModel : '';
     }
 
+    // A signed-in customer's cap is known from step 1; a guest's only once they've
+    // typed an email on step 3, which bookValidateDetails fills in.
+    if (customer) b.upcomingCount = countUpcomingForEmail(customer.email);
+    const atLimit = (b.upcomingCount || 0) >= MAX_ACTIVE_BOOKINGS_PER_EMAIL;
+
     let body = '';
-    if (b.step === 1) body = bookStep1();
+    if (b.step === 1) body = bookStep1(atLimit);
     else if (b.step === 2) body = bookStep2();
     else if (b.step === 3) body = bookStep3(customer);
-    else if (b.step === 4) body = bookStep4();
+    else if (b.step === 4) body = bookStep4(atLimit);
     else body = bookConfirmed();
+
+    const limitNotice = (b.step < 5 && atLimit)
+        ? '<div class="booking-limit-notice">' +
+            '<h2>You already have ' + b.upcomingCount + ' upcoming bookings</h2>' +
+            '<p>That\'s the most we hold for one email at a time, so slots stay free for ' +
+            'everyone. Cancel one and you can book again straight away.</p>' +
+            (customer
+              ? '<a href="#/account" class="btn btn-primary" data-nav>View my bookings</a>'
+              : '<a href="tel:' + SITE.phoneE164 + '" class="btn btn-primary">' +
+                icon('phone') + ' Call us on ' + SITE.phoneDisplay + '</a>') +
+          '</div>'
+        : '';
 
     return '' +
     pageHero('Online Booking', 'Book a Repair',
              'Pick your service, choose a time, and we\'ll have you back on the road.') +
     '<section class="section booking-section"><div class="container">' +
-      (b.step < 5 ? customerAuthStrip(customer) + stepsIndicator(b.step) : '') +
+      (b.step < 5 ? customerAuthStrip(customer) + limitNotice + stepsIndicator(b.step) : '') +
       body +
     '</div></section>';
 }
@@ -7399,7 +7566,7 @@ function stepsIndicator(step) {
     }).join('') + '</div>';
 }
 
-function bookStep1() {
+function bookStep1(atLimit) {
     const services = serviceOptions();
     const categories = [...new Set(services.map((s) => s.category))];
     const selected = state.book.service;
@@ -7428,7 +7595,8 @@ function bookStep1() {
         '<p class="booking-card__subtitle">Select the type of repair or service you need.</p>' +
         groups +
         '<div class="booking-nav"><span></span>' +
-          '<button class="btn btn-primary btn-lg" data-act="book-step2" ' + (selected ? '' : 'disabled') + '>' +
+          '<button class="btn btn-primary btn-lg" data-act="book-step2" ' +
+            (selected && !atLimit ? '' : 'disabled') + '>' +
             'Continue ' + icon('arrow-right') + '</button>' +
         '</div>' +
     '</div>';
@@ -7497,7 +7665,10 @@ function bookStep2() {
           '<div class="timeslot-wrapper">' + slotPanel + '</div>' +
         '</div>' +
         '<div class="booking-nav">' +
-          '<button class="btn btn-outline" data-act="book-step" data-step="1">' + icon('arrow-left') + ' Back</button>' +
+          '<div class="booking-nav__left">' +
+            '<button class="btn btn-outline" data-act="book-step" data-step="1">' + icon('arrow-left') + ' Back</button>' +
+            '<button class="btn btn-ghost" data-act="book-restart">Start over</button>' +
+          '</div>' +
           '<button class="btn btn-primary btn-lg" data-act="book-step3" ' +
             (b.date && b.time ? '' : 'disabled') + '>Continue ' + icon('arrow-right') + '</button>' +
         '</div>' +
@@ -7560,13 +7731,16 @@ function bookStep3(customer) {
           '</div>' +
         '</div>' +
         '<div class="booking-nav">' +
-          '<button class="btn btn-outline" data-act="book-step" data-step="2">' + icon('arrow-left') + ' Back</button>' +
+          '<div class="booking-nav__left">' +
+            '<button class="btn btn-outline" data-act="book-step" data-step="2">' + icon('arrow-left') + ' Back</button>' +
+            '<button class="btn btn-ghost" data-act="book-restart">Start over</button>' +
+          '</div>' +
           '<button class="btn btn-primary btn-lg" data-act="book-step4">Continue ' + icon('arrow-right') + '</button>' +
         '</div>' +
     '</div>';
 }
 
-function bookStep4() {
+function bookStep4(atLimit) {
     const b = state.book;
     const customer = currentCustomer();
     const item = (label, value, green) =>
@@ -7595,8 +7769,12 @@ function bookStep4() {
           'using the details above to arrange your repair — see our ' +
           '<a href="#/privacy" data-nav>privacy policy</a>.</p>' +
         '<div class="booking-nav">' +
-          '<button class="btn btn-outline" data-act="book-step" data-step="3">' + icon('arrow-left') + ' Back</button>' +
-          '<button class="btn btn-primary btn-lg" data-act="book-confirm">Confirm Booking ✓</button>' +
+          '<div class="booking-nav__left">' +
+            '<button class="btn btn-outline" data-act="book-step" data-step="3">' + icon('arrow-left') + ' Back</button>' +
+            '<button class="btn btn-ghost" data-act="book-restart">Start over</button>' +
+          '</div>' +
+          '<button class="btn btn-primary btn-lg" data-act="book-confirm" ' +
+            (atLimit ? 'disabled' : '') + '>Confirm Booking ✓</button>' +
         '</div>' +
     '</div>';
 }
@@ -7647,6 +7825,19 @@ function bookValidateDetails() {
     // required — isValidPhone rejects "call me" and similar, which would otherwise
     // produce a dead Call button in the dashboard.
     if (!isValidPhone(b.phone)) { b.error = 'Please enter a phone number we can reach you on.'; return false; }
+
+    // A guest's email is only known here, so this is the earliest their cap can be
+    // asked about — still ahead of the review screen. Kept on this step rather than
+    // advancing, so a mistyped address can be corrected.
+    if (!customer) {
+        b.upcomingCount = countUpcomingForEmail(email);
+        if (b.upcomingCount >= MAX_ACTIVE_BOOKINGS_PER_EMAIL) {
+            b.error = 'This email already has ' + MAX_ACTIVE_BOOKINGS_PER_EMAIL +
+                      ' upcoming bookings. Cancel one from your account, or call us on ' +
+                      SITE.phoneDisplay + '.';
+            return false;
+        }
+    }
     return true;
 }
 
@@ -7814,10 +8005,16 @@ function accountUpcoming(upcoming, a, shared) {
     }
 
     const rows = upcoming.map((b) => {
+        // Null when they can still cancel it themselves; otherwise the reason, which
+        // decides both the control and the line under it.
+        const blocked = selfCancelBlockedReason(b);
         const actions = a.cancelConfirmId === b.id
             ? '<button class="action-btn action-btn--danger" data-act="account-cancel" data-id="' + b.id + '">Confirm cancel</button>' +
               '<button class="action-btn action-btn--keep" data-act="account-cancel-keep">Keep</button>'
-            : '<button class="action-btn action-btn--delete" data-act="account-cancel-start" data-id="' + b.id + '">Cancel</button>';
+            : blocked
+              ? '<a class="action-btn action-btn--call" href="tel:' + SITE.phoneE164 + '">' +
+                icon('phone') + ' Call to cancel</a>'
+              : '<button class="action-btn action-btn--delete" data-act="account-cancel-start" data-id="' + b.id + '">Cancel</button>';
 
         return '<div class="account-booking-row">' + refBadge(b.reference) +
             '<div class="account-booking-row__info"><strong>' + esc(b.serviceName) + '</strong>' +
@@ -7825,6 +8022,7 @@ function accountUpcoming(upcoming, a, shared) {
               (b.bikeDescription ? '<span>' + esc(b.bikeDescription) + '</span>' : '') +
             '</div>' +
             '<div class="account-booking-row__actions">' + statusBadge(b.status) + actions + '</div>' +
+            (blocked ? '<p class="account-booking-row__blocked">' + esc(blocked) + '</p>' : '') +
             jobNotes(b.id, shared) +
         '</div>';
     }).join('');
@@ -8963,10 +9161,18 @@ function customerDetailPanel(detail) {
 const unhandledEnquiries = () => DB.enquiries.filter((e) => !e.handledAt);
 
 function enquiryActions(e) {
-    return '<div class="booking-actions__row">' +
-        '<a class="action-btn action-btn--call" href="mailto:' + esc(e.email) + '">' + esc(e.email) + '</a>' +
+    // Not .booking-actions__row: above 768px that collapses .action-btn--call to a
+    // 32px icon square and clips the label inside it. Fine for a booking, where the
+    // label is the word "Call"; here the address is the content, and it printed over
+    // the button beside it.
+    return '<div class="enquiry-actions">' +
+        '<a class="action-btn action-btn--call enquiry-actions__contact" ' +
+          'href="mailto:' + esc(e.email) + '" title="' + esc(e.email) + '">' +
+          icon('mail') + ' <span class="enquiry-actions__text">' + esc(e.email) + '</span></a>' +
         (isValidPhone(e.phone)
-            ? '<a class="action-btn action-btn--call" href="tel:' + telHref(e.phone) + '">' + esc(e.phone) + '</a>' +
+            ? '<a class="action-btn action-btn--call enquiry-actions__contact" ' +
+                'href="tel:' + telHref(e.phone) + '" title="' + esc(e.phone) + '">' +
+                icon('phone') + ' <span class="enquiry-actions__text">' + esc(e.phone) + '</span></a>' +
               '<a class="action-btn action-btn--whatsapp" href="' + whatsAppHref(e.phone) + '" ' +
                 'target="_blank" rel="noopener">WhatsApp</a>'
             : '') +
@@ -9328,7 +9534,10 @@ document.addEventListener('click', (e) => {
     case 'book-step4': if (bookValidateDetails()) bookGoToStep(4); else render(); break;
     case 'book-step': bookGoToStep(parseInt(actEl.dataset.step, 10)); break;
     case 'book-confirm': bookConfirm(); break;
-    case 'book-reset': bookReset(); break;
+    // Same clear-and-start-again either way: "Book Another" after a success, and
+    // "Start over" from inside the wizard, which previously had no way out at all.
+    case 'book-reset':
+    case 'book-restart': bookReset(); break;
     case 'cal-prev': {
         const m = state.book.calendarMonth;
         const prev = new Date(m.getFullYear(), m.getMonth() - 1, 1);

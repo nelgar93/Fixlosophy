@@ -26,7 +26,7 @@ public class BookingPagingTests
             .Options);
 
     private static BookingService NewService(AppDbContext db) =>
-        new(db, new FakeStorageService(), NullLogger<BookingService>.Instance);
+        TestFactory.NewBookingService(db);
 
     private static void Seed(
         AppDbContext db, int count, BookingStatus status = BookingStatus.Confirmed,

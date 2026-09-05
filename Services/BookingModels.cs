@@ -21,6 +21,16 @@ public class Booking
     public string? CustomerId { get; set; }
     public string? AssignedStaffId { get; set; }
 
+    /// When the day-before reminder went out, or null if it hasn't. This is what
+    /// stops a restart — or two instances overlapping during a deploy — sending the
+    /// same customer the same reminder twice; see MaintenanceJobs.SendRemindersAsync.
+    public DateTime? ReminderSentAt { get; set; }
+
+    /// When staff were told the bike hadn't arrived, or null. Same job as
+    /// <see cref="ReminderSentAt"/>: the bell should ring once, not on every tick for
+    /// the rest of the day.
+    public DateTime? LateNotifiedAt { get; set; }
+
     // Navigation
     public Customer? Customer { get; set; }
     public StaffMember? AssignedStaff { get; set; }

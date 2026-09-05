@@ -147,6 +147,18 @@
     justify-content: flex-end;
 }
 
+/* Why the Cancel button isn't there — work already started, or the two-hour cutoff
+   passed. Its own full-width line, like the job notes below it, and order 3 so it
+   still lands under the actions once the row reorders on a phone. Said on the page
+   rather than in a title attribute: the reason is the whole point of the change. */
+.account-booking-row__blocked {
+    flex: 1 1 100%;
+    order: 3;
+    margin: 0;
+    font-size: var(--fs-xs);
+    color: rgba(255,255,255,0.5);
+}
+
 @media (max-width: 479px) {
     .account-booking-row {
         flex-wrap: wrap;
@@ -206,6 +218,42 @@
     border-top: 1px solid var(--border-dark);
     gap: var(--space-4);
     flex-wrap: wrap;
+}
+
+/* Back and Start over travel together, so the primary action keeps the right-hand
+   end of the row to itself and "Start over" never reads as the way forward. */
+.booking-nav__left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+/* Says the booking cap has been reached before any of the wizard is filled in, so
+   it can't be discovered at the Confirm click. Amber rather than red: nothing has
+   gone wrong, there's just a limit and a way past it. */
+.booking-limit-notice {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+    padding: var(--space-5);
+    background: rgba(234,179,8,0.08);
+    border: 1px solid rgba(234,179,8,0.28);
+    border-radius: var(--radius);
+}
+
+.booking-limit-notice h2 {
+    margin: 0;
+    font-size: var(--fs-lg);
+    color: #fbbf24;
+}
+
+.booking-limit-notice p {
+    margin: 0;
+    color: rgba(255,255,255,0.72);
+    line-height: 1.55;
 }
 
 /* ---------- Customer Auth Strip ---------- */
@@ -804,6 +852,9 @@
     .booking-nav { flex-direction: column-reverse; }
     .booking-nav .btn { width: 100%; justify-content: center; }
     .booking-nav > span { display: none; }
+    /* The grouped Back/Start over pair stacks too, rather than trying to sit two
+       full-width buttons side by side. */
+    .booking-nav__left { width: 100%; flex-direction: column; gap: var(--space-2); }
 
     /* Calendar: tighten up */
     .cal-day { font-size: var(--fs-caption); border-radius: var(--radius-sm); }
@@ -1807,6 +1858,53 @@ a.action-btn { text-decoration: none; }
         clip-path: inset(50%);
         white-space: nowrap;
     }
+}
+
+/* ── An enquiry's controls ───────────────────────────────────────────────────
+   Their own row rather than .booking-actions__row, which above 768px squeezes
+   .action-btn--call to a 32px icon square and visually hides the label inside it.
+   A booking survives that: the label is the word "Call" and the number is already
+   in the row. An enquiry doesn't — the sender's address appears nowhere else, so
+   there is nothing to hide it in favour of, and unhidden text in a 32px box with
+   zero inline padding simply overprinted the button beside it. */
+.enquiry-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.enquiry-actions .action-btn {
+    min-height: var(--touch-min);
+    gap: var(--space-1);
+}
+
+/* An address can be arbitrarily long, and the Actions cell sits inside the table's
+   overflow-x wrapper — so it truncates here rather than pushing a scrollbar under
+   the whole dashboard. The full value stays in the title and in the mailto:. */
+.enquiry-actions__contact { min-width: 0; }
+
+.enquiry-actions__text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+    /* Same reasoning as .booking-actions__row: a mouse doesn't need 44px, and the
+       table cell has less room than a card. */
+    .enquiry-actions {
+        gap: var(--space-1);
+        flex-wrap: nowrap;
+    }
+    .enquiry-actions .action-btn { min-height: 28px; }
+    /* The contact pills give up width first; WhatsApp and Mark handled keep theirs,
+       because a truncated verb is useless where a truncated address still reads. */
+    .enquiry-actions__contact { flex: 0 1 auto; }
+    .enquiry-actions .action-btn--whatsapp,
+    .enquiry-actions .action-btn--primary,
+    .enquiry-actions .action-btn--keep { flex: 0 0 auto; }
 }
 
 /* The confirm step for Cancel. It used to fire on a single click, despite being

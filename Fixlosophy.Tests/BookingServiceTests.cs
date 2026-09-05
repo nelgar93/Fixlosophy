@@ -22,7 +22,7 @@ public class BookingServiceTests
     }
 
     private static BookingService NewService(AppDbContext db) =>
-        new(db, new FakeStorageService(), NullLogger<BookingService>.Instance);
+        TestFactory.NewBookingService(db);
 
     private static AppDbContext NewDb() =>
         new(new DbContextOptionsBuilder<AppDbContext>()
@@ -155,7 +155,10 @@ public class BookingServiceTests
     {
         using var db = NewDb();
         var date = FutureWorkday();
-        Seed(db, date, "09:00");
+        // One short of capacity, whatever capacity is — at MaxPerSlot 1 that's an
+        // empty slot, and the assertion still says the thing it means.
+        for (var i = 0; i < BookingService.MaxPerSlot - 1; i++)
+            Seed(db, date, "09:00", email: $"filler{i}@example.com");
 
         Assert.Contains("09:00", NewService(db).GetAvailableSlots(date));
     }
@@ -211,7 +214,7 @@ public class BookingServiceTests
             .CreateBooking(NewBooking(date, "09:00", "jane@example.com"));
 
         Assert.Null(created);
-        Assert.Contains("just filled up", error);
+        Assert.Contains("just been taken", error);
     }
 
     [Fact]
@@ -242,6 +245,36 @@ public class BookingServiceTests
 
         Assert.Null(created);
         Assert.Contains("upcoming bookings", error);
+    }
+
+    // The wizard asks this before the customer fills anything in, so it has to agree
+    // with the check CreateBooking makes at the end — otherwise the form promises a
+    // booking the submit refuses, which is the whole problem it exists to fix.
+    [Fact]
+    public void CountUpcomingForEmail_MatchesWhatCreateBookingEnforces()
+    {
+        using var db = NewDb();
+        for (var i = 0; i < BookingService.MaxActiveBookingsPerEmail; i++)
+            Seed(db, FutureWorkday(i + 1), "09:00", email: "jane@example.com");
+
+        var svc = NewService(db);
+
+        Assert.Equal(BookingService.MaxActiveBookingsPerEmail, svc.CountUpcomingForEmail("jane@example.com"));
+        // Same answer for a different casing and stray whitespace — the wizard passes
+        // whatever was typed into the box.
+        Assert.Equal(BookingService.MaxActiveBookingsPerEmail, svc.CountUpcomingForEmail("  JANE@Example.com "));
+        Assert.Equal(0, svc.CountUpcomingForEmail("someone-else@example.com"));
+        Assert.Equal(0, svc.CountUpcomingForEmail(""));
+    }
+
+    [Fact]
+    public void CountUpcomingForEmail_IgnoresCancelledAndPastBookings()
+    {
+        using var db = NewDb();
+        Seed(db, FutureWorkday(1), "09:00", email: "jane@example.com", status: BookingStatus.Cancelled);
+        Seed(db, ShopClock.Today.AddDays(-7), "09:00", email: "jane@example.com");
+
+        Assert.Equal(0, NewService(db).CountUpcomingForEmail("jane@example.com"));
     }
 
     [Fact]

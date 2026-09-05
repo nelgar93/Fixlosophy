@@ -28,6 +28,38 @@ public class ConsoleEmailSender(ILogger<ConsoleEmailSender> logger) : IEmailSend
         return Task.CompletedTask;
     }
 
+    public Task SendAppointmentReminderAsync(Booking booking, string? manageLink)
+    {
+        logger.LogWarning(
+            "[DEV EMAIL] Reminder to {Email}: {Reference} — {Service} on {Date} at {Time}. Manage: {Link}",
+            booking.CustomerEmail, booking.Reference, booking.ServiceName,
+            booking.SlotDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), booking.SlotTime,
+            manageLink ?? "(none)");
+        return Task.CompletedTask;
+    }
+
+    public Task SendBookingRescheduledAsync(
+        Booking booking, DateTime previousDate, string previousSlot, string? reason, string? manageLink)
+    {
+        logger.LogWarning(
+            "[DEV EMAIL] Booking moved for {Email}: {Reference} — was {OldDate} {OldTime}, now {NewDate} {NewTime}. Reason: {Reason}",
+            booking.CustomerEmail, booking.Reference,
+            previousDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), previousSlot,
+            booking.SlotDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), booking.SlotTime,
+            reason ?? "(none given)");
+        return Task.CompletedTask;
+    }
+
+    public Task SendBookingCancelledByShopAsync(Booking booking, string? reason, string? bookAgainLink)
+    {
+        logger.LogWarning(
+            "[DEV EMAIL] Shop cancelled {Reference} for {Email} ({Date} {Time}). Reason: {Reason}. Rebook: {Link}",
+            booking.Reference, booking.CustomerEmail,
+            booking.SlotDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), booking.SlotTime,
+            reason ?? "(none given)", bookAgainLink ?? "(none)");
+        return Task.CompletedTask;
+    }
+
     public Task SendBookingNotificationAsync(Booking booking, bool isCancellation)
     {
         logger.LogWarning(
