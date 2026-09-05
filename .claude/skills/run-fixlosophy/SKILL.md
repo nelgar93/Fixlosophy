@@ -125,6 +125,63 @@ viewport on focus and never zoom back:
 
 Expect `[16]` below 768px and `[16, 15.2]` above it.
 
+## Driving the dashboard (signed in)
+
+`/admin` needs a staff login, and the driver never types passwords — so a blank
+headless context can only ever see the login page. Two environment variables fix that:
+
+| Variable | Effect |
+|---|---|
+| `PWDRIVER_PROFILE=<dir>` | Keeps cookies in `<dir>` between runs instead of a blank context each time |
+| `PWDRIVER_HEADED=1` | Shows the browser window |
+
+Both default off, so every recipe above behaves exactly as before.
+
+**One-time setup** — open a visible window and let the person at the keyboard sign in:
+
+```bash
+PWDRIVER_PROFILE=/path/to/profile PWDRIVER_HEADED=1 sh -c '{
+  echo "goto http://localhost:5127/admin/login"
+  echo "wait 200000"      # they log in during this
+  echo "quit"             # graceful close is what flushes cookies to disk
+} | dotnet bin/Release/net10.0/pwdriver.dll'
+```
+
+Two things that will otherwise waste a round trip:
+
+- **"Remember me on this device" must be ticked.** Without it the app issues a session
+  cookie (`IsPersistent = false`), which browsers keep in memory only — it dies with
+  the window and the next run is signed out again.
+- **Restarting the app signs you out**, because in Development the Data Protection
+  keyring is in-memory and dies with the process. Pass a key path to keep it:
+  `--DataProtection:KeyPath=/path/to/dpkeys`. Do that from the first launch and the
+  login survives every later rebuild.
+
+Then drive normally, headless, reusing the profile:
+
+```bash
+PWDRIVER_PROFILE=/path/to/profile sh -c '{
+  echo "goto http://localhost:5127/admin"
+  echo "wait 8000"                                    # circuit + first queries
+  echo "click .tab-bar-wrapper .filter-tab:nth-child(5)"   # tabs are 1-7 in bar order
+  echo "wait 2500"
+  echo "eval () => document.querySelectorAll(\".availability-panel\").length"
+  echo "quit"
+} | dotnet bin/Release/net10.0/pwdriver.dll'
+```
+
+Notes from doing this in anger:
+
+- **Chromium locks the profile**, so only one driver process can use it at a time.
+- **Each invocation is a fresh page load**, so anything stateful — filling a form,
+  picking a date then a slot — has to happen inside a single invocation.
+- **The mobile cards and the desktop table are both in the DOM** at every width. A
+  selector like `.action-btn--primary` matches twice per booking; scope to
+  `.admin-table-wrapper--desktop-only` to act once.
+- **Blazor `@onclick` on injected/looked-up elements**: `dispatchEvent(new MouseEvent(
+  "click", {bubbles:true, cancelable:true, view:window}))` is more reliable than the
+  `click` command when the element was found via `eval`.
+
 ## Test on a physical device (phone / tablet)
 
 Headless Edge at an emulated 390px is not an iPhone. Three behaviours can only be
@@ -257,10 +314,11 @@ EF Core InMemory — no database or secrets needed.
   `PerformanceObserver('layout-shift')` reports **CLS 0** on those pages — so it is a
   measurement artifact between `goto` resolving and first paint, not a page defect.
   Re-check in isolation before believing a hit.
-- **`/admin` cannot be reached without staff credentials.** The seeded dev admin
-  password is random and logged only on first run. To verify admin CSS without logging
-  in, inject probe markup into any page that loads `booking.css` and read computed
-  styles — that is how the mobile/desktop switch was checked:
+- **`/admin` needs a staff login the agent can't perform.** See *Driving the dashboard*
+  above for the persistent-profile route — the user signs in once by hand and every
+  later run reuses it. Failing that, verify admin CSS without logging in by injecting
+  probe markup into any page that loads `booking.css` and reading computed styles —
+  that is how the mobile/desktop switch was checked:
   ```
   eval () => { const d=document.createElement("div"); d.innerHTML='<div class="admin-mobile-cards" id="p1">x</div><div class="admin-table-wrapper admin-table-wrapper--desktop-only" id="p2">y</div>'; document.body.appendChild(d); return "injected"; }
   eval () => ({ cards: getComputedStyle(document.getElementById("p1")).display, table: getComputedStyle(document.getElementById("p2")).display })

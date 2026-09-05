@@ -27,22 +27,55 @@ using Microsoft.Playwright;
 var exitCode = 0;
 using var playwright = await Playwright.CreateAsync();
 
-await using var browser = await playwright.Chromium.LaunchAsync(new()
-{
-    Channel = "msedge",
-    Headless = true,
-});
+// ── Signed-in mode ───────────────────────────────────────────────────────────
+// Set PWDRIVER_PROFILE to a directory and the browser keeps its cookies there
+// between runs, instead of starting from a blank context every time.
+//
+// This is what makes the admin dashboard reachable at all. /admin needs a staff
+// login, the driver never types passwords, and a fresh headless context is signed
+// out by definition — so those screens simply couldn't be driven. With a profile the
+// person running this signs in once, by hand, in a visible window (PWDRIVER_HEADED=1),
+// and every later invocation reuses that session.
+//
+// Default behaviour is unchanged: no profile, headless, blank context.
+var profileDir = Environment.GetEnvironmentVariable("PWDRIVER_PROFILE");
+var headed = Environment.GetEnvironmentVariable("PWDRIVER_HEADED") == "1";
 
-var context = await browser.NewContextAsync(new()
-{
-    ViewportSize = new() { Width = 1280, Height = 900 },
-    DeviceScaleFactor = 1,
-    // Reports as a touch device so `@media (hover: hover)` and `(pointer: fine)`
-    // evaluate the way they would on a phone. Overridden per-size below.
-    HasTouch = false,
-});
+IBrowser? browser = null;
+IBrowserContext context;
 
-var page = await context.NewPageAsync();
+if (string.IsNullOrWhiteSpace(profileDir))
+{
+    browser = await playwright.Chromium.LaunchAsync(new()
+    {
+        Channel = "msedge",
+        Headless = !headed,
+    });
+
+    context = await browser.NewContextAsync(new()
+    {
+        ViewportSize = new() { Width = 1280, Height = 900 },
+        DeviceScaleFactor = 1,
+        // Reports as a touch device so `@media (hover: hover)` and `(pointer: fine)`
+        // evaluate the way they would on a phone. Overridden per-size below.
+        HasTouch = false,
+    });
+}
+else
+{
+    Directory.CreateDirectory(profileDir);
+    context = await playwright.Chromium.LaunchPersistentContextAsync(profileDir, new()
+    {
+        Channel = "msedge",
+        Headless = !headed,
+        ViewportSize = new() { Width = 1280, Height = 900 },
+        DeviceScaleFactor = 1,
+        HasTouch = false,
+    });
+}
+
+// A persistent context opens with a page already; a fresh one doesn't.
+var page = context.Pages.Count > 0 ? context.Pages[0] : await context.NewPageAsync();
 
 // Surface page errors rather than swallowing them — a JS exception on the page is
 // usually the reason an interaction "did nothing".
@@ -202,7 +235,10 @@ while ((line = Console.ReadLine()) is not null)
 
             case "quit":
                 Console.WriteLine("OK: bye");
-                await browser.CloseAsync();
+                // Context first: that's what writes a persistent profile's cookies
+                // out, so a signed-in session survives to the next invocation.
+                await context.CloseAsync();
+                if (browser is not null) await browser.CloseAsync();
                 return exitCode;
 
             default:
@@ -218,7 +254,11 @@ while ((line = Console.ReadLine()) is not null)
     }
 }
 
-await browser.CloseAsync();
+// Closing the context is what flushes a persistent profile's cookies to disk, so it
+// has to happen before the browser goes — and in profile mode there is no separate
+// browser handle to close.
+await context.CloseAsync();
+if (browser is not null) await browser.CloseAsync();
 return exitCode;
 
 // Waits until the document's scrollWidth stops changing across consecutive animation
