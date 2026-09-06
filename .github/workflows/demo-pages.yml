@@ -13,6 +13,9 @@ on:
     branches: [main]
     paths:
       - 'demo/**'
+      # The page links the real stylesheets and the build inlines them, so a CSS change
+      # changes what Pages serves without touching demo/ at all.
+      - 'wwwroot/**'
       - '.github/workflows/demo-pages.yml'
   workflow_dispatch:
 
@@ -47,6 +50,11 @@ jobs:
           test -s _site/index.html
           test "$(find _site/assets -type f | wc -l)" -ge 9
           grep -q '__FIXLOSOPHY_PHOTOS' _site/index.html
+          # The site CSS has to be in the page, not linked: nothing Pages serves can
+          # reach ../wwwroot. An unstyled build renders as bare markup and reads, at a
+          # glance, like a page that simply failed to load.
+          ! grep -q 'rel="stylesheet"' _site/index.html
+          grep -q 'inlined by demo/build.js' _site/index.html
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

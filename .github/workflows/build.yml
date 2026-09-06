@@ -28,3 +28,32 @@ jobs:
       # Fixlosophy.Tests uses EF Core's InMemory provider — no database/secrets needed.
       - name: Test
         run: dotnet test Fixlosophy.Tests/Fixlosophy.Tests.csproj --no-build --configuration Release --verbosity normal
+
+  # The shareable demo is a hand-written replica of the site, so it can fall behind the
+  # thing it replicates — and did, by a whole dashboard tab, because nothing checked.
+  # demo/smoke.js drives the built page in headless Chromium and cross-checks it against
+  # the Razor it mirrors. Separate job: it needs Node and a browser, not the .NET SDK.
+  demo:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # --no-save because there is no package.json to save into: Playwright is a test
+      # dependency of one script, not of the project.
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Build the demo
+        run: node demo/build.js
+
+      - name: Smoke-test the demo
+        run: node demo/smoke.js
