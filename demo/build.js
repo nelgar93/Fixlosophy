@@ -12,9 +12,13 @@
  *       the HTML stays small. For GitHub Pages (see .github/workflows/demo-pages.yml).
  *
  * `demo/index.html` needs neither: opened straight from disk it reads the photos from
- * the public Supabase bucket the real site uses. The builds exist to cut that last
- * dependency — an Artifact's sandbox blocks off-origin images outright, and a hosted
- * site shouldn't lean on a bucket it doesn't own.
+ * the public Supabase bucket the real site uses, and <link>s the real stylesheets by
+ * relative path. The builds exist to cut both of those — an Artifact's sandbox blocks
+ * off-origin images outright, a hosted site shouldn't lean on a bucket it doesn't own,
+ * and neither shape can reach ../wwwroot once the page has left the repo.
+ *
+ * The CSS is read from wwwroot at build time rather than kept as a second copy in the
+ * demo, which is how it fell 182 lines behind the site it is meant to be showing.
  *
  * Either way the mapping is by the path the page asks for, so `assets/shop/x.webp`
  * answers `img('shop/x.jpg')`: the page keeps naming the bucket's files, and the build
@@ -25,6 +29,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { inlineStylesheets } = require('./stylesheets');
 
 const root = __dirname;
 const SOURCE = path.join(root, 'index.html');
@@ -73,7 +78,12 @@ if (names.length === 0) {
     process.exit(1);
 }
 
-const html = fs.readFileSync(SOURCE, 'utf8');
+const source = fs.readFileSync(SOURCE, 'utf8');
+
+// The site's own CSS, read from wwwroot and baked in. Throws rather than emitting a
+// page with no stylesheet in it, which renders as unstyled markup and reads, at a
+// glance, like a page that simply failed to load.
+const { html, sheets } = inlineStylesheets(source, root);
 
 // Anchor on the demo harness's own markup, which sits immediately above the script
 // that reads window.__FIXLOSOPHY_PHOTOS. Failing loudly beats emitting a build whose
@@ -113,7 +123,9 @@ const kb = (n) => (n / 1024).toFixed(0) + ' KB';
 const assetBytes = names.reduce((sum, n) => sum + fs.statSync(images[n].file).size, 0);
 const rel = (p) => path.relative(process.cwd(), p);
 
-console.log((pages ? 'Site build' : 'Single-file build') + ' — ' + names.length + ' images');
+console.log((pages ? 'Site build' : 'Single-file build') + ' — ' + names.length + ' images, ' +
+            sheets.length + ' stylesheets inlined (' +
+            sheets.map((s) => s.href.replace(/^\.\.\//, '')).join(', ') + ')');
 if (pages) {
     console.log('  ' + rel(outFile) + ' (' + kb(fs.statSync(outFile).size) + ')');
     console.log('  ' + rel(path.join(outDir, 'assets')) + ' (' + kb(assetBytes) + ' over ' + names.length + ' files)');

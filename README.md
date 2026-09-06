@@ -109,7 +109,10 @@ certificate.
   dashboard), `site.js` (behaviours for statically-rendered pages and the image
   fallbacks).
 - `demo/` — a browser-only replica published to GitHub Pages. localStorage, no network,
-  invented data. It is a shareable mock-up, **not** a deployable copy of the app.
+  invented data. It is a shareable mock-up, **not** a deployable copy of the app. It
+  links `wwwroot/app.css` and `wwwroot/booking.css` rather than copying them, so the
+  styling cannot drift; the render functions are hand-written and can, which is what
+  `demo/smoke.js` is for.
 
 ### Roles & permissions
 
@@ -292,10 +295,15 @@ didn't quietly break interactivity. See the skill for recipes and gotchas.
 
 GitHub Actions (`.github/workflows/build.yml`) restores, builds, and runs the test
 suite on every push/PR to `main`/`dev`. No secrets required — the test suite doesn't
-touch a real database.
+touch a real database. A second job in the same workflow builds the demo and runs
+`demo/smoke.js` against it in headless Chromium, which also cross-checks the demo's
+dashboard tabs against `Components/Pages/Admin.razor` — the demo fell a whole tab
+behind once, silently, and that is the check that catches it.
 
-`.github/workflows/demo-pages.yml` publishes `demo/` to GitHub Pages. It never touches
-the real app or its database.
+`.github/workflows/demo-pages.yml` publishes `demo/` to GitHub Pages, on a push to
+`main` touching `demo/` or `wwwroot/` (the demo inlines the real stylesheets at build
+time, so a CSS change alters what Pages serves). It never touches the real app or its
+database.
 
 ## Deployment
 

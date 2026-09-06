@@ -1,4668 +1,25 @@
+<meta charset="utf-8" />
+<!-- First, and inside the first 1024 bytes, or it doesn't count: the declaration has
+     to be read before anything it applies to, so this note sits after it and stays
+     ASCII. Components/App.razor says the same thing for the real site. GitHub Pages
+     happens to send charset=utf-8 as a header, but the single-file build exists to
+     travel - an email attachment, a USB stick, a plain static server - and none of
+     those promise a header. Without this, every em-dash, curly quote and pound sign
+     in the page decodes as windows-1252 mojibake. -->
 <title>Fixlosophy Shop Demo</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0A0A0A" />
+<!-- The real site's stylesheets, read rather than copied. Opened from disk these
+     resolve as they stand; demo/build.js inlines them for the built page, which has
+     to travel on its own. Neither path leaves a copy that can fall behind. -->
+<link rel="stylesheet" href="../wwwroot/app.css" />
+<link rel="stylesheet" href="../wwwroot/booking.css" />
 <style>
 /* ============================================================
-   FIXLOSOPHY – Global Styles
-   Mobile-first, responsive bike shop theme
-   ============================================================ */
-
-/* ---------- Design Tokens ---------- */
-:root {
-    --green: #3DBB48;
-    --green-dark: #2D9A38;
-    --green-glow: rgba(61,187,72,0.20);
-    --dark: #0A0A0A;
-    --dark-2: #111111;
-    --dark-3: #1C1C1C;
-    --dark-4: #2A2A2A;
-    --mid: #888888;
-    --white: #ffffff;
-    --border-dark: #2A2A2A;
-    --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    --radius: 12px;
-    --radius-sm: 8px;
-    --shadow: 0 4px 24px rgba(0,0,0,0.10);
-    --shadow-lg: 0 12px 40px rgba(0,0,0,0.20);
-    --nav-h: 64px;
-
-    /* Spacing scale. Every padding, margin and gap in both stylesheets now comes
-       from here. There used to be ~35 distinct literals doing the work of seven —
-       0.4 next to 0.45, 0.6 next to 0.65 next to 0.7, .75rem next to 0.75rem — and
-       that drift is what made the admin dashboard in particular look unfinished.
-       Off-scale values were snapped to the nearest step (ties toward the tighter
-       one), so a few elements moved by up to 0.25rem; nothing moved further.
-
-       The step numbers are multiples of --space-1 (0.25rem), so --space-8 is 2rem
-       and --space-12 is 3rem. There is deliberately no --space-7: 1.75rem was a
-       one-off that belonged at 2rem. */
-    --space-05: 0.125rem;
-    --space-1: 0.25rem;
-    --space-2: 0.5rem;
-    --space-3: 0.75rem;
-    --space-4: 1rem;
-    --space-5: 1.25rem;
-    --space-6: 1.5rem;
-    --space-8: 2rem;
-    --space-10: 2.5rem;
-    --space-12: 3rem;
-    --space-16: 4rem;
-
-    /* The "this row is highlighted" left bar. Was 3px in two places and 2px in two
-       others, via two different mechanisms (border-left and an inset box-shadow). */
-    --rule-accent: 3px;
-
-    /* Height of the mobile sticky action bar. The list above it needs matching
-       bottom clearance or the last card sits under the bar; keeping both ends on
-       one token stops them drifting apart. */
-    --sticky-actions-h: 4.5rem;
-
-    /* Font-size scale. Every size below 1rem in both stylesheets now comes from
-       here — there used to be nine different literals (0.7 / 0.75 / 0.8 / 0.82 /
-       0.85 / 0.875 / 0.9 / 0.95rem, plus .9rem and .875rem written without the
-       leading zero) doing what is really about five jobs, which is where the
-       "everything is slightly different" feeling came from.
-
-       Values are unchanged from what was already on the page — this was a
-       consolidation, not a re-scale — except 0.82rem, a one-off that is now --fs-xs
-       like every other caption. */
-    --fs-2xs: 0.7rem;        /* micro caps: table headers, badges, step labels */
-    --fs-tiny: 0.75rem;      /* status/reference badges, stat labels */
-    --fs-caption: 0.8rem;    /* captions and meta text under a heading */
-    --fs-xs: 0.85rem;        /* muted caption/meta text */
-    --fs-sm: 0.875rem;       /* small body text: labels, footer copy, error text */
-    --fs-body-sm: 0.9rem;    /* small body copy */
-    --fs-body: 0.95rem;      /* form controls, buttons, card titles */
-    --fs-h3-compact: 1.05rem; /* card/table sub-heading, smaller than default h3 */
-
-    /* Semantic alias — the uppercase "eyebrow" label above a heading. */
-    --fs-eyebrow: var(--fs-caption);
-
-    /* Minimum comfortable touch target. Anything a finger has to hit on a phone
-       should reach this in both dimensions, padding included. */
-    --touch-min: 44px;
-}
-
-/* ---------- Reset / Base ---------- */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-/* Form controls don't inherit font from their ancestors — the UA applies its own
-   `font` shorthand instead. Without this, <button class="btn"> rendered in the
-   browser's default face while <a class="btn"> used --font, so the same class
-   produced two different-looking buttons. The shorthand also resets line-height
-   to `normal`, which is what threw the calendar's arrow glyphs off-centre. */
-button, input, select, textarea { font: inherit; }
-
-/* Every :hover rule in this file and in booking.css is wrapped in
-   `@media (hover: hover) and (pointer: fine)`. A touchscreen has no hover state, so
-   the browser fakes one on tap and leaves it applied until you tap something else —
-   which left service cards, gallery tiles, booking rows and filter chips visibly
-   stuck in their hover styling after every touch. The wrap means those styles only
-   ever apply to a real pointer. Press feedback on touch comes from :active and from
-   the .selected / .active classes, which are unaffected. */
-
-/* Suppresses the grey/blue box the browser flashes over a tapped element. The site
-   has a lot of <div @onclick> controls, so this was firing constantly. */
-* { -webkit-tap-highlight-color: transparent; }
-
-html { scroll-behavior: smooth; }
-
-/* Honour the OS "reduce motion" setting: no smooth scrolling, no bouncing scroll
-   hint, and transitions collapse to something imperceptible rather than being
-   removed outright (0s can make state changes read as glitches). */
-@media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-
-    *, *::before, *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-    }
-}
-
-body {
-    font-family: var(--font);
-    background: var(--dark);
-    color: rgba(255,255,255,0.85);
-    line-height: 1.6;
-    font-size: 16px;
-    -webkit-font-smoothing: antialiased;
-}
-
-img { max-width: 100%; display: block; }
-a { color: var(--green); text-decoration: none; }
-@media (hover: hover) and (pointer: fine) {
-    a:hover { color: var(--green-dark); }
-}
-ul { list-style: none; }
-
-/* The gutter grows to clear the notch in landscape, where the safe-area insets are
-   horizontal. max() rather than addition so the normal gutter is unchanged on every
-   device without insets. */
-.container {
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding-inline:
-        max(var(--space-5), env(safe-area-inset-left))
-        max(var(--space-5), env(safe-area-inset-right));
-}
-
-/* ---------- Typography ---------- */
-h1, h2, h3, h4 {
-    font-weight: 700;
-    line-height: 1.2;
-    color: var(--white);
-}
-
-h1 { font-size: clamp(2rem, 6vw, 3.5rem); }
-h2 { font-size: clamp(1.5rem, 4vw, 2.4rem); }
-h3 { font-size: clamp(1.1rem, 3vw, 1.4rem); }
-
-/* Routes.razor has <FocusOnNavigate Selector="h1">, which moves focus to the page
-   heading after every navigation so a screen reader announces the new page. That
-   gives the h1 tabindex="-1", and Chromium counts the programmatic focus as
-   :focus-visible — so the browser was painting its default focus ring around the
-   main heading on every single page load, on every page.
-
-   The focus move is worth keeping; the ring is not. Nobody pressed Tab to get here,
-   and the heading isn't a control (tabindex="-1" keeps it out of the tab order), so
-   suppressing the ring costs no keyboard affordance. Interactive elements keep
-   theirs — see .btn:focus-visible and the lightbox controls. */
-h1[tabindex="-1"]:focus,
-h1[tabindex="-1"]:focus-visible {
-    outline: none;
-}
-
-/* ---------- Buttons ---------- */
-.btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-6);
-    border-radius: 50px;
-    font-size: var(--fs-body);
-    font-weight: 600;
-    cursor: pointer;
-    border: 2px solid transparent;
-    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease,
-                box-shadow 0.2s ease, transform 0.2s ease;
-    white-space: nowrap;
-    text-decoration: none;
-}
-
-.btn-lg { padding: var(--space-3) var(--space-8); font-size: 1rem; }
-.btn-full { width: 100%; }
-
-/* The booking wizard disables Continue/Confirm until each step is valid. Without
-   this the button stayed fully saturated and still lifted on hover, so there was
-   nothing to tell you why the click did nothing. */
-.btn:disabled,
-.btn[disabled] {
-    opacity: 0.45;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-    pointer-events: none;
-}
-
-.btn:focus-visible {
-    outline: 2px solid var(--white);
-    outline-offset: 2px;
-}
-
-.btn-primary {
-    background: var(--green);
-    color: var(--white);
-    border-color: var(--green);
-}
-@media (hover: hover) and (pointer: fine) {
-    .btn-primary:hover {
-        background: var(--green-dark);
-        border-color: var(--green-dark);
-        color: var(--white);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 16px rgba(61,187,72,0.35);
-    }
-}
-
-.btn-outline {
-    background: transparent;
-    color: var(--green);
-    border-color: var(--green);
-}
-@media (hover: hover) and (pointer: fine) {
-    .btn-outline:hover {
-        background: var(--green);
-        color: var(--white);
-    }
-}
-
-.btn-ghost {
-    background: transparent;
-    color: var(--white);
-    border-color: rgba(255,255,255,0.5);
-}
-@media (hover: hover) and (pointer: fine) {
-    .btn-ghost:hover {
-        background: rgba(255,255,255,0.12);
-        border-color: var(--white);
-        color: var(--white);
-    }
-}
-
-/* Destructive actions (delete account, delete booking). Muted until hover so it
-   doesn't shout from the page, matching .action-btn--delete's treatment. */
-.btn-danger {
-    background: transparent;
-    color: #f87171;
-    border-color: rgba(220,38,38,0.45);
-}
-@media (hover: hover) and (pointer: fine) {
-    .btn-danger:hover {
-        background: #dc2626;
-        border-color: #dc2626;
-        color: var(--white);
-    }
-}
-
-/* Visually hidden but available to screen readers — for labels whose text would be
-   redundant on screen next to a placeholder. */
-.sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-}
-
-/* ---------- Navbar ---------- */
-.navbar-wrapper {
-    position: sticky;
-    top: 0;
-    z-index: 1000;
-    background: var(--dark);
-    border-bottom: 1px solid var(--dark-3);
-    transition: box-shadow 0.3s;
-}
-
-.navbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: var(--nav-h);
-}
-
-.navbar-brand {
-    font-size: 1.35rem;
-    font-weight: 800;
-    color: var(--white) !important;
-    letter-spacing: -0.5px;
-    display: flex;
-    align-items: center;
-}
-@media (hover: hover) and (pointer: fine) {
-    .navbar-brand:hover { color: var(--green) !important; }
-}
-/* logo.avif has a solid black background; screen blend hides it on dark surfaces */
-.navbar-logo { height: 40px; width: auto; display: block; mix-blend-mode: screen; }
-
-/* ---------- Footer logo ---------- */
-.footer-logo-link {
-    display: inline-block;
-    margin-bottom: var(--space-3);
-    line-height: 0;
-}
-.footer-logo-img  { height: 38px; width: auto; display: block; mix-blend-mode: screen; }
-.footer-logo-text {
-    font-size: 1.3rem;
-    font-weight: 800;
-    color: var(--white);
-    margin-bottom: var(--space-3);
-}
-
-.nav-links {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-}
-
-.nav-links a {
-    color: rgba(255,255,255,0.75);
-    font-weight: 500;
-    font-size: var(--fs-body);
-    padding: var(--space-2) var(--space-3);
-    border-radius: 6px;
-    transition: color 0.2s, background 0.2s;
-}
-
-/* The current page's link stays highlighted on every device — it's state, not
-   feedback — so it sits outside the pointer guard. Only the hover styling is
-   gated. These shared one selector list, which would have hidden the active
-   highlight on every phone. */
-.nav-links a.active {
-    color: var(--white);
-    background: rgba(255,255,255,0.08);
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .nav-links a:hover {
-        color: var(--white);
-        background: rgba(255,255,255,0.08);
-    }
-}
-
-/* The secondary nav pill — Dashboard signed in, Sign in signed out. Same shape as
-   .btn-book but outlined, so booking stays the one filled call to action. The
-   !important flags are here for the same reason .btn-book's are: both have to beat
-   `.nav-links a` above, which sets colour and padding on every link in the bar. */
-.btn-nav {
-    border: 1.5px solid var(--green);
-    color: var(--green) !important;
-    padding: var(--space-2) var(--space-5) !important;
-    border-radius: 50px !important;
-    font-weight: 600 !important;
-    margin-left: var(--space-2);
-}
-
-/* `.nav-links a.active` paints a translucent panel behind the current page's link.
-   Inside the pill that reads as a smudge against the border, so the active state
-   fills it instead. Outside the pointer guard, like the rule it overrides: the
-   current page is state, not hover feedback. */
-.nav-links a.btn-nav.active {
-    background: var(--green);
-    color: var(--white) !important;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .btn-nav:hover {
-        background: var(--green);
-        color: var(--white) !important;
-    }
-}
-
-.btn-book {
-    background: var(--green) !important;
-    color: var(--white) !important;
-    padding: var(--space-2) var(--space-5) !important;
-    border-radius: 50px !important;
-    font-weight: 600 !important;
-    margin-left: var(--space-2);
-}
-@media (hover: hover) and (pointer: fine) {
-    .btn-book:hover {
-        background: var(--green-dark) !important;
-        color: var(--white) !important;
-    }
-}
-
-/* Hamburger */
-/* The bars stay 24×2px; the padding grows the hit area to --touch-min in both
-   directions. It was 40×32, which is a small target for the control that opens the
-   whole menu on a phone. */
-.hamburger {
-    display: none;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    gap: var(--space-1);
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: var(--space-2);
-    min-width: var(--touch-min);
-    min-height: var(--touch-min);
-    border-radius: 6px;
-}
-.hamburger span {
-    display: block;
-    width: 24px;
-    height: 2px;
-    background: var(--white);
-    border-radius: 2px;
-    transition: all 0.25s ease;
-    transform-origin: center;
-}
-.hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-.hamburger.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
-.hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
-
-/* ---------- Hero ---------- */
-.hero {
-    position: relative;
-    min-height: calc(100svh - var(--nav-h));
-    display: flex;
-    align-items: center;
-    background: var(--dark);
-    overflow: hidden;
-}
-
-.hero::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse 80% 60% at 70% 50%, rgba(61,187,72,0.15) 0%, transparent 70%);
-    pointer-events: none;
-}
-
-/* A faint circle texture over the hero photo. The circles are drawn as strokes,
-   so the opacity has to be stroke-opacity — fill-opacity alone leaves the rings
-   at full white and tiles a hard lattice across the whole hero, hiding the photo
-   behind it. */
-.hero-overlay {
-    position: absolute;
-    inset: 0;
-    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.02'%3E%3Ccircle cx='30' cy='30' r='28' stroke='%23ffffff' stroke-width='1' stroke-opacity='0.05'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-    pointer-events: none;
-}
-
-/* This element is both .container and .hero-content. Capping it at 680px let
-   .container's `margin: 0 auto` centre the whole text block, which pushed the
-   buttons into the middle of the hero where the scrim is thinnest — so they read
-   as washed out. Keep the container's own width so the text lines up with the
-   gutter every other section uses, and cap the children instead. */
-.hero-content {
-    position: relative;
-    padding: var(--space-16) var(--space-5);
-}
-
-.hero-eyebrow,
-.hero-title,
-.hero-actions { max-width: 680px; }
-
-.hero-eyebrow {
-    color: var(--green);
-    font-weight: 600;
-    font-size: var(--fs-eyebrow);
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-bottom: var(--space-4);
-}
-
-.hero-title {
-    color: var(--white);
-    margin-bottom: var(--space-5);
-}
-
-.hero-title span { color: var(--green); }
-
-.hero-subtitle {
-    color: rgba(255,255,255,0.7);
-    font-size: 1.1rem;
-    margin-bottom: var(--space-8);
-    max-width: 520px;
-    line-height: 1.7;
-}
-
-.hero-actions {
-    display: flex;
-    gap: var(--space-4);
-    flex-wrap: wrap;
-}
-
-.hero-scroll-hint {
-    position: absolute;
-    bottom: 2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    color: rgba(255,255,255,0.3);
-    font-size: 1.4rem;
-    animation: bounce 1.8s infinite;
-}
-
-@keyframes bounce {
-    0%, 100% { transform: translateX(-50%) translateY(0); }
-    50% { transform: translateX(-50%) translateY(8px); }
-}
-
-/* ---------- Trust Bar ---------- */
-.trust-bar {
-    background: var(--dark-2);
-    padding: var(--space-6) 0;
-    border-bottom: 1px solid var(--dark-3);
-}
-
-.trust-bar-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-4);
-}
-
-.trust-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    color: var(--white);
-}
-
-/* ---------- Icons ---------- */
-/* <Icon /> renders a 1em square, so the icon takes its size from whatever
-   font-size the surrounding rule already set and its colour from currentColor. */
-.icon {
-    width: 1em;
-    height: 1em;
-    display: inline-block;
-    vertical-align: -0.125em;
-    flex-shrink: 0;
-}
-
-.trust-icon {
-    font-size: 1.75rem;
-    flex-shrink: 0;
-    color: var(--green);
-    display: flex;
-    align-items: center;
-}
-
-.trust-item strong {
-    display: block;
-    font-size: var(--fs-body);
-    color: var(--white);
-    margin-bottom: var(--space-05);
-}
-
-.trust-item p {
-    font-size: var(--fs-caption);
-    color: rgba(255,255,255,0.5);
-    margin: 0;
-}
-
-/* ---------- Sections ---------- */
-.section {
-    padding: var(--space-16) 0;
-}
-
-.section-header {
-    text-align: center;
-    margin-bottom: var(--space-12);
-}
-
-.section-eyebrow {
-    color: var(--green);
-    font-size: var(--fs-eyebrow);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-bottom: var(--space-2);
-}
-
-.section-subtitle {
-    color: rgba(255,255,255,0.55);
-    font-size: var(--fs-h3-compact);
-    max-width: 540px;
-    margin: var(--space-3) auto 0;
-}
-
-.section-cta {
-    text-align: center;
-    margin-top: var(--space-10);
-}
-
-/* ---------- Services Grid ---------- */
-.services-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-5);
-}
-
-.service-card {
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-8);
-    transition: all 0.25s ease;
-    position: relative;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .service-card:hover {
-        transform: translateY(-3px);
-        box-shadow: var(--shadow);
-        border-color: var(--green);
-    }
-}
-
-.service-card--featured {
-    background: var(--dark-4);
-    border-color: var(--green);
-    border-width: 2px;
-}
-
-.service-card--featured h3,
-.service-card--featured p { color: rgba(255,255,255,0.9); }
-
-.service-badge {
-    position: absolute;
-    top: -1px;
-    right: 1.5rem;
-    background: var(--green);
-    color: var(--white);
-    font-size: var(--fs-2xs);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    padding: var(--space-1) var(--space-3);
-    border-radius: 0 0 8px 8px;
-}
-
-.service-icon {
-    font-size: 2rem;
-    margin-bottom: var(--space-3);
-    color: var(--green);
-    line-height: 1;
-}
-
-.service-card h3 { margin-bottom: var(--space-2); }
-
-.service-card p {
-    color: rgba(255,255,255,0.55);
-    font-size: var(--fs-body-sm);
-    margin-bottom: var(--space-4);
-}
-
-.service-price {
-    display: inline-block;
-    color: var(--green);
-    font-weight: 700;
-    font-size: var(--fs-body);
-}
-
-/* ---------- How It Works ---------- */
-.how-it-works {
-    background: var(--dark-2);
-    border-top: 1px solid var(--dark-3);
-    border-bottom: 1px solid var(--dark-3);
-}
-
-.steps-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-6);
-}
-
-.step {
-    text-align: center;
-    padding: var(--space-6);
-    background: var(--dark-3);
-    border-radius: var(--radius);
-    border: 1px solid var(--border-dark);
-}
-
-.step-number {
-    font-size: 2.5rem;
-    font-weight: 900;
-    color: var(--green);
-    opacity: 0.8;
-    line-height: 1;
-    margin-bottom: var(--space-3);
-}
-
-.step h3 { margin-bottom: var(--space-2); }
-.step p { color: rgba(255,255,255,0.55); font-size: var(--fs-body-sm); }
-
-.step-arrow {
-    display: none;
-    color: var(--green);
-    font-size: 1.5rem;
-    align-items: center;
-    justify-content: center;
-}
-
-/* ---------- Star row ---------- */
-.stars {
-    font-size: 1rem;
-    margin-bottom: var(--space-3);
-    color: #F5B301;
-    display: flex;
-    gap: var(--space-05);
-}
-
-/* ---------- Rating summary ---------- */
-/* Replaces the invented testimonial cards on the home page: the shop's real
-   aggregate rating, linked to the profile it comes from. */
-.rating-summary {
-    max-width: 420px;
-    margin: 0 auto;
-    padding: var(--space-8) var(--space-6);
-    text-align: center;
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-}
-
-.rating-summary__score {
-    font-size: 3rem;
-    font-weight: 900;
-    line-height: 1;
-    color: var(--green);
-}
-
-.rating-summary .stars {
-    justify-content: center;
-    font-size: 1.15rem;
-    margin: var(--space-2) 0 var(--space-3);
-}
-
-.rating-summary__count {
-    color: rgba(255,255,255,0.55);
-    font-size: var(--fs-sm);
-    margin-bottom: var(--space-5);
-}
-
-/* ---------- CTA Banner ---------- */
-.cta-banner {
-    background: var(--dark-2);
-    border-top: 1px solid var(--dark-3);
-    border-bottom: 1px solid var(--dark-3);
-    padding: var(--space-16) 0;
-    position: relative;
-    overflow: hidden;
-}
-
-.cta-banner::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse 70% 80% at 50% 50%, rgba(61,187,72,0.10) 0%, transparent 70%);
-    pointer-events: none;
-}
-
-.cta-banner-content {
-    position: relative;
-    text-align: center;
-    color: var(--white);
-}
-
-.cta-banner h2 {
-    color: var(--white);
-    margin-bottom: var(--space-3);
-}
-
-.cta-banner p {
-    color: rgba(255,255,255,0.6);
-    font-size: var(--fs-h3-compact);
-    margin-bottom: var(--space-8);
-    max-width: 480px;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-.cta-actions {
-    display: flex;
-    justify-content: center;
-    gap: var(--space-4);
-    flex-wrap: wrap;
-}
-
-/* ---------- Page Hero ---------- */
-.page-hero {
-    background: linear-gradient(135deg, var(--dark) 0%, var(--dark-2) 100%);
-    text-align: center;
-    color: var(--white);
-}
-
-.page-hero--sm { padding: var(--space-16) var(--space-5) var(--space-12); }
-
-.page-hero h1 { color: var(--white); margin-bottom: var(--space-3); }
-.page-hero p { color: rgba(255,255,255,0.65); font-size: var(--fs-h3-compact); max-width: 500px; margin: 0 auto; }
-.page-hero .section-eyebrow { margin-bottom: var(--space-2); }
-
-/* ---------- Services Page ---------- */
-.services-category {
-    margin-bottom: var(--space-12);
-}
-
-.category-title {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin-bottom: var(--space-6);
-    padding-bottom: var(--space-3);
-    border-bottom: 2px solid var(--border-dark);
-}
-
-.cat-icon { font-size: 1.4rem; }
-
-.pricing-table { display: flex; flex-direction: column; gap: 0; }
-
-.pricing-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: var(--space-4);
-    padding: var(--space-4) 0;
-    border-bottom: 1px solid var(--border-dark);
-}
-
-.pricing-row:last-child { border-bottom: none; }
-
-.pricing-info h4 { font-size: 1rem; margin-bottom: var(--space-1); }
-.pricing-info p { color: rgba(255,255,255,0.5); font-size: var(--fs-sm); margin: 0; }
-
-.pricing-cost {
-    color: var(--green);
-    font-weight: 700;
-    font-size: var(--fs-body);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.package-grid {
-    display: grid;
-    /* auto-fit so cards reflow 1→2→3 across phone/tablet/desktop without ever
-       forcing the bold name+price header wider than the column (which used to
-       overflow the viewport at tablet widths). min(100%, …) keeps it safe on
-       very narrow screens. */
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
-    gap: var(--space-5);
-}
-
-.package-card {
-    background: var(--dark-3);
-    border: 2px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-8);
-    position: relative;
-    transition: all 0.25s;
-    min-width: 0;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .package-card:hover { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
-}
-
-.package-card--popular {
-    border-color: var(--green);
-    background: var(--dark-4);
-}
-
-.package-badge {
-    position: absolute;
-    top: -14px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--green);
-    color: var(--white);
-    font-size: var(--fs-2xs);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    padding: var(--space-1) var(--space-4);
-    border-radius: 50px;
-    white-space: nowrap;
-}
-
-.package-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-5);
-    padding-bottom: var(--space-4);
-    border-bottom: 1px solid var(--border-dark);
-}
-
-.package-price {
-    font-size: 1.75rem;
-    font-weight: 900;
-    color: var(--green);
-}
-
-.package-card ul { margin-bottom: var(--space-6); }
-
-.package-card li {
-    color: rgba(255,255,255,0.7);
-    font-size: var(--fs-body-sm);
-    padding: var(--space-1) 0;
-}
-
-.services-note {
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-8);
-    text-align: center;
-    margin-top: var(--space-4);
-}
-
-.services-note p {
-    color: rgba(255,255,255,0.5);
-    margin-bottom: var(--space-5);
-    font-size: var(--fs-body-sm);
-}
-
-/* ---------- About Page ---------- */
-.about-intro {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-10);
-    margin-bottom: var(--space-4);
-}
-
-.about-text h2 { margin-bottom: var(--space-4); }
-.about-text p { color: rgba(255,255,255,0.6); margin-bottom: var(--space-4); line-height: 1.8; }
-
-.about-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-4);
-}
-
-.stat-card {
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    color: var(--white);
-    border-radius: var(--radius);
-    padding: var(--space-6);
-    text-align: center;
-}
-
-.stat-number {
-    font-size: 2.2rem;
-    font-weight: 900;
-    color: var(--green);
-    line-height: 1;
-    margin-bottom: var(--space-2);
-}
-
-.stat-label { color: rgba(255,255,255,0.6); font-size: var(--fs-xs); }
-
-/* The star beside the rating figure. Without this rule .icon's `width: 1em` took
-   its size from .stat-number's 2.2rem and rendered a 35px star next to "4.9". */
-.stat-star {
-    font-size: 0.45em;
-    margin-left: 0.15em;
-    vertical-align: 0.35em;
-}
-
-.team-section { background: var(--dark-2); border-top: 1px solid var(--dark-3); border-bottom: 1px solid var(--dark-3); }
-
-.team-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-5);
-}
-
-/* Two-item variants. The generic .team-grid / .about-stats rules step up to three and
-   four columns at wider breakpoints, which strands a two-item set across a very wide
-   row; these cap the track count and keep the pair centred. */
-.team-grid--pair,
-.about-stats--pair {
-    max-width: 620px;
-    margin-inline: auto;
-}
-
-.team-card {
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-8);
-    text-align: center;
-    transition: all 0.25s;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .team-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
-}
-
-.team-avatar {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    background: var(--green);
-    color: var(--white);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-    font-weight: 700;
-    margin: 0 auto var(--space-4);
-}
-
-.team-role {
-    color: var(--green);
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    margin-bottom: var(--space-3) !important;
-}
-
-.team-card p { color: rgba(255,255,255,0.55); font-size: var(--fs-sm); margin: 0; }
-
-.values-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-5);
-}
-
-.value-card {
-    padding: var(--space-8);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    background: var(--dark-3);
-    transition: all 0.25s;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .value-card:hover { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
-}
-.value-icon { font-size: 2rem; margin-bottom: var(--space-3); }
-.value-card h3 { margin-bottom: var(--space-2); }
-.value-card p { color: rgba(255,255,255,0.55); font-size: var(--fs-body-sm); }
-
-/* ---------- Contact Page ---------- */
-.contact-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-10);
-}
-
-/* h3 since this became a section of /about rather than a page of its own — the
-   page's own h2 is the section header above it. */
-.contact-form-wrapper h2,
-.contact-form-wrapper h3 { margin-bottom: var(--space-3); }
-
-/* Points repair requests at the wizard. The form used to ask for a service and a
-   preferred date, which made it a second, worse booking flow; this says plainly
-   which one you want. */
-.contact-form-note {
-    color: rgba(255,255,255,0.55);
-    font-size: var(--fs-sm);
-    line-height: 1.6;
-    margin-bottom: var(--space-6);
-}
-.contact-form-note a { color: var(--green); text-decoration: underline; }
-
-/* The contact block sits between the values grid and the CTA banner, both of which
-   bring their own top padding — without this the three run together. */
-.contact-section { border-top: 1px solid var(--dark-3); }
-
-.form-group {
-    margin-bottom: var(--space-5);
-}
-
-.form-group label {
-    display: block;
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    margin-bottom: var(--space-2);
-    color: rgba(255,255,255,0.85);
-}
-
-.form-control {
-    width: 100%;
-    padding: var(--space-3) var(--space-4);
-    border: 1.5px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-    font-size: var(--fs-body);
-    font-family: var(--font);
-    color: rgba(255,255,255,0.85);
-    background: var(--dark-3);
-    transition: border-color 0.2s, box-shadow 0.2s;
-    appearance: auto;
-    color-scheme: dark;
-}
-
-.form-control:focus {
-    outline: none;
-    border-color: var(--green);
-    box-shadow: 0 0 0 3px rgba(61,187,72,0.15);
-}
-
-.form-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0;
-}
-
-textarea.form-control { resize: vertical; min-height: 130px; }
-
-/* Consent / privacy note under a form's submit button. */
-.form-consent {
-    font-size: var(--fs-xs);
-    color: rgba(255,255,255,0.45);
-    line-height: 1.5;
-    margin: 0 0 var(--space-4);
-}
-.form-consent a { color: var(--green); text-decoration: underline; }
-
-/* Small explanatory text under a single field. */
-.form-hint {
-    font-size: var(--fs-xs);
-    color: rgba(255,255,255,0.45);
-    margin-top: var(--space-1);
-}
-.form-hint a { color: var(--green); }
-
-/* A field whose value is fixed by the account rather than typed. */
-.form-control[readonly] {
-    background: var(--dark-2);
-    color: rgba(255,255,255,0.6);
-    cursor: default;
-}
-
-.validation-message {
-    /* Per-field validation text (Blazor's <ValidationMessage>) is a different UI
-       role from .booking-error's banner, so only the size converges, not the color. */
-    color: #dc2626;
-    font-size: var(--fs-sm);
-    margin-top: var(--space-1);
-}
-
-.success-message {
-    text-align: center;
-    padding: var(--space-12) var(--space-6);
-    background: var(--dark-3);
-    border-radius: var(--radius);
-    border: 1px solid var(--border-dark);
-}
-
-.success-icon {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: var(--green);
-    color: var(--white);
-    font-size: 1.75rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto var(--space-4);
-}
-
-.success-message h3 { margin-bottom: var(--space-2); }
-.success-message p { color: rgba(255,255,255,0.55); margin-bottom: var(--space-6); }
-
-/* Info Cards */
-.info-card {
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-6);
-    margin-bottom: var(--space-5);
-}
-
-.info-card h3 { margin-bottom: var(--space-4); font-size: var(--fs-h3-compact); }
-
-.info-item {
-    display: flex;
-    gap: var(--space-3);
-    align-items: flex-start;
-    margin-bottom: var(--space-4);
-}
-
-.info-item:last-child { margin-bottom: 0; }
-
-.info-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: var(--space-05); }
-.info-item strong { display: block; font-size: var(--fs-xs); margin-bottom: var(--space-1); }
-.info-item p, .info-item a { font-size: var(--fs-sm); color: rgba(255,255,255,0.55); margin: 0; }
-@media (hover: hover) and (pointer: fine) {
-    .info-item a:hover { color: var(--green); }
-}
-
-.turnaround-list { display: flex; flex-direction: column; gap: var(--space-2); }
-
-.turnaround-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: var(--fs-sm);
-    color: rgba(255,255,255,0.65);
-    padding: var(--space-2) 0;
-    border-bottom: 1px solid var(--border-dark);
-}
-
-.turnaround-item:last-child { border-bottom: none; }
-
-.turnaround-time {
-    font-weight: 600;
-    color: var(--green);
-    font-size: var(--fs-caption);
-}
-
-/* ---------- Error / not-found pages ---------- */
-.error-page {
-    max-width: 560px;
-    text-align: center;
-}
-
-.error-page p {
-    color: rgba(255,255,255,0.65);
-    line-height: 1.7;
-    margin-bottom: var(--space-8);
-}
-
-.error-page__actions {
-    display: flex;
-    gap: var(--space-3);
-    justify-content: center;
-    flex-wrap: wrap;
-}
-
-.error-page__ref {
-    margin-top: var(--space-8);
-    font-size: var(--fs-xs);
-    color: rgba(255,255,255,0.35);
-}
-
-.error-page__ref code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: 4px;
-    padding: var(--space-05) var(--space-1);
-    word-break: break-all;
-}
-
-@media (max-width: 479px) {
-    .error-page__actions { flex-direction: column; }
-    .error-page__actions .btn { width: 100%; justify-content: center; }
-}
-
-/* ---------- Legal documents (privacy, terms) ---------- */
-/* Long-form prose, so it gets a reading measure rather than the full container
-   width — 12-word lines are hard to track back from at the end of each one. */
-.legal-doc {
-    max-width: 720px;
-}
-
-.legal-doc h2 {
-    font-size: clamp(1.2rem, 3vw, 1.5rem);
-    margin: var(--space-10) 0 var(--space-3);
-}
-
-.legal-doc h2:first-of-type { margin-top: 0; }
-
-.legal-doc h3 {
-    font-size: var(--fs-h3-compact);
-    margin: var(--space-6) 0 var(--space-2);
-    color: rgba(255,255,255,0.9);
-}
-
-.legal-doc p {
-    color: rgba(255,255,255,0.65);
-    margin-bottom: var(--space-4);
-    line-height: 1.75;
-}
-
-.legal-doc__list {
-    margin: 0 0 var(--space-4);
-    padding-left: var(--space-4);
-    list-style: disc;
-}
-
-.legal-doc__list li {
-    color: rgba(255,255,255,0.65);
-    margin-bottom: var(--space-3);
-    line-height: 1.7;
-    padding-left: var(--space-1);
-}
-
-.legal-doc__list strong { color: rgba(255,255,255,0.9); }
-
-.legal-doc a { text-decoration: underline; }
-
-.legal-doc code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.9em;
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: 4px;
-    padding: var(--space-05) var(--space-1);
-}
-
-.legal-doc__updated {
-    font-size: var(--fs-xs);
-    color: rgba(255,255,255,0.35);
-    margin-bottom: var(--space-8);
-}
-
-/* Marks a passage that still needs the shop's own details filled in. Deliberately
-   loud — it must be impossible to publish these without noticing. */
-.legal-doc__todo {
-    background: rgba(234,179,8,0.10);
-    border: 1px solid rgba(234,179,8,0.35);
-    border-radius: var(--radius-sm);
-    padding: var(--space-3) var(--space-4);
-    color: #eab308 !important;
-    font-size: var(--fs-sm);
-}
-
-/* ---------- Footer ---------- */
-/* The footer is the last thing on the page, so in landscape its bottom edge sits
-   under the home indicator. */
-.site-footer {
-    background: var(--dark);
-    color: rgba(255,255,255,0.65);
-    padding: var(--space-12) 0 calc(var(--space-6) + env(safe-area-inset-bottom));
-}
-
-.footer-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-8);
-    margin-bottom: var(--space-8);
-}
-
-/* .footer-logo replaced by .footer-logo-img */
-
-.footer-brand p { font-size: var(--fs-sm); line-height: 1.6; }
-
-.footer-links h6, .footer-contact h6 {
-    color: var(--white);
-    font-size: var(--fs-xs);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    margin-bottom: var(--space-3);
-}
-
-.footer-links ul li { margin-bottom: var(--space-2); }
-.footer-links a { color: rgba(255,255,255,0.6); font-size: var(--fs-sm); transition: color 0.2s; }
-@media (hover: hover) and (pointer: fine) {
-    .footer-links a:hover { color: var(--green); }
-}
-
-.footer-contact p { font-size: var(--fs-sm); margin-bottom: var(--space-2); }
-
-.footer-bottom {
-    border-top: 1px solid var(--dark-3);
-    padding-top: var(--space-5);
-    text-align: center;
-    font-size: var(--fs-caption);
-    color: rgba(255,255,255,0.35);
-}
-
-/* ---------- Main ---------- */
-.site-main {
-    min-height: calc(100svh - var(--nav-h));
-}
-
-/* ---------- Error UI ---------- */
-/* Blazor reveals this with an inline `display: block`, so any flex properties here
-   would never apply — hence no gap/align-items. It also used to be `white-space:
-   nowrap` centred at left:50%, which ran off both edges of a phone; it's now a
-   width-constrained bar that wraps, clear of the home indicator. */
-#blazor-error-ui {
-    display: none;
-    position: fixed;
-    bottom: calc(1rem + env(safe-area-inset-bottom));
-    left: 1rem;
-    right: 1rem;
-    max-width: 32rem;
-    margin: 0 auto;
-    background: #b91c1c;
-    color: var(--white);
-    padding: var(--space-3) var(--space-5);
-    border-radius: var(--radius);
-    font-size: var(--fs-sm);
-    line-height: 1.5;
-    text-align: center;
-    z-index: 9999;
-    box-shadow: var(--shadow-lg);
-}
-
-#blazor-error-ui .reload { color: var(--white); font-weight: 600; text-decoration: underline; margin-left: var(--space-2); }
-#blazor-error-ui .dismiss { cursor: pointer; margin-left: var(--space-2); }
-
-/* ---------- Blazor validation ---------- */
-.valid.modified:not([type=checkbox]) { border-color: var(--green) !important; }
-.invalid { border-color: #dc2626 !important; }
-
-/* ---------- Shop Photography ---------- */
-/* Photos are served from the public Supabase bucket via SiteImages, not wwwroot.
-   Each one carries an onerror that hides itself, so if the bucket is unreachable
-   the dark theme underneath shows through instead of a broken-image icon.
-   Note: do NOT add mix-blend-mode here — that rule exists only to punch out the
-   logo's solid black background and would wash a photograph out. */
-
-.hero-photo {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-/* The hero title is white and the photo behind it is a bright overcast street,
-   so it needs a scrim to stay readable. Heavier on the left, where the text sits.
-   These two gradients multiply where they overlap, so keep them light: at 0.92
-   and 0.80 the bottom-left corner composited to ~98% black and erased the photo
-   entirely. The values below still clear AA for white text over the photo. */
-.hero-scrim {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background:
-        linear-gradient(to right, rgba(10,10,10,0.78) 0%, rgba(10,10,10,0.45) 55%, rgba(10,10,10,0.15) 100%),
-        linear-gradient(to top, rgba(10,10,10,0.55) 0%, transparent 40%);
-    pointer-events: none;
-}
-
-/* The horizontal gradient above assumes the text sits in the left half of the hero,
-   which is true on desktop — .hero-eyebrow / .hero-title / .hero-actions cap at
-   680px inside a 1200px container. On a phone the text is full-width, so it runs
-   out into the thin end of that gradient and the subtitle lands over the brightest
-   part of the photo (the bikes), where white-on-photo stops being readable.
-
-   Below the point where that assumption holds, the scrim becomes vertical instead,
-   which tracks where the text actually is. Kept well short of opaque: the earlier
-   note on this element records that pushing these past ~0.9 composites to near-black
-   and erases the photograph. */
-@media (max-width: 767px) {
-    .hero-scrim {
-        background:
-            linear-gradient(to bottom,
-                rgba(10,10,10,0.55) 0%,
-                rgba(10,10,10,0.72) 40%,
-                rgba(10,10,10,0.80) 100%);
-    }
-}
-
-/* The green wash sits under the scrim rather than over it — stacked on top it
-   tinted the photo and the buttons along with everything else. */
-.hero::before { z-index: 1; }
-.hero-overlay { z-index: 2; }
-.hero-content { z-index: 3; }
-
-/* Columns rather than a grid: three of these photos are portrait and five are
-   landscape, and forcing them all to one ratio would crop the opening-times sign
-   past legibility. Columns let every photo keep its own shape with no ragged
-   rows. break-inside stops a card splitting across a column. */
-.gallery-grid {
-    column-count: 1;
-    column-gap: var(--space-5);
-}
-
-.gallery-item {
-    margin: 0 0 var(--space-5);
-    break-inside: avoid;
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    overflow: hidden;
-    transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
-}
-
-/* Colour-change only, deliberately without the translateY lift the other cards use:
-   the Home teaser shares this class, and shifting a photo under the cursor meant
-   chasing it. The border was always 1px — only its colour moves. */
-@media (hover: hover) and (pointer: fine) {
-    .gallery-item:hover {
-        border-color: var(--green);
-        box-shadow: var(--shadow);
-    }
-}
-
-.gallery-item img {
-    width: 100%;
-    height: auto;
-}
-
-/* Click-to-enlarge, scoped to .gallery-page so the Home teaser — which shares
-   .gallery-grid / .gallery-item but isn't clickable — is left alone. */
-.gallery-page .gallery-item__trigger {
-    display: block;
-    width: 100%;
-    padding: 0;
-    border: 0;
-    background: none;
-    cursor: zoom-in;
-}
-
-.gallery-page .gallery-item__trigger:focus-visible {
-    outline: 2px solid var(--green);
-    outline-offset: 3px;
-}
-
-/* ---------- Gallery lightbox ---------- */
-/* Above .navbar-wrapper (1000). At z-index 100 the sticky header rendered on top of
-   the fullscreen photo, which was most obvious on a phone where the header takes a
-   larger share of the screen. */
-.lightbox {
-    position: fixed;
-    inset: 0;
-    z-index: 1100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    padding: var(--space-4);
-    background: rgba(10,10,10,0.94);
-    backdrop-filter: blur(4px);
-    cursor: zoom-out;
-    /* Stops a swipe on the overlay chaining through to the page behind it, which on
-       a phone scrolled the gallery away underneath the open photo. */
-    overscroll-behavior: contain;
-}
-
-.lightbox:focus { outline: none; }
-
-/* The arrows are pinned to the viewport edges (below), so the photo keeps clear of
-   them by reserving a gutter each side: 44px control + 1.25rem offset + breathing
-   room. Without this a wide landscape shot slides underneath them. */
-.lightbox__figure {
-    max-width: min(92vw, calc(100vw - 176px));
-    max-height: 88vh;
-    cursor: default;
-}
-
-.lightbox__figure img {
-    max-width: min(92vw, calc(100vw - 176px));
-    max-height: 88vh;
-    width: auto;
-    height: auto;
-    object-fit: contain;
-    border-radius: var(--radius-sm);
-}
-
-.lightbox__nav,
-.lightbox__close {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.25);
-    background: rgba(255,255,255,0.08);
-    color: var(--white);
-    font-size: 1.25rem;
-    line-height: 1;
-    cursor: pointer;
-    transition: background-color 0.2s, border-color 0.2s;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .lightbox__nav:hover,
-    .lightbox__close:hover {
-        background: var(--green);
-        border-color: var(--green);
-    }
-}
-
-.lightbox__nav:focus-visible,
-.lightbox__close:focus-visible {
-    outline: 2px solid var(--white);
-    outline-offset: 2px;
-}
-
-/* The lightbox is inset:0 over the whole screen, so its controls are the one place
-   that can land under the notch or the home indicator. */
-.lightbox__close {
-    position: absolute;
-    top: calc(1rem + env(safe-area-inset-top));
-    right: calc(1rem + env(safe-area-inset-right));
-}
-
-/* Pinned to the viewport rather than sitting in the flex row beside the photo.
-   In flow they moved on every click: the figure is width:auto, so a portrait shot
-   is far narrower than a landscape one, and centring the row slid both arrows in
-   and out under the cursor. Anchoring them means only the photo changes size. */
-.lightbox__nav {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-}
-
-.lightbox__nav--prev { left: calc(1.25rem + env(safe-area-inset-left)); }
-.lightbox__nav--next { right: calc(1.25rem + env(safe-area-inset-right)); }
-
-.lightbox__count {
-    position: absolute;
-    bottom: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
-    color: rgba(255,255,255,0.55);
-    font-size: var(--fs-sm);
-}
-
-/* On narrow screens the arrows would squeeze the photo, so they move to the
-   bottom corners and the photo gets the full width. */
-@media (max-width: 639px) {
-    .lightbox__nav {
-        top: auto;
-        transform: none;
-        bottom: calc(1rem + env(safe-area-inset-bottom));
-    }
-    .lightbox__nav--prev { left: calc(1rem + env(safe-area-inset-left)); }
-    .lightbox__nav--next { right: calc(1rem + env(safe-area-inset-right)); }
-    .lightbox__figure,
-    .lightbox__figure img { max-width: 96vw; max-height: 74vh; }
-}
-
-/* About: photo sits above the stat cards in the narrower right-hand column. */
-.about-aside {
-    display: grid;
-    gap: var(--space-6);
-    align-content: start;
-}
-
-/* Both are portrait originals, and the opening-times photo is only useful if the
-   sign stays readable — so never crop them. Capping the width keeps them from
-   running absurdly tall while their column is still full-width below 1024px. */
-.about-photo,
-.contact-photo {
-    margin: 0;
-    max-width: 420px;
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    overflow: hidden;
-}
-
-.about-photo img,
-.contact-photo img {
-    width: 100%;
-    height: auto;
-}
-
-.about-photo figcaption,
-.contact-photo figcaption {
-    padding: var(--space-3) var(--space-4);
-    color: rgba(255,255,255,0.55);
-    font-size: var(--fs-xs);
-}
-
-/* ============================================================
-   iOS INPUT ZOOM
-   ------------------------------------------------------------
-   Safari on iOS zooms the viewport whenever a focused input's font-size is under
-   16px, and never zooms back out — so every tap on a field left the page enlarged
-   and the layout shifted. Every control on the site was between 13.6px and 15.2px,
-   missing the threshold by as little as 0.8px, which is why it read as a mysterious
-   jitter rather than an obvious mistake.
-
-   The floor is applied at mobile widths only; desktop keeps the smaller, denser
-   sizes, where the behaviour doesn't exist. Note the fix is NOT `maximum-scale=1`
-   on the viewport meta: that also stops the zoom, but by disabling pinch-zoom for
-   everybody, which fails WCAG 1.4.4.
-
-   Note: booking.css loads AFTER this file and defines its own smaller sizes for the
-   admin controls (.form-control--compact, .admin-search .form-control, and so on).
-   Media queries add no specificity, so those would win on source order alone — the
-   matching override for them lives at the end of booking.css. Keep the two in step.
-   ============================================================ */
-@media (max-width: 767px) {
-    input,
-    select,
-    textarea,
-    .form-control {
-        font-size: 16px;
-    }
-}
-
-/* ============================================================
-   RESPONSIVE BREAKPOINTS
-   ============================================================ */
-
-/* ---- SM: 480px ---- */
-@media (min-width: 480px) {
-    .trust-bar-grid {
-        grid-template-columns: 1fr 1fr;
-    }
-    .form-row {
-        grid-template-columns: 1fr 1fr;
-        gap: var(--space-5);
-    }
-}
-
-/* ---- MD: 768px ---- */
-@media (min-width: 768px) {
-    .services-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    .steps-grid {
-        grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
-        align-items: start;
-    }
-    .step-arrow {
-        display: flex;
-        padding-top: var(--space-10);
-    }
-    .team-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    .values-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    .about-stats {
-        grid-template-columns: repeat(4, 1fr);
-    }
-    .about-stats--pair {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    .about-intro {
-        grid-template-columns: 1fr;
-    }
-    .footer-grid {
-        grid-template-columns: 2fr 1fr 1fr;
-    }
-    .trust-bar-grid {
-        grid-template-columns: repeat(4, 1fr);
-    }
-    .gallery-grid {
-        column-count: 2;
-    }
-}
-
-/* ---- LG: 1024px ---- */
-@media (min-width: 1024px) {
-    .services-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
-    .team-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
-    .team-grid--pair {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    .about-intro {
-        grid-template-columns: 3fr 2fr;
-        align-items: start;
-    }
-    .about-stats {
-        grid-template-columns: 1fr 1fr;
-    }
-    .contact-grid {
-        grid-template-columns: 3fr 2fr;
-        align-items: start;
-    }
-    .gallery-grid {
-        column-count: 3;
-    }
-    .section { padding: var(--space-16) 0; }
-}
-
-/* ---- Mobile Nav ---- */
-@media (max-width: 767px) {
-    .hamburger { display: flex; }
-
-    .nav-links {
-        display: none;
-        position: absolute;
-        top: var(--nav-h);
-        left: 0;
-        right: 0;
-        flex-direction: column;
-        background: var(--dark-2);
-        padding: var(--space-4);
-        gap: var(--space-1);
-        border-top: 1px solid var(--dark-3);
-        border-bottom: 1px solid var(--dark-3);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-        /* Signed in, the menu holds 8 items at ~48px — taller than a phone in
-           landscape, and previously with no way to reach the last entries.
-           overscroll-behavior stops the scroll chaining to the page behind. */
-        max-height: calc(100svh - var(--nav-h));
-        overflow-y: auto;
-        overscroll-behavior: contain;
-    }
-
-    .nav-links--open { display: flex; }
-
-    .nav-links a {
-        width: 100%;
-        padding: var(--space-3) var(--space-4);
-        border-radius: 8px;
-        font-size: 1rem;
-        /* Full-width already, but this guarantees the vertical half of the target. */
-        min-height: var(--touch-min);
-        display: flex;
-        align-items: center;
-    }
-
-    .btn-book,
-    .btn-nav {
-        margin-left: 0 !important;
-        margin-top: var(--space-1);
-        text-align: center;
-    }
-    /* .nav-links a above makes every row a flex box, so text-align does nothing —
-       the pill labels sat hard against the left edge while the desktop bar centres
-       them. Both pills, not just the new one: .btn-book has had this since the flex
-       row landed. */
-    .btn-book,
-    .btn-nav { justify-content: center; }
-
-    .navbar-wrapper { position: sticky; }
-}
-
-/* ============================================================
-   EXTRA MOBILE FIXES (< 480px)
-   ============================================================ */
-@media (max-width: 479px) {
-
-    /* Tighter section padding on small phones */
-    .section { padding: var(--space-10) 0; }
-
-    /* Hero: reduce heading on very small screens */
-    .hero-content { padding: var(--space-12) var(--space-5) var(--space-10); }
-    .hero-actions { flex-direction: column; }
-    .hero-actions .btn { width: 100%; justify-content: center; }
-
-    /* Hero scroll hint hidden on short screens */
-    .hero-scroll-hint { display: none; }
-
-    /* Page hero: less padding */
-    .page-hero--sm { padding: var(--space-10) var(--space-5) var(--space-8); }
-
-    /* Trust bar: single column on tiny screens */
-    .trust-bar { padding: var(--space-5) 0; }
-    .trust-bar-grid { grid-template-columns: 1fr; }
-
-    /* Pricing rows: stack label above price */
-    .pricing-row { flex-direction: column; gap: var(--space-1); }
-    .pricing-cost { align-self: flex-start; }
-
-    /* Section header */
-    .section-header { margin-bottom: var(--space-8); }
-
-    /* Services note: stack button */
-    .services-note { padding: var(--space-5); }
-
-    /* CTA banner */
-    .cta-banner { padding: var(--space-10) 0; }
-    .cta-actions { flex-direction: column; align-items: center; }
-    .cta-actions .btn { width: 100%; max-width: 320px; justify-content: center; }
-
-    /* Footer */
-    .footer-grid { gap: var(--space-6); }
-
-    /* Form rows stay single column on tiny screens */
-    .form-row { grid-template-columns: 1fr !important; gap: 0 !important; }
-
-    /* Contact info cards: smaller padding */
-    .info-card { padding: var(--space-4); }
-
-    /* Turnaround table: wrap service name */
-    .turnaround-item { flex-wrap: wrap; gap: var(--space-1); }
-}
-
-/* Booking-page, customer-auth, and admin-only styles live in booking.css,
-   not here — app.css is the public-site stylesheet. */
-
-/* ---------- Password field with reveal toggle ---------- */
-/* Typing a password blind on a phone keyboard is the main reason people lock
-   themselves out. The toggle is a real button (focusable, labelled) driven by
-   wwwroot/site.js, not an inline handler. */
-.password-field {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.password-field .form-control {
-    /* Room for the toggle, so a long password doesn't run underneath it. */
-    padding-right: var(--space-12);
-}
-
-.password-field__toggle {
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 3rem;
-    min-height: var(--touch-min);
-    padding: 0;
-    background: none;
-    border: none;
-    color: rgba(255,255,255,0.45);
-    font-size: 1.1rem;
-    cursor: pointer;
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.password-field__toggle:focus-visible {
-    outline: 2px solid var(--green);
-    outline-offset: -2px;
-}
-
-/* Pressed = password currently visible. */
-.password-field__toggle[aria-pressed="true"] { color: var(--green); }
-
-@media (hover: hover) and (pointer: fine) {
-    .password-field__toggle:hover { color: var(--white); }
-}
-
-/* ---------- /devinfo (development only) ---------- */
-/* Deliberately plain: this page exists to be read on a phone in a hurry, and its
-   own styling must not be what's under test. */
-.devinfo { max-width: 640px; }
-
-.devinfo__hero {
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-6) var(--space-5);
-    text-align: center;
-    margin-bottom: var(--space-6);
-}
-
-.devinfo__hero-label {
-    font-size: var(--fs-2xs);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: rgba(255,255,255,0.4);
-}
-
-.devinfo__hero-value {
-    font-size: 3rem;
-    font-weight: 900;
-    line-height: 1.1;
-    color: var(--green);
-    font-variant-numeric: tabular-nums;
-}
-
-.devinfo__hero-note {
-    font-size: var(--fs-sm);
-    color: rgba(255,255,255,0.6);
-    margin: var(--space-2) 0 var(--space-4);
-    line-height: 1.5;
-}
-
-.devinfo__list {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    margin-bottom: var(--space-6);
-}
-
-.devinfo__row {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-05);
-    padding: var(--space-3) 0;
-    border-bottom: 1px solid var(--border-dark);
-}
-
-.devinfo__row:last-child { border-bottom: none; }
-
-.devinfo__row dt {
-    font-size: var(--fs-2xs);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: rgba(255,255,255,0.4);
-}
-
-.devinfo__row dd {
-    margin: 0;
-    font-size: var(--fs-sm);
-    color: rgba(255,255,255,0.85);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    word-break: break-word;
-}
-
-.devinfo__ua { font-size: var(--fs-2xs); color: rgba(255,255,255,0.55); }
-
-/* Rendered so they can be measured, but they aren't controls — the sample row is
-   aria-hidden and these must not look clickable. */
-.devinfo__samples {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin-bottom: var(--space-6);
-    pointer-events: none;
-    opacity: 0.7;
-}
-
-.devinfo__samples .cal-day {
-    width: 44px;
-    flex: 0 0 auto;
-}
-
-.devinfo__actions {
-    display: flex;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-}
-
-.devinfo__actions .btn { flex: 1 1 auto; justify-content: center; }
-
-.devinfo__copied {
-    margin-top: var(--space-3);
-    font-size: var(--fs-sm);
-    color: var(--green);
-}
-/* ============================================================
-   FIXLOSOPHY – Booking & Admin Styles
-   ============================================================ */
-
-/* ---------- Step Indicator ---------- */
-.steps-indicator {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: var(--space-10);
-    flex-wrap: nowrap;
-    gap: 0;
-}
-
-.step-indicator {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-2);
-}
-
-.step-indicator__dot {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: var(--dark-3);
-    border: 2px solid var(--border-dark);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--fs-xs);
-    font-weight: 700;
-    color: rgba(255,255,255,0.4);
-    transition: all 0.3s;
-}
-
-.step-indicator.active .step-indicator__dot {
-    background: var(--green);
-    border-color: var(--green);
-    color: var(--white);
-    box-shadow: 0 0 0 4px var(--green-glow);
-}
-
-.step-indicator.done .step-indicator__dot {
-    background: var(--green-dark);
-    border-color: var(--green-dark);
-    color: var(--white);
-}
-
-.step-indicator__label {
-    font-size: var(--fs-2xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: rgba(255,255,255,0.35);
-}
-
-.step-indicator.active .step-indicator__label,
-.step-indicator.done .step-indicator__label {
-    color: var(--green);
-}
-
-.step-indicator__line {
-    flex: 1;
-    height: 2px;
-    background: var(--border-dark);
-    margin: 0 var(--space-1);
-    margin-bottom: var(--space-5);
-    min-width: 24px;
-    max-width: 80px;
-    transition: background 0.3s;
-}
-
-.step-indicator__line.done { background: var(--green-dark); }
-
-/* ---------- Booking Card ---------- */
-.booking-card {
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-8);
-    max-width: 860px;
-    margin: 0 auto;
-}
-
-.booking-card__title {
-    margin-bottom: var(--space-1);
-}
-
-.booking-card__subtitle {
-    color: rgba(255,255,255,0.5);
-    margin-bottom: var(--space-8);
-    font-size: var(--fs-body);
-}
-
-.booking-error {
-    background: rgba(220,38,38,0.12);
-    border: 1px solid rgba(220,38,38,0.3);
-    color: #f87171;
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-sm);
-    margin-bottom: var(--space-5);
-    font-size: var(--fs-sm);
-}
-
-/* ---------- Account page ---------- */
-.account-section { padding-top: var(--space-8); }
-.account-section .booking-card { margin-bottom: var(--space-6); }
-
-/* The saved-bike list sits directly above the add-a-bike field. .photo-picker-list
-   carries no bottom margin of its own because the booking wizard's copy of it takes
-   its spacing from the .form-group around it — which this row isn't in, so without
-   this the last bike sat flush against the input. Scoped to the account page for the
-   same reason: unscoped it would double the wizard's spacing. */
-.account-section .photo-picker-list { margin-bottom: var(--space-5); }
-
-.account-booking-list { display: flex; flex-direction: column; gap: var(--space-3); }
-
-.account-booking-row {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-4);
-    padding: var(--space-3) var(--space-4);
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-}
-
-.account-booking-row__info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-05);
-    font-size: var(--fs-xs);
-}
-
-.account-booking-row__info span { color: rgba(255,255,255,0.5); }
-
-/* Status badge plus the cancel controls. Wraps under the booking details on a
-   narrow screen rather than squeezing the service name. */
-.account-booking-row__actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-    justify-content: flex-end;
-}
-
-/* Why the Cancel button isn't there — work already started, or the two-hour cutoff
-   passed. Its own full-width line, like the job notes below it, and order 3 so it
-   still lands under the actions once the row reorders on a phone. Said on the page
-   rather than in a title attribute: the reason is the whole point of the change. */
-.account-booking-row__blocked {
-    flex: 1 1 100%;
-    order: 3;
-    margin: 0;
-    font-size: var(--fs-xs);
-    color: rgba(255,255,255,0.5);
-}
-
-@media (max-width: 479px) {
-    .account-booking-row {
-        flex-wrap: wrap;
-        align-items: flex-start;
-    }
-    .account-booking-row__info { flex: 1 1 100%; order: 2; }
-    .account-booking-row__actions { flex: 1 1 100%; order: 3; justify-content: flex-start; }
-}
-
-/* An input with a button beside it. Not .form-row: that's a two-column grid whose
-   cells stretch to the row height, which left the button taller than the field and
-   misaligned against the field's bottom margin. */
-.inline-add-row {
-    display: flex;
-    gap: var(--space-3);
-    align-items: flex-start;
-    flex-wrap: wrap;
-}
-.inline-add-row .form-control { flex: 1 1 12rem; }
-.inline-add-row .btn { flex: 0 0 auto; }
-
-/* Account → Your Data */
-.account-data-actions {
-    display: flex;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-}
-
-.account-danger-zone {
-    margin-top: var(--space-4);
-    padding: var(--space-4) var(--space-5);
-    background: rgba(220,38,38,0.06);
-    border: 1px solid rgba(220,38,38,0.25);
-    border-radius: var(--radius);
-}
-
-.account-danger-zone p {
-    color: rgba(255,255,255,0.7);
-    font-size: var(--fs-sm);
-    line-height: 1.6;
-    margin-bottom: var(--space-4);
-}
-
-.account-danger-zone__warning { color: #f87171 !important; }
-
-@media (max-width: 479px) {
-    .account-data-actions { flex-direction: column; }
-    .account-data-actions .btn { width: 100%; justify-content: center; }
-}
-
-.booking-nav {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: var(--space-8);
-    padding-top: var(--space-6);
-    border-top: 1px solid var(--border-dark);
-    gap: var(--space-4);
-    flex-wrap: wrap;
-}
-
-/* Back and Start over travel together, so the primary action keeps the right-hand
-   end of the row to itself and "Start over" never reads as the way forward. */
-.booking-nav__left {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-}
-
-/* Says the booking cap has been reached before any of the wizard is filled in, so
-   it can't be discovered at the Confirm click. Amber rather than red: nothing has
-   gone wrong, there's just a limit and a way past it. */
-.booking-limit-notice {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-3);
-    margin-bottom: var(--space-6);
-    padding: var(--space-5);
-    background: rgba(234,179,8,0.08);
-    border: 1px solid rgba(234,179,8,0.28);
-    border-radius: var(--radius);
-}
-
-.booking-limit-notice h2 {
-    margin: 0;
-    font-size: var(--fs-lg);
-    color: #fbbf24;
-}
-
-.booking-limit-notice p {
-    margin: 0;
-    color: rgba(255,255,255,0.72);
-    line-height: 1.55;
-}
-
-/* ---------- Customer Auth Strip ---------- */
-.customer-auth-strip {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: .5rem;
-    padding: var(--space-3) var(--space-4);
-    margin-bottom: var(--space-6);
-    font-size: var(--fs-body-sm);
-    color: rgba(255,255,255,0.65);
-}
-.customer-auth-strip strong { color: var(--white); }
-.customer-auth-strip__link {
-    background: none;
-    border: none;
-    color: var(--green);
-    font-size: var(--fs-body-sm);
-    font-weight: 600;
-    cursor: pointer;
-    padding: 0;
-}
-@media (hover: hover) and (pointer: fine) {
-    .customer-auth-strip__link:hover { color: var(--green-dark); text-decoration: underline; }
-}
-
-/* ---------- Service Picker ---------- */
-.service-category-group {
-    margin-bottom: var(--space-8);
-}
-
-.service-category-label {
-    font-size: var(--fs-caption);
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    color: var(--green);
-    font-weight: 700;
-    margin-bottom: var(--space-3);
-}
-
-.service-pick-grid {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-}
-
-/* A <button> since the a11y pass — width/text-align/color are reset explicitly
-   because a button doesn't inherit them the way the old <div> did. */
-.service-pick-card {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    width: 100%;
-    text-align: left;
-    color: inherit;
-    font-family: inherit;
-    padding: var(--space-4) var(--space-5);
-    background: var(--dark-3);
-    border: 1.5px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-}
-
-.service-pick-card:focus-visible,
-.cal-day:focus-visible,
-.timeslot:focus-visible {
-    outline: 2px solid var(--green);
-    outline-offset: 2px;
-}
-
-/* An unavailable day is a disabled <button> now, so the cursor and pointer-events
-   follow from the attribute rather than from a handler that quietly did nothing. */
-.cal-day:disabled {
-    cursor: default;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .service-pick-card:hover {
-        border-color: var(--green);
-        background: var(--dark-4);
-    }
-}
-
-.service-pick-card.selected {
-    border-color: var(--green);
-    background: rgba(61,187,72,0.08);
-}
-
-.service-pick-card__icon {
-    font-size: 1.3rem;
-    flex-shrink: 0;
-    width: 36px;
-    text-align: center;
-}
-
-.service-pick-card__info {
-    flex: 1;
-    min-width: 0;
-}
-
-.service-pick-card__info strong {
-    display: block;
-    font-size: var(--fs-body);
-    color: var(--white);
-}
-
-.service-pick-card__info span {
-    font-size: var(--fs-caption);
-    color: rgba(255,255,255,0.45);
-}
-
-.service-pick-card__price {
-    font-size: var(--fs-sm);
-    font-weight: 700;
-    color: var(--green);
-    white-space: nowrap;
-}
-
-.service-pick-card__check {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--green);
-    color: var(--white);
-    font-size: var(--fs-tiny);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-/* ---------- Calendar ---------- */
-.schedule-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-8);
-}
-
-.calendar-wrapper {
-    flex: 1;
-}
-
-.cal-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-4);
-}
-
-.cal-nav__title {
-    font-weight: 700;
-    font-size: 1rem;
-    color: var(--white);
-}
-
-/* line-height: 1 matters — flex centres the line box, not the glyph inside it,
-   so the UA's default `normal` line-height left the arrows sitting visibly high
-   in the square. The icons are inline SVG rather than text arrows for the same
-   reason: a symmetric viewBox centres exactly, where U+2190/2192 are drawn on
-   the font's math axis and shift with whatever fallback face resolves them. */
-.cal-nav__btn {
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    color: var(--white);
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 1rem;
-    line-height: 1;
-    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.cal-nav__btn svg {
-    width: 16px;
-    height: 16px;
-    display: block;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .cal-nav__btn:hover:not(:disabled) { background: var(--green); border-color: var(--green); }
-}
-.cal-nav__btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-.cal-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: var(--space-1);
-}
-
-.cal-head {
-    text-align: center;
-    font-size: var(--fs-2xs);
-    font-weight: 700;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.35);
-    padding: var(--space-2) 0;
-}
-
-.cal-day {
-    aspect-ratio: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 8px;
-    font-size: var(--fs-xs);
-    font-weight: 500;
-    transition: all 0.15s;
-    cursor: default;
-    /* Button resets — these are <button> elements since the a11y pass. */
-    width: 100%;
-    padding: 0;
-    border: none;
-    background: transparent;
-    font-family: inherit;
-    color: inherit;
-}
-
-.cal-day--empty { background: transparent; }
-
-.cal-day--disabled {
-    color: rgba(255,255,255,0.2);
-    background: transparent;
-}
-
-.cal-day--available {
-    color: var(--white);
-    background: var(--dark-3);
-    cursor: pointer;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .cal-day--available:hover { background: var(--green-glow); color: var(--green); }
-}
-
-.cal-day--today {
-    border: 1.5px solid rgba(255,255,255,0.2);
-}
-
-.cal-day--selected {
-    background: var(--green) !important;
-    color: var(--dark) !important;
-    font-weight: 700;
-}
-
-.cal-legend {
-    display: flex;
-    gap: var(--space-4);
-    margin-top: var(--space-3);
-    font-size: var(--fs-tiny);
-    color: rgba(255,255,255,0.4);
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.cal-legend__dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: var(--space-1);
-}
-
-.cal-legend__dot--available { background: var(--dark-4); border: 1px solid var(--border-dark); }
-.cal-legend__dot--selected { background: var(--green); }
-.cal-legend__dot--disabled { background: transparent; border: 1px solid var(--border-dark); opacity: 0.3; }
-
-/* ---------- Time Slots ---------- */
-.timeslot-wrapper h4 {
-    margin-bottom: var(--space-4);
-    font-size: 1rem;
-    color: var(--white);
-}
-
-.timeslot-prompt {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-3);
-    padding: var(--space-12) var(--space-4);
-    color: rgba(255,255,255,0.3);
-    text-align: center;
-    background: var(--dark-3);
-    border-radius: var(--radius);
-    border: 1px dashed var(--border-dark);
-}
-
-.timeslot-prompt span { font-size: 2rem; }
-.timeslot-prompt p { font-size: var(--fs-sm); margin: 0; }
-
-.timeslot-none {
-    color: rgba(255,255,255,0.4);
-    font-size: var(--fs-sm);
-    padding: var(--space-6);
-    text-align: center;
-    background: var(--dark-3);
-    border-radius: var(--radius-sm);
-}
-
-.timeslot-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-3);
-}
-
-.timeslot {
-    padding: var(--space-3) var(--space-2);
-    text-align: center;
-    background: var(--dark-3);
-    border: 1.5px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-    font-size: var(--fs-body-sm);
-    font-weight: 600;
-    color: var(--white);
-    cursor: pointer;
-    transition: all 0.15s;
-    /* Button reset — a <button> since the a11y pass. */
-    width: 100%;
-    font-family: inherit;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .timeslot:hover { border-color: var(--green); color: var(--green); }
-}
-
-.timeslot--selected {
-    background: var(--green) !important;
-    border-color: var(--green) !important;
-    color: var(--dark) !important;
-}
-
-/* ---------- Details Form ---------- */
-.details-form { display: flex; flex-direction: column; gap: 0; }
-
-.bike-chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
-
-.bike-chip {
-    padding: var(--space-2) var(--space-3);
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: 50px;
-    color: rgba(255,255,255,0.65);
-    font-size: var(--fs-caption);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .bike-chip:hover { border-color: var(--green); color: var(--white); }
-}
-.bike-chip--selected { background: var(--green); border-color: var(--green); color: var(--dark); font-weight: 700; }
-
-.photo-picker-list {
-    list-style: none;
-    margin: var(--space-3) 0 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-}
-
-.photo-picker-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-3);
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    font-size: var(--fs-xs);
-}
-
-.photo-picker-remove {
-    background: none;
-    border: none;
-    color: rgba(255,255,255,0.5);
-    font-size: 1.1rem;
-    line-height: 1;
-    cursor: pointer;
-    padding: 0 var(--space-1);
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .photo-picker-remove:hover { color: var(--white); }
-}
-
-/* ---------- Review ---------- */
-.review-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0;
-    background: var(--dark-3);
-    border-radius: var(--radius);
-    border: 1px solid var(--border-dark);
-    overflow: hidden;
-    margin-bottom: var(--space-5);
-}
-
-.review-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--space-3) var(--space-5);
-    border-bottom: 1px solid var(--border-dark);
-    gap: var(--space-4);
-}
-
-.review-item:last-child { border-bottom: none; }
-
-.review-label {
-    font-size: var(--fs-caption);
-    color: rgba(255,255,255,0.45);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    flex-shrink: 0;
-}
-
-.review-value {
-    font-weight: 600;
-    font-size: var(--fs-body-sm);
-    text-align: right;
-}
-
-.review-value--green { color: var(--green); }
-
-.review-note {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
-    background: rgba(61,187,72,0.07);
-    border: 1px solid var(--green-glow);
-    border-radius: var(--radius-sm);
-    font-size: var(--fs-caption);
-    color: rgba(255,255,255,0.55);
-    margin-bottom: var(--space-2);
-}
-
-/* ---------- Confirmed ---------- */
-.booking-confirmed {
-    text-align: center;
-    max-width: 560px;
-    margin: 0 auto;
-    padding: var(--space-4) 0 var(--space-8);
-}
-
-.confirmed-icon {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    background: var(--green);
-    color: var(--dark);
-    font-size: 2rem;
-    font-weight: 900;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto var(--space-6);
-    box-shadow: 0 0 0 8px rgba(61,187,72,0.15);
-}
-
-.confirmed-subtitle {
-    color: rgba(255,255,255,0.55);
-    margin-bottom: var(--space-8);
-}
-
-.confirmed-ref {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-1);
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-4) var(--space-8);
-    margin-bottom: var(--space-8);
-}
-
-.confirmed-ref span { font-size: var(--fs-tiny); color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px; }
-.confirmed-ref strong { font-size: 1.3rem; color: var(--green); letter-spacing: 1px; }
-
-.confirmed-summary {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-5);
-    margin-bottom: var(--space-8);
-    text-align: left;
-}
-
-.confirmed-row {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
-    font-size: 1.2rem;
-}
-
-.confirmed-row > span { flex-shrink: 0; }
-
-.confirmed-row div {
-    display: flex;
-    flex-direction: column;
-}
-
-.confirmed-row div strong { font-size: var(--fs-body-sm); color: var(--white); }
-.confirmed-row div span { font-size: var(--fs-caption); color: rgba(255,255,255,0.45); }
-
-.confirmed-actions {
-    display: flex;
-    justify-content: center;
-    gap: var(--space-4);
-    flex-wrap: wrap;
-}
-
-/* ---------- Admin Login ---------- */
-.admin-login {
-    min-height: calc(100svh - var(--nav-h));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-8) var(--space-5);
-    background: var(--dark);
-}
-
-.admin-login__card {
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-10);
-    width: 100%;
-    max-width: 420px;
-    text-align: center;
-}
-
-.admin-login__logo {
-    display: flex;
-    justify-content: center;
-    margin-bottom: var(--space-6);
-}
-.admin-logo-img { height: 64px; width: auto; display: block; margin: 0 auto; mix-blend-mode: screen; }
-
-.admin-login__card h2 { margin-bottom: var(--space-2); }
-.admin-login__card p { color: rgba(255,255,255,0.5); margin-bottom: var(--space-6); font-size: var(--fs-body-sm); }
-.admin-login__card .form-group { text-align: left; margin-bottom: var(--space-5); }
-
-.remember-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    text-align: left;
-    margin-bottom: var(--space-5);
-    color: rgba(255,255,255,0.7);
-    font-size: var(--fs-body-sm);
-    cursor: pointer;
-}
-.remember-row input { width: auto; margin: 0; }
-
-.auth-alt { margin-top: var(--space-5); margin-bottom: 0; font-size: var(--fs-body-sm); color: rgba(255,255,255,0.5); }
-.auth-alt a { color: var(--green); font-weight: 600; }
-
-/* ---------- Admin Dashboard ---------- */
-/* Tighter than the public page heroes so the dashboard header takes ~50px less
-   vertical space (and stays compact on phones). */
-.page-hero--admin { padding-top: var(--space-8); padding-bottom: var(--space-6); }
-.admin-section { padding-top: var(--space-8); }
-
-@media (max-width: 479px) {
-    .page-hero--admin { padding-top: var(--space-6); padding-bottom: var(--space-5); }
-    .admin-section { padding-top: var(--space-5); }
-
-    /* Booking card: reduce padding */
-    .booking-card { padding: var(--space-5); }
-
-    /* Step indicator: shrink dots and hide labels on tiny screens */
-    .step-indicator__dot { width: 28px; height: 28px; font-size: var(--fs-tiny); }
-    .step-indicator__label { display: none; }
-    .step-indicator__line { margin-bottom: 0; min-width: 16px; }
-    .steps-indicator { margin-bottom: var(--space-8); }
-
-    /* Booking nav buttons: stack on tiny screens */
-    .booking-nav { flex-direction: column-reverse; }
-    .booking-nav .btn { width: 100%; justify-content: center; }
-    .booking-nav > span { display: none; }
-    /* The grouped Back/Start over pair stacks too, rather than trying to sit two
-       full-width buttons side by side. */
-    .booking-nav__left { width: 100%; flex-direction: column; gap: var(--space-2); }
-
-    /* Calendar: tighten up */
-    .cal-day { font-size: var(--fs-caption); border-radius: var(--radius-sm); }
-    /* Was 0.6rem — the smallest text anywhere on the site, for the one row that
-       has to stay readable at arm's length while you pick a date. The weekday
-       initials are two characters, so --fs-2xs still fits the cell at 320px. */
-    .cal-head { font-size: var(--fs-2xs); }
-
-    /* Service picker: reduce padding */
-    .service-pick-card { padding: var(--space-3); }
-
-    /* Review items: allow wrapping */
-    .review-item { flex-wrap: wrap; gap: var(--space-1); }
-    .review-value { text-align: left; }
-
-    /* Confirmed page */
-    .confirmed-ref { padding: var(--space-3) var(--space-5); }
-    .confirmed-ref strong { font-size: 1.1rem; }
-    .confirmed-actions { flex-direction: column; align-items: center; }
-    .confirmed-actions .btn { width: 100%; max-width: 320px; justify-content: center; }
-}
-
-/* Small utilities for the admin dashboard markup — replace repeated inline
-   styles in Admin.razor rather than hand-writing the same declarations per
-   element. */
-.text-center { text-align: center; }
-.text-muted-sm { font-size: var(--fs-xs); color: rgba(255,255,255,0.45); }
-.text-faint-sm { font-size: var(--fs-xs); color: rgba(255,255,255,0.35); }
-
-.admin-header-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-}
-.admin-header-actions__name {
-    color: rgba(255,255,255,0.7);
-    font-size: var(--fs-sm);
-}
-.admin-header-actions__name .status-badge { font-size: var(--fs-tiny); }
-
-.form-control--compact { font-size: var(--fs-xs); padding: var(--space-1) var(--space-2); }
-.form-control--price   { font-size: var(--fs-sm); padding: var(--space-1) var(--space-2); width: 100px; }
-.form-control--assign  { min-width: 130px; }
-.admin-subheading      { font-size: var(--fs-h3-compact); margin: var(--space-8) 0 var(--space-4); }
-
-/* Replaces repeated inline styles in Admin.razor. */
-.admin-inline-error    { margin-bottom: var(--space-3); }
-.admin-checkbox-label  { margin-left: var(--space-1); }
-.price-current         { font-weight: 700; color: var(--green); }
-
-/* Pricing table column widths, previously inline on the <th>. */
-/* Enough for the primary button plus two icon buttons and the menu toggle on one
-   line — otherwise the cell squeezes and the set wraps. */
-.admin-table .col-actions     { width: 1%; white-space: nowrap; }
-.admin-table .col-price       { width: 130px; }
-.admin-table .col-price-input { width: 140px; }
-.admin-table .col-save        { width: 80px; }
-
-.tab-bar-wrapper { margin-bottom: var(--space-6); }
-
-.pricing-tab-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-4);
-    flex-wrap: wrap;
-    gap: var(--space-3);
-}
-.pricing-tab-header h3 { margin: 0; }
-
-/* Below 768px the sticky bar at the foot of the list provides Save All, so this one
-   is a second button doing the same job a few pixels away. */
-@media (max-width: 767px) {
-    .pricing-tab-header .btn { display: none; }
-}
-
-.admin-stats {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-4);
-    margin-bottom: var(--space-6);
-}
-
-.admin-stat {
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-5);
-    text-align: center;
-}
-
-.admin-stat--highlight {
-    border-color: var(--green);
-    background: rgba(61,187,72,0.05);
-}
-
-.admin-stat__number {
-    font-size: 2.2rem;
-    font-weight: 900;
-    color: var(--green);
-    line-height: 1;
-    margin-bottom: var(--space-1);
-}
-
-.admin-stat__label {
-    font-size: var(--fs-tiny);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: rgba(255,255,255,0.4);
-}
-
-/* Filters */
-.admin-filters {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    margin-bottom: var(--space-6);
-}
-
-/* The sort picker sits beside the search box. Fixed width so it doesn't stretch to
-   fill the row on desktop and dwarf the thing being sorted. */
-.admin-sort { flex-shrink: 0; }
-.admin-sort .form-control { width: 100%; }
-
-@media (min-width: 640px) {
-    .admin-sort .form-control { width: auto; min-width: 11rem; }
-}
-
-.admin-filter-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-bottom: var(--space-05);
-}
-.admin-filter-scroll::-webkit-scrollbar { display: none; }
-
-.admin-filter-tabs {
-    display: flex;
-    gap: var(--space-1);
-    flex-wrap: nowrap;
-    width: max-content;
-}
-
-.filter-tab {
-    padding: var(--space-2) var(--space-3);
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: 50px;
-    color: rgba(255,255,255,0.6);
-    font-size: var(--fs-caption);
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
-    white-space: nowrap;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .filter-tab:hover { border-color: var(--green); color: var(--white); }
-}
-.filter-tab.active { background: var(--green); border-color: var(--green); color: var(--dark); }
-
-.admin-search { width: 100%; }
-.admin-search .form-control { font-size: var(--fs-sm); }
-
-/* Today schedule */
-.today-schedule {
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-5);
-    margin-bottom: var(--space-6);
-}
-
-.today-schedule h3 { font-size: var(--fs-h3-compact); margin-bottom: var(--space-4); }
-
-.today-slots { display: flex; flex-direction: column; gap: var(--space-2); }
-
-.today-slot {
-    display: grid;
-    grid-template-columns: 48px 1fr auto;
-    align-items: center;
-    gap: var(--space-1) var(--space-3);
-    padding: var(--space-3);
-    background: var(--dark-3);
-    border-radius: var(--radius-sm);
-    font-size: var(--fs-sm);
-}
-
-.today-slot__time { font-weight: 700; color: var(--green); }
-.today-slot__name { font-weight: 600; }
-.today-slot__service {
-    color: rgba(255,255,255,0.55);
-    font-size: var(--fs-caption);
-    grid-column: 2;
-}
-
-/* Table */
-.admin-table-wrapper { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border-dark); }
-
-.admin-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: var(--fs-sm);
-}
-
-.admin-table thead tr {
-    background: var(--dark-3);
-    border-bottom: 1px solid var(--border-dark);
-}
-
-.admin-table th {
-    padding: var(--space-3) var(--space-4);
-    text-align: left;
-    font-size: var(--fs-2xs);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: rgba(255,255,255,0.45);
-    white-space: nowrap;
-}
-
-.admin-table tbody tr {
-    background: var(--dark-2);
-    border-bottom: 1px solid var(--border-dark);
-    cursor: pointer;
-    transition: background 0.15s;
-}
-
-.admin-table tbody tr:last-child { border-bottom: none; }
-/* An expanded row stays highlighted on touch too — it marks which row is open,
-   which is state rather than hover feedback. Only the hover half is gated. */
-.admin-table tbody tr.row-expanded { background: var(--dark-3); }
-
-@media (hover: hover) and (pointer: fine) {
-    .admin-table tbody tr:hover { background: var(--dark-3); }
-}
-
-.admin-table td { padding: var(--space-3) var(--space-4); vertical-align: middle; }
-
-.row-detail td { background: rgba(61,187,72,0.04); padding: 0; }
-
-.booking-detail {
-    padding: var(--space-4);
-    border-top: 1px solid var(--border-dark);
-}
-
-.booking-detail__grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-3) var(--space-8);
-}
-
-.booking-detail__grid > div {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-05);
-}
-
-.booking-detail__grid strong { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.35); }
-.booking-detail__grid span { font-size: var(--fs-sm); color: rgba(255,255,255,0.75); }
-
-.booking-detail__photos { margin-top: var(--space-3); }
-.booking-detail__photos strong {
-    display: block;
-    margin-bottom: var(--space-1);
-    font-size: var(--fs-2xs);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: rgba(255,255,255,0.35);
-}
-
-.admin-photo-thumbs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-top: var(--space-1);
-}
-
-.admin-photo-thumb {
-    width: 56px;
-    height: 56px;
-    object-fit: cover;
-    border-radius: var(--radius);
-    border: 1px solid var(--border-dark);
-}
-
-/* Table cells */
-.ref-badge {
-    font-size: var(--fs-tiny);
-    font-family: monospace;
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    padding: var(--space-1) var(--space-2);
-    border-radius: 4px;
-    white-space: nowrap;
-    color: var(--green);
-}
-
-.customer-cell, .service-cell, .date-cell {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-05);
-}
-
-.customer-cell strong, .service-cell strong, .date-cell strong { color: var(--white); font-size: var(--fs-sm); }
-.customer-cell span, .service-cell span, .date-cell span { font-size: var(--fs-tiny); color: rgba(255,255,255,0.4); }
-
-/* Status badges */
-.status-badge {
-    display: inline-block;
-    padding: var(--space-1) var(--space-3);
-    border-radius: 50px;
-    font-size: var(--fs-2xs);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    white-space: nowrap;
-}
-
-.status-badge--pending    { background: rgba(234,179,8,0.15);  color: #eab308; border: 1px solid rgba(234,179,8,0.3);  }
-.status-badge--confirmed  { background: rgba(61,187,72,0.15);  color: var(--green); border: 1px solid rgba(61,187,72,0.3); }
-.status-badge--inprogress { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
-.status-badge--completed  { background: rgba(107,114,128,0.15);color: #9ca3af; border: 1px solid rgba(107,114,128,0.3);}
-.status-badge--cancelled  { background: rgba(220,38,38,0.12);  color: #f87171; border: 1px solid rgba(220,38,38,0.25); }
-
-/* Action buttons */
-.action-buttons { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-
-.action-btn {
-    /* inline-flex + inherited font + fixed line-height so <button> and <a>
-       action buttons render at an identical height everywhere (the calendar
-       row centres them, so any intrinsic size difference would show). */
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-1) var(--space-3);
-    min-height: 28px;
-    border-radius: 6px;
-    font-family: inherit;
-    font-size: var(--fs-tiny);
-    font-weight: 600;
-    line-height: 1.35;
-    cursor: pointer;
-    /* Every colour below comes from a --variant class, so a button wearing none of
-       them used to fall through to the user agent's button chrome — a white pill on
-       the dark card. These two make the base neutral instead of undefined. */
-    background: rgba(255,255,255,0.06);
-    color: rgba(255,255,255,0.75);
-    border: 1px solid transparent;
-    transition: all 0.15s;
-    white-space: nowrap;
-    gap: var(--space-1);
-}
-
-/* The one primary action on a booking. Confirm / Start work / Mark complete were
-   three separately-coloured buttons for what is one control — they were already
-   mutually exclusive, so the colour change only ever signalled "the button moved". */
-.action-btn--primary { background: rgba(61,187,72,0.15); color: var(--green); border-color: rgba(61,187,72,0.3); }
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--primary:hover { background: var(--green); color: var(--dark); }
-}
-
-/* Confirming a destructive step, at the point of confirming it — never as the
-   resting state of a button that merely opens the confirmation. */
-.action-btn--danger { background: rgba(220,38,38,0.12); color: #f87171; border-color: rgba(220,38,38,0.3); }
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--danger:hover { background: #dc2626; color: var(--white); }
-}
-
-/* Opening the cancel confirmation — quiet red, so it reads as destructive without
-   claiming to be the destruction itself. --danger stays reserved for the button that
-   actually fires inside the confirmation, and the two sit next to each other often
-   enough that the difference in weight is the whole point. */
-.action-btn--cancel {
-    background: rgba(220,38,38,0.08);
-    color: #f87171;
-    border-color: rgba(220,38,38,0.22);
-}
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--cancel:hover { background: rgba(220,38,38,0.2); border-color: rgba(220,38,38,0.45); }
-}
-
-/* Icons inside action buttons sit beside a label, so they take a touch more than the
-   1em the base .icon rule gives them or they read as a smudge next to 600-weight text. */
-.action-btn .icon { width: 1.05em; height: 1.05em; }
-
-
-/* An empty result inside a table that stays on the page, rather than in place of it.
-   Matches .admin-empty so the phone and desktop views read the same. */
-.admin-table__empty-row td {
-    padding: var(--space-12) var(--space-4);
-    text-align: center;
-    color: rgba(255,255,255,0.35);
-    font-size: var(--fs-body-sm);
-}
-
-.admin-table__empty-row:hover td { background: none; }
-
-.admin-empty {
-    padding: var(--space-12);
-    text-align: center;
-    color: rgba(255,255,255,0.35);
-    font-size: var(--fs-body-sm);
-}
-
-/* Staff management / Pricing tab */
-.staff-mgmt { margin-top: var(--space-2); }
-.staff-add-card {
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-6);
-    margin-bottom: var(--space-6);
-}
-.staff-add-card h3 { margin: 0 0 var(--space-4); font-size: var(--fs-h3-compact); color: var(--white); }
-
-/* Admin utility: success banner & info banner */
-.admin-success {
-    background: rgba(61,187,72,0.10);
-    border: 1px solid rgba(61,187,72,0.3);
-    color: var(--green);
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-sm);
-    margin-bottom: var(--space-6);
-    font-size: var(--fs-sm);
-}
-
-.pricing-info-banner {
-    background: var(--dark-3);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-    padding: var(--space-3) var(--space-4);
-    margin-bottom: var(--space-6);
-    font-size: var(--fs-sm);
-    color: rgba(255,255,255,0.5);
-}
-.pricing-info-banner strong { color: var(--white); }
-
-/* ============================================================
-   ADMIN CARD VIEW (mobile only)
-   ============================================================ */
-
-/* Mobile: show cards, hide the table.
-   The hide is on the --desktop-only modifier, not on .admin-table-wrapper itself.
-   It used to apply to every wrapper, but only the bookings table had a card
-   fallback — so the Pricing and Staff tabs, which reuse the wrapper, rendered a
-   completely blank page on every phone. All three now have card layouts, and a
-   wrapper only opts into being hidden when one exists. */
-.admin-cards {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-}
-
-.admin-table-wrapper--desktop-only { display: none; }
-
-.admin-card {
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    overflow: hidden;
-    cursor: pointer;
-    transition: border-color 0.2s;
-}
-
-.admin-card--open { border-color: rgba(61,187,72,0.4); }
-@media (hover: hover) and (pointer: fine) {
-    .admin-card:hover { border-color: var(--border-dark); }
-    .admin-card--open:hover { border-color: rgba(61,187,72,0.4); }
-}
-
-.admin-card__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-3) var(--space-4) var(--space-2);
-    gap: var(--space-2);
-}
-
-.admin-card__header-right {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-}
-
-.admin-card__chevron {
-    font-size: 1.3rem;
-    color: rgba(255,255,255,0.3);
-    line-height: 1;
-    transition: transform 0.2s;
-    display: inline-block;
-}
-
-.admin-card__chevron.open { transform: rotate(90deg); color: var(--green); }
-
-/* An enquiry card has nothing to expand — everything it holds is already on it —
-   so it doesn't offer the pointer the bookings cards do. */
-.admin-card--static { cursor: default; }
-
-/* Handled ones stay readable but stop competing with the ones still outstanding. */
-.admin-card--handled { opacity: 0.6; }
-
-.admin-card__name {
-    padding: 0 var(--space-4) var(--space-1);
-    font-weight: 700;
-    font-size: var(--fs-body);
-    color: var(--white);
-}
-
-.admin-card__meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 var(--space-4) var(--space-3);
-    gap: var(--space-2);
-    flex-wrap: wrap;
-}
-
-.admin-card__meta span:first-child { font-size: var(--fs-xs); color: rgba(255,255,255,0.6); }
-.admin-card__meta span:last-child  { font-size: var(--fs-caption); color: rgba(255,255,255,0.4); }
-
-.admin-card__detail {
-    border-top: 1px solid var(--border-dark);
-    padding: var(--space-3) var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    background: rgba(61,187,72,0.03);
-}
-
-.admin-card__detail-row {
-    display: flex;
-    gap: var(--space-3);
-    font-size: var(--fs-caption);
-}
-
-/* Direct child, not any descendant: as `span:first-child` this also matched the
-   first <span> inside any nested markup in the value column, which uppercased and
-   shrank the first job note on every expanded booking. */
-.admin-card__detail-row > span:first-child {
-    color: rgba(255,255,255,0.35);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-size: var(--fs-2xs);
-    min-width: 48px;
-    flex-shrink: 0;
-    padding-top: var(--space-05);
-}
-
-/* Direct child for the same reason as the rule above. */
-.admin-card__detail-row > span:last-child {
-    color: rgba(255,255,255,0.75);
-    word-break: break-word;
-}
-
-.admin-card__actions {
-    display: flex;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
-    border-top: 1px solid var(--border-dark);
-    background: var(--dark-3);
-    flex-wrap: wrap;
-}
-
-/* Admin hero row */
-.admin-hero-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-4);
-}
-
-/* ============================================================
-   RESPONSIVE
-   ============================================================ */
-
-@media (min-width: 480px) {
-    .timeslot-grid { grid-template-columns: repeat(3, 1fr); }
-    .admin-stats { grid-template-columns: repeat(4, 1fr); }
-}
-
-@media (min-width: 640px) {
-    .service-pick-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
-    .schedule-grid { grid-template-columns: 1fr 1fr; }
-    .booking-detail__grid { grid-template-columns: repeat(4, 1fr); }
-}
-
-/* At 768px+ switch to table view */
-@media (min-width: 768px) {
-    .timeslot-grid { grid-template-columns: repeat(4, 1fr); }
-    .booking-card { padding: var(--space-10); }
-
-    /* Show tables, hide the bookings card list. (.admin-mobile-cards is hidden
-       next to its own definition further down — see the note there.) */
-    .admin-cards { display: none; }
-    .admin-table-wrapper--desktop-only { display: block; }
-
-    /* Filters: horizontal row */
-    .admin-filters {
-        flex-direction: row;
-        align-items: center;
-    }
-    .admin-filter-scroll { flex: 1; }
-    .admin-search { width: auto; min-width: 220px; flex: 0 1 260px; }
-}
-
-/* ============================================================
-   ADMIN PRICING & STAFF — mobile card layouts
-   ------------------------------------------------------------
-   Below 768px the Pricing and Staff tables are replaced by these, rather than
-   hidden with nothing behind them (which is what used to happen). Hidden at
-   768px+ by the .admin-mobile-cards rule in the breakpoint block above.
-   ============================================================ */
-.admin-mobile-cards {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-}
-
-/* The hide has to live here, immediately after the rule it overrides, rather than
-   with the other breakpoint rules further up the file: this block is defined below
-   them, and at equal specificity the later declaration wins regardless of the media
-   query. Putting it up there left the cards AND the table both rendering at 768px+,
-   so the Pricing and Staff tabs showed every row twice on desktop. */
-@media (min-width: 768px) {
-    .admin-mobile-cards { display: none; }
-}
-
-.admin-edit-card {
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-5);
-}
-
-.admin-edit-card__title {
-    font-weight: 700;
-    font-size: var(--fs-body);
-    color: var(--white);
-    margin-bottom: var(--space-05);
-}
-
-.admin-edit-card__meta {
-    font-size: var(--fs-xs);
-    color: rgba(255,255,255,0.45);
-    margin-bottom: var(--space-3);
-}
-
-/* Label and control on one line, wrapping to two when the label is long. */
-.admin-edit-card__field {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-    padding: var(--space-2) 0;
-    border-top: 1px solid var(--border-dark);
-}
-
-.admin-edit-card__field:first-of-type { border-top: none; }
-
-.admin-edit-card__field > span {
-    font-size: var(--fs-sm);
-    color: rgba(255,255,255,0.6);
-}
-
-.admin-edit-card__field .form-control { width: auto; min-width: 7rem; }
-
-.admin-edit-card__actions {
-    display: flex;
-    gap: var(--space-2);
-    margin-top: var(--space-3);
-}
-
-.admin-edit-card__actions .btn,
-.admin-edit-card__actions .action-btn { flex: 1; justify-content: center; }
-
-/* A checkbox big enough to hit. The bare 13px checkboxes in the staff table were
-   unusable on touch. */
-.admin-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    padding: var(--space-3) 0;
-    border-top: 1px solid var(--border-dark);
-    font-size: var(--fs-sm);
-    color: rgba(255,255,255,0.7);
-    cursor: pointer;
-    min-height: var(--touch-min);
-}
-
-.admin-toggle input[type="checkbox"] {
-    width: 22px;
-    height: 22px;
-    flex-shrink: 0;
-    accent-color: var(--green);
-    cursor: pointer;
-}
-
-/* The sticky bar floats over the list, so the list needs room to scroll clear of it.
-   Without this the last service's own Save button sits permanently underneath and is
-   unreachable on a phone — you could edit its price but never save it. */
-.admin-mobile-cards--sticky-actions { padding-bottom: var(--sticky-actions-h); }
-
-@media (min-width: 768px) {
-    .admin-mobile-cards--sticky-actions { padding-bottom: 0; }
-}
-
-/* Save All follows the list down the page instead of scrolling off the top. */
-.pricing-sticky-actions {
-    position: sticky;
-    bottom: 0;
-    z-index: 5;
-    display: flex;
-    align-items: center;
-    min-height: var(--sticky-actions-h);
-    gap: var(--space-2);
-    padding: var(--space-3) 0;
-    margin-top: var(--space-4);
-    background: linear-gradient(to top, var(--dark) 60%, transparent);
-}
-
-.pricing-sticky-actions .btn { flex: 1; justify-content: center; }
-
-@media (min-width: 768px) {
-    .pricing-sticky-actions { display: none; }
-}
-
-/* ============================================================
-   ADMIN DAY CALENDAR
-   ============================================================ */
-/* Stacked on a phone: the date and its two arrows on one line, the jump controls
-   beneath. This was a single wrapping row, which broke wherever it ran out of width —
-   typically leaving "previous day" on one line and "next day" on the next. */
-.day-cal__nav {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    margin-bottom: var(--space-4);
-}
-
-.day-cal__nav-main {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-}
-
-.day-cal__nav-tools {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-}
-
-/* Wide enough for one row again. */
-@media (min-width: 640px) {
-    .day-cal__nav {
-        flex-direction: row;
-        align-items: center;
-        gap: var(--space-3);
-        flex-wrap: wrap;
-    }
-    .day-cal__nav-main { flex: 1 1 auto; }
-}
-
-/* min-width: 0 rather than the old 240px: that floor is what forced the nav row to
-   wrap on a phone and split the two arrows across separate lines. The title takes the
-   space between the arrows and wraps within it if the date is long. */
-.day-cal__title {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-3);
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: var(--fs-h3-compact);
-    text-align: center;
-}
-
-/* Only one of the two date lengths is ever shown. Below 640px the short form keeps
-   the arrows and the date on a single line; above it there's room for the full one. */
-.day-cal__date--full  { display: none; }
-.day-cal__date--short { display: inline; }
-
-@media (min-width: 640px) {
-    .day-cal__title {
-        justify-content: flex-start;
-        text-align: left;
-    }
-    .day-cal__date--full  { display: inline; }
-    .day-cal__date--short { display: none; }
-}
-
-.day-cal__picker {
-    width: auto;
-    padding: var(--space-1) var(--space-3);
-    font-size: var(--fs-xs);
-    color-scheme: dark;
-}
-
-.day-cal__summary {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin-bottom: var(--space-5);
-    color: rgba(255,255,255,0.6);
-    font-size: var(--fs-body-sm);
-}
-
-.day-cal__closed {
-    color: #f87171;
-    font-size: var(--fs-xs);
-    font-weight: 600;
-}
-
-.day-cal__slots {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-}
-
-.day-cal-slot {
-    display: grid;
-    grid-template-columns: 64px 1fr;
-    gap: var(--space-3);
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    padding: var(--space-3);
-}
-
-.day-cal-slot--free {
-    background: transparent;
-    opacity: 0.55;
-}
-
-.day-cal-slot__time {
-    font-weight: 700;
-    color: var(--green);
-    font-size: var(--fs-body-sm);
-    padding-top: var(--space-05);
-}
-
-.day-cal-slot--free .day-cal-slot__time { color: rgba(255,255,255,0.35); }
-
-.day-cal-slot__content {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-width: 0;
-}
-
-.day-cal-slot__free {
-    color: rgba(255,255,255,0.3);
-    font-size: var(--fs-xs);
-    padding-top: var(--space-05);
-}
-
-.day-cal-booking {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-    background: var(--dark-4);
-    border: 1px solid var(--border-dark);
-    border-radius: 8px;
-    padding: var(--space-3);
-}
-
-.day-cal-booking--cancelled { opacity: 0.45; }
-
-.day-cal-booking__info { min-width: 0; flex: 1 1 260px; }
-
-.day-cal-booking__head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-    margin-bottom: var(--space-1);
-}
-
-.day-cal-booking__meta {
-    font-size: var(--fs-xs);
-    color: rgba(255,255,255,0.55);
-}
-
-.day-cal-booking__notes {
-    margin-top: var(--space-1);
-    font-size: var(--fs-caption);
-    color: rgba(255,255,255,0.4);
-    font-style: italic;
-}
-
-.day-cal-booking__actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-}
-
-a.action-btn { text-decoration: none; }
-
-/* ── One booking's controls, in two rows ─────────────────────────────────────
-   Was a single flex-wrap row holding up to nine pills of equal weight; then one
-   primary action with contact demoted to bare icon squares and Cancel hidden behind
-   a "…" menu, which cost three taps to reach the second most common thing done to a
-   booking. Now: the primary action across the top, and under it the three things you
-   might do instead, all labelled. The menu is gone — Reopen was the only other thing
-   in it, and it has the primary slot to itself on a cancelled or completed booking. */
-.booking-actions {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    /* Its parents (.admin-card__actions, .action-buttons, .day-cal-booking__actions)
-       are themselves flex, so without this it sizes to its content and the primary
-       button never actually reaches full width. */
-    flex: 1 1 100%;
-    min-width: 0;
-}
-
-/* The thing tapped twenty times a day gets the full width and a full touch target.
-   Column direction stretches it; the width is not set here. */
-.booking-actions__primary { min-height: var(--touch-min); }
-
-.booking-actions__row {
-    display: flex;
-    gap: var(--space-2);
-    /* Wraps rather than overflowing if a translation ever outgrows a third of a
-       narrow card — the automatic minimum size keeps each label readable first. */
-    flex-wrap: wrap;
-}
-
-/* flex-basis 0 makes the grow values a straight ratio of the row, rather than a
-   share of whatever is left over after the labels. */
-.booking-actions__row .action-btn {
-    flex: 1 1 0;
-    min-height: var(--touch-min);
-}
-
-/* Cancel is the least used of the three by a wide margin, so it takes the smallest
-   share. Not so small that the word crowds its own padding: flex's automatic minimum
-   size stops it shrinking under the label, so on a very narrow card the ratio gives
-   out before the text does. */
-.booking-actions__row .action-btn--cancel {
-    flex-grow: 0.62;
-    padding-inline: var(--space-2);
-}
-
-@media (min-width: 768px) {
-    /* Desktop puts the whole set back on one line — the table's Actions cell has no
-       room for a stacked block, and a mouse does not need 44px targets.
-
-       768px, not the 640px this block used to sit at, because that is where the card
-       list gives way to the table (.admin-cards / .admin-table-wrapper--desktop-only).
-       At 640–767px the cards were still on screen but these rules had already shrunk
-       their buttons to 28px — a mouse-sized target on what is most often a tablet. */
-    .booking-actions {
-        flex-direction: row;
-        align-items: center;
-        justify-content: flex-end;
-        flex-wrap: nowrap;
-    }
-    .booking-actions__primary { min-height: 28px; }
-    .booking-actions__row { flex: 0 0 auto; flex-wrap: nowrap; }
-
-    /* Four gaps at --space-2 is 32px of the Actions column spent on air. Half that is
-       still legible at 28px tall and buys back the headroom the table needs to sit
-       inside its wrapper without a scrollbar. */
-    .booking-actions,
-    .booking-actions__row { gap: var(--space-1); }
-    .booking-actions__row .action-btn {
-        flex: 0 0 auto;
-        min-height: 28px;
-    }
-    .booking-actions__row .action-btn--cancel { padding-inline: var(--space-2); }
-
-    /* The bookings table is a dense twelve-column grid inside an overflow-x wrapper,
-       and two labelled contact pills pushed it 110px past that wrapper — a horizontal
-       scrollbar under the whole dashboard. Above 768px they go back to icon squares
-       with their title tooltips. The labels earn their width on the card list, where
-       the target has to be finger-sized and a bare glyph is a guess; a mouse gets the
-       tooltip instead. Cancel keeps its word at every width — it is the destructive
-       one, and a symbol is not enough warning. */
-    .booking-actions__row .action-btn--whatsapp,
-    .booking-actions__row .action-btn--call {
-        width: 32px;
-        min-width: 32px;
-        padding-inline: 0;
-    }
-
-    /* Hidden, not removed: the label is the button's accessible name, and dropping it
-       would leave a link announced as nothing at all. */
-    .booking-actions__row .action-btn--whatsapp .action-btn__label,
-    .booking-actions__row .action-btn--call .action-btn__label {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-    }
-}
-
-/* ── An enquiry's controls ───────────────────────────────────────────────────
-   Their own row rather than .booking-actions__row, which above 768px squeezes
-   .action-btn--call to a 32px icon square and visually hides the label inside it.
-   A booking survives that: the label is the word "Call" and the number is already
-   in the row. An enquiry doesn't — the sender's address appears nowhere else, so
-   there is nothing to hide it in favour of, and unhidden text in a 32px box with
-   zero inline padding simply overprinted the button beside it. */
-.enquiry-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-}
-
-.enquiry-actions .action-btn {
-    min-height: var(--touch-min);
-    gap: var(--space-1);
-}
-
-/* An address can be arbitrarily long, and the Actions cell sits inside the table's
-   overflow-x wrapper — so it truncates here rather than pushing a scrollbar under
-   the whole dashboard. The full value stays in the title and in the mailto:. */
-.enquiry-actions__contact { min-width: 0; }
-
-.enquiry-actions__text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-@media (min-width: 768px) {
-    /* Same reasoning as .booking-actions__row: a mouse doesn't need 44px, and the
-       table cell has less room than a card. */
-    .enquiry-actions {
-        gap: var(--space-1);
-        flex-wrap: nowrap;
-    }
-    .enquiry-actions .action-btn { min-height: 28px; }
-    /* The contact pills give up width first; WhatsApp and Mark handled keep theirs,
-       because a truncated verb is useless where a truncated address still reads. */
-    .enquiry-actions__contact { flex: 0 1 auto; }
-    .enquiry-actions .action-btn--whatsapp,
-    .enquiry-actions .action-btn--primary,
-    .enquiry-actions .action-btn--keep { flex: 0 0 auto; }
-}
-
-/* The confirm step for Cancel. It used to fire on a single click, despite being
-   irreversible and now emailing the customer. */
-.booking-confirm {
-    flex: 1 1 100%;
-    margin-top: var(--space-3);
-    padding: var(--space-3);
-    background: rgba(220,38,38,0.07);
-    border: 1px solid rgba(220,38,38,0.25);
-    border-radius: var(--radius-sm);
-}
-
-.booking-confirm__text {
-    margin-bottom: var(--space-3);
-    color: rgba(255,255,255,0.8);
-    font-size: var(--fs-sm);
-    line-height: 1.5;
-}
-
-.booking-confirm__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-
-/* Delete's new home, at the foot of the expanded detail. Separated by a rule so it
-   reads as a different category of thing, not the next button along. */
-.booking-danger {
-    margin-top: var(--space-4);
-    padding-top: var(--space-3);
-    border-top: 1px solid var(--border-dark);
-}
-
-.booking-danger__text {
-    margin-bottom: var(--space-3);
-    color: rgba(255,255,255,0.6);
-    font-size: var(--fs-sm);
-    line-height: 1.5;
-}
-
-.booking-danger__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-
-.action-btn--whatsapp { background: rgba(37,211,102,0.12); color: #25d366; border-color: rgba(37,211,102,0.3); }
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--whatsapp:hover { background: #25d366; color: var(--dark); }
-}
-.action-btn--call { background: rgba(59,130,246,0.12); color: #60a5fa; border-color: rgba(59,130,246,0.3); }
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--call:hover { background: #3b82f6; color: var(--white); }
-}
-.action-btn--keep { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.15); }
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--keep:hover { background: rgba(255,255,255,0.15); color: var(--white); }
-}
-/* Delete is permanent (two-step), so it stays muted until hover — distinct from
-   the always-red "Cancel" which only changes a booking's status. */
-.action-btn--delete { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.5); border-color: rgba(255,255,255,0.12); }
-@media (hover: hover) and (pointer: fine) {
-    .action-btn--delete:hover { background: #dc2626; color: var(--white); border-color: #dc2626; }
-}
-
-/* ============================================================
-   iOS INPUT ZOOM — admin & booking controls
-   ------------------------------------------------------------
-   Companion to the block of the same name in app.css. It has to live here rather
-   than there because this file is loaded second: the selectors below are defined
-   in this file at 13.6–14px, media queries contribute no specificity, and at equal
-   specificity the later stylesheet wins. Putting the override in app.css alone left
-   every admin field still under the 16px threshold, so the page kept zooming on
-   focus exactly where it was worst — the dashboard, on a phone.
-   ============================================================ */
-@media (max-width: 767px) {
-    .form-control--compact,
-    .form-control--price,
-    .day-cal__picker,
-    .admin-search .form-control {
-        font-size: 16px;
-    }
-
-    /* 16px needs more room than the 13–14px these were spaced for. */
-    .form-control--compact,
-    .form-control--price {
-        padding: var(--space-2) var(--space-3);
-    }
-
-    /* Fixed at 100px for a 14px font; too tight once the digits are 16px. */
-    .form-control--price { width: 7.5rem; }
-}
-
-/* ============================================================
-   TOUCH TARGETS (mobile)
-   ------------------------------------------------------------
-   Every control a finger has to hit gets at least --touch-min (44px) in the
-   vertical direction, and as close to it horizontally as the layout allows. The
-   visual sizes are unchanged on desktop, where a mouse makes small targets fine.
-
-   The calendar day is the one compromise: it's a 7-column grid inside the booking
-   card, so at a 390px viewport each cell can only be ~41px wide however the padding
-   is tuned. Dropping aspect-ratio and setting an explicit min-height gives a
-   41×44 target — short on one axis, but the axis that matters least, and far better
-   than the ~31px square it collapsed to at 320px.
-   ============================================================ */
-@media (max-width: 767px) {
-    .cal-nav__btn {
-        width: var(--touch-min);
-        height: var(--touch-min);
-    }
-
-    .cal-day {
-        aspect-ratio: auto;
-        min-height: var(--touch-min);
-    }
-
-    .cal-grid { gap: var(--space-05); }
-
-    .timeslot { min-height: var(--touch-min); }
-
-    .action-btn {
-        min-height: var(--touch-min);
-        padding: var(--space-2) var(--space-3);
-    }
-
-    .filter-tab {
-        min-height: var(--touch-min);
-        display: inline-flex;
-        align-items: center;
-        padding: var(--space-2) var(--space-4);
-    }
-
-    .bike-chip {
-        min-height: var(--touch-min);
-        display: inline-flex;
-        align-items: center;
-        padding: var(--space-2) var(--space-4);
-    }
-
-    /* The ✕ was an ~18px glyph with almost no padding around it. */
-    .photo-picker-remove {
-        min-width: var(--touch-min);
-        min-height: var(--touch-min);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.35rem;
-    }
-
-    .service-pick-card { min-height: var(--touch-min); }
-
-    .customer-auth-strip__link {
-        min-height: var(--touch-min);
-        display: inline-flex;
-        align-items: center;
-    }
-}
-
-/* ============================================================
-   NOTIFICATION BELL (admin header)
-   ------------------------------------------------------------
-   Fed by NotificationService and pushed live over the circuit the dashboard already
-   holds — see NotificationHub. The panel is absolutely positioned against .notif,
-   so it needs the header row to allow overflow.
-   ============================================================ */
-.notif { position: relative; }
-
-.notif__bell {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: var(--touch-min);
-    min-height: var(--touch-min);
-    padding: var(--space-2);
-    font-size: 1.25rem;
-    background: transparent;
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-    color: rgba(255,255,255,0.75);
-    cursor: pointer;
-    transition: border-color 0.2s, color 0.2s;
-}
-
-.notif__bell--open { border-color: var(--green); color: var(--green); }
-
-@media (hover: hover) and (pointer: fine) {
-    .notif__bell:hover { border-color: var(--green); color: var(--green); }
-}
-
-/* The unread count. Sits on the bell's top-right corner. */
-.notif__badge {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 var(--space-1);
-    border-radius: 9px;
-    background: var(--green);
-    color: var(--dark);
-    font-size: 0.65rem;
-    font-weight: 800;
-    line-height: 18px;
-    text-align: center;
-}
-
-.notif__panel {
-    position: absolute;
-    top: calc(100% + 0.5rem);
-    right: 0;
-    z-index: 1200;          /* above the sticky navbar (1000) */
-    /* The panel is rendered inside .page-hero, which is text-align: center — so
-       without this every notification came out centred like a heading. */
-    text-align: left;
-    width: min(22rem, calc(100vw - 2rem));
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-lg);
-    overflow: hidden;
-}
-
-.notif__panel-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--border-dark);
-    font-size: var(--fs-sm);
-    color: var(--white);
-}
-
-.notif__mark {
-    background: none;
-    border: none;
-    color: var(--green);
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    cursor: pointer;
-    padding: var(--space-1);
-}
-
-.notif__empty {
-    padding: var(--space-6) var(--space-4);
-    text-align: center;
-    color: rgba(255,255,255,0.35);
-    font-size: var(--fs-sm);
-}
-
-.notif__list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    max-height: 60vh;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-}
-
-.notif__item {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0 var(--space-3);
-    padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--border-dark);
-}
-
-.notif__item:last-child { border-bottom: none; }
-
-/* A left bar rather than a background wash, so an unread item still reads as part
-   of the same list. */
-.notif__item--unread { box-shadow: inset var(--rule-accent) 0 0 var(--green); }
-
-.notif__item-title {
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    color: var(--white);
-}
-
-.notif__item-body {
-    grid-column: 1;
-    font-size: var(--fs-xs);
-    color: rgba(255,255,255,0.55);
-}
-
-.notif__item-time {
-    grid-row: 1;
-    grid-column: 2;
-    font-size: var(--fs-2xs);
-    color: rgba(255,255,255,0.35);
-    white-space: nowrap;
-}
-
-/* The panel is anchored to the bell, which sits in a right-aligned header row; on a
-   phone that row wraps, so pin the panel to the viewport edge instead of the bell. */
-@media (max-width: 479px) {
-    /* A 22rem panel anchored to the bell would run off the left edge on a narrow
-       screen, because the bell sits mid-row rather than at the edge. So the panel is
-       anchored to the header row instead — still directly beneath the bell, but
-       right-aligned to the container, where there is room for it.
-
-       Note what this must NOT be: `position: static` on .notif alone. That removes
-       the positioning context entirely, so the panel's `top: calc(100% + 0.5rem)`
-       resolves against a far taller ancestor and it lands halfway down the page,
-       nowhere near the bell that opened it. */
-    .admin-header-actions { position: relative; }
-    .notif { position: static; }
-    .notif__panel {
-        right: 0;
-        left: auto;
-        width: min(22rem, calc(100vw - 2rem));
-    }
-}
-
-/* ---------- Pager (admin bookings list) ---------- */
-/* Explicit prev/next rather than infinite scroll — on a phone, infinite scroll makes
-   anything below the list unreachable. */
-.pager {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-    margin-top: var(--space-5);
-}
-
-.pager__status {
-    font-size: var(--fs-sm);
-    color: rgba(255,255,255,0.5);
-    text-align: center;
-    flex: 1 1 auto;
-}
-
-.pager__btn { flex: 0 0 auto; }
-
-@media (max-width: 479px) {
-    .pager__status { order: 3; flex-basis: 100%; }
-    .pager__btn { flex: 1 1 0; justify-content: center; }
-}
-
-/* The toggle between "unread only" and "read too". Sits under the list so the
-   notifications themselves stay the first thing you read. */
-.notif__panel-foot {
-    padding: var(--space-2) var(--space-4) var(--space-3);
-    border-top: 1px solid var(--border-dark);
-    text-align: center;
-}
-
-/* ---------- Completion note (admin) ---------- */
-/* Opens inline under the action buttons when a job is marked complete. flex-basis
-   100% so it drops onto its own line rather than squeezing in beside the buttons. */
-.complete-note {
-    flex: 1 1 100%;
-    margin-top: var(--space-3);
-    padding: var(--space-3);
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-    text-align: left;
-}
-
-.complete-note__label {
-    display: block;
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    color: var(--white);
-    margin-bottom: var(--space-2);
-}
-
-.complete-note__optional {
-    font-weight: 400;
-    color: rgba(255,255,255,0.4);
-}
-
-.complete-note__share {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-top: var(--space-3);
-    font-size: var(--fs-sm);
-    color: rgba(255,255,255,0.75);
-    cursor: pointer;
-    min-height: var(--touch-min);
-}
-
-.complete-note__share input[type="checkbox"] {
-    width: 22px;
-    height: 22px;
-    flex-shrink: 0;
-    accent-color: var(--green);
-    cursor: pointer;
-}
-
-.complete-note__hint {
-    font-size: var(--fs-xs);
-    color: rgba(255,255,255,0.4);
-    margin-bottom: var(--space-3);
-}
-
-.complete-note__actions {
-    display: flex;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-}
-
-/* The mechanic's report on this job. Its own full-width line rather than another
-   entry in the info column, so the reference and status badges stay level with the
-   service name — the same shape .customer-booking__notes takes in the dashboard.
-   order puts it last on a phone too, where the row reorders its other children. */
-.account-booking-row__notes {
-    flex: 1 1 100%;
-    order: 4;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-}
-
-/* Tinted green to read as something from the shop rather than more booking
-   metadata, and headed so it is unmistakably the report on *this* job. */
-.account-booking-row__note {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-3);
-    background: rgba(61,187,72,0.07);
-    border-left: var(--rule-accent) solid var(--green);
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    color: rgba(255,255,255,0.75);
-    line-height: 1.5;
-}
-
-.account-booking-row__note-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--fs-2xs);
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--green);
-}
-
-/* ============================================================
-   CUSTOMERS TAB (admin)
-   ============================================================ */
-.admin-search--wide { flex: 1 1 100%; }
-
-/* A list row that's a button — it opens the detail view. Inherits .admin-edit-card's
-   box, so only the button resets and the stats row are needed here. */
-.customer-card {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-05);
-    width: 100%;
-    text-align: left;
-    font-family: inherit;
-    color: inherit;
-    cursor: pointer;
-}
-
-.customer-card__stats {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-3);
-    width: 100%;
-    margin-top: var(--space-2);
-    font-size: var(--fs-xs);
-    color: rgba(255,255,255,0.45);
-}
-
-.customer-card:focus-visible {
-    outline: 2px solid var(--green);
-    outline-offset: 2px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .customer-card:hover { border-color: var(--green); }
-}
-
-/* ── Bulk customer import ────────────────────────────────────────────────────
-   Three states in one panel — pick a file, review what it will do, see what it did.
-   The review step is the point of the whole thing, so it gets the room. */
-.import-panel { max-width: 46rem; }
-
-.import-panel__title { margin-bottom: var(--space-3); font-size: var(--fs-h3-compact); color: var(--white); }
-
-.import-panel__intro {
-    margin-bottom: var(--space-6);
-    color: rgba(255,255,255,0.65);
-    font-size: var(--fs-sm);
-    line-height: 1.6;
-}
-
-.import-panel__intro code {
-    padding: 0 var(--space-1);
-    background: var(--dark-3);
-    border-radius: var(--radius-sm);
-    font-size: var(--fs-xs);
-}
-
-.import-panel__note {
-    margin-top: var(--space-2);
-    color: rgba(255,255,255,0.45);
-    font-size: var(--fs-xs);
-    line-height: 1.6;
-}
-
-.import-panel__error {
-    margin: var(--space-4) 0;
-    padding: var(--space-3) var(--space-4);
-    background: rgba(220,38,38,0.1);
-    border: 1px solid rgba(220,38,38,0.3);
-    border-radius: var(--radius-sm);
-    color: #f87171;
-    font-size: var(--fs-sm);
-}
-
-.import-summary {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: var(--space-6) 0;
-    padding: var(--space-5);
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius);
-}
-
-.import-summary__row {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-3);
-    color: rgba(255,255,255,0.7);
-    font-size: var(--fs-sm);
-}
-
-/* Tabular figures so the counts line up in a column rather than jittering. */
-.import-summary__count {
-    min-width: 3ch;
-    color: var(--white);
-    font-size: var(--fs-h3-compact);
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-}
-
-.import-summary__count--create { color: var(--green); }
-.import-summary__count--bad { color: #f87171; }
-
-.import-problems { margin-top: var(--space-6); margin-bottom: var(--space-6); }
-.import-problems h4 { margin-bottom: var(--space-3); font-size: var(--fs-sm); color: var(--white); }
-
-.import-panel__opt {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    margin-top: var(--space-4);
-    color: rgba(255,255,255,0.8);
-    font-size: var(--fs-sm);
-    line-height: 1.5;
-    cursor: pointer;
-}
-
-.import-panel__actions {
-    display: flex;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-    margin-top: var(--space-6);
-}
-
-/* ---------- Detail ---------- */
-.customer-detail__back { margin-bottom: var(--space-5); }
-
-.customer-detail__head { margin-bottom: var(--space-5); }
-.customer-detail__head h3 { margin-bottom: var(--space-1); }
-
-.customer-detail__contact {
-    display: flex;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-    margin-top: var(--space-3);
-}
-
-.customer-detail__stats { margin-bottom: var(--space-5); }
-.customer-detail__empty { margin-bottom: var(--space-5); }
-.customer-detail__add-note { margin-bottom: var(--space-5); }
-
-/* ---------- Enquiries tab ---------- */
-/* The message as it was typed, newlines and all. Capped so one long message can't
-   push the actions on every other row off the bottom of the screen. */
-.enquiry-message {
-    margin: 0;
-    font-size: var(--fs-sm);
-    line-height: 1.6;
-    color: rgba(255,255,255,0.8);
-    white-space: pre-wrap;
-    max-height: 12rem;
-    overflow-y: auto;
-}
-
-.admin-table__row--handled { opacity: 0.6; }
-
-/* The outstanding count, on the tab itself — the reason to open it. */
-.filter-tab__count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.25rem;
-    margin-left: var(--space-2);
-    padding: 0 var(--space-1);
-    border-radius: 50px;
-    background: var(--green);
-    color: var(--dark);
-    font-size: var(--fs-2xs);
-    font-weight: 700;
-}
-
-/* ---------- Notes ---------- */
-.customer-notes,
-.customer-bookings,
-.customer-bikes {
-    list-style: none;
-    margin: 0 0 var(--space-6);
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-}
-
-.customer-note {
-    padding: var(--space-3);
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-}
-
-/* Shared notes get the same green edge the customer sees on their own booking, so
-   staff can tell at a glance which ones the customer is reading. */
-.customer-note--shared { border-left: var(--rule-accent) solid var(--green); }
-
-.customer-note__head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-    margin-bottom: var(--space-2);
-}
-
-.customer-note__delete { margin-left: auto; }
-
-.customer-note__body {
-    font-size: var(--fs-sm);
-    color: rgba(255,255,255,0.8);
-    line-height: 1.6;
-    white-space: pre-wrap;
-}
-
-/* ---------- Bookings & bikes ---------- */
-.customer-booking {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-    padding: var(--space-3);
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-}
-
-/* Never linked to the account — shown so a guest booking doesn't make a returning
-   customer look like a stranger. */
-.customer-booking--unlinked { opacity: 0.75; border-style: dashed; }
-
-/* A job's notes, on the job. Full width so they wrap onto their own line under the
-   row rather than squeezing the service name, and one step lighter than the row that
-   holds them — the same relationship .account-booking-row has with its card. */
-.customer-booking__notes {
-    flex: 1 1 100%;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-}
-.customer-booking__notes .customer-note { background: var(--dark-3); }
-
-.customer-booking__main {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-05);
-    flex: 1 1 10rem;
-    min-width: 0;
-}
-
-.customer-bikes li {
-    padding: var(--space-3);
-    background: var(--dark-2);
-    border: 1px solid var(--border-dark);
-    border-radius: var(--radius-sm);
-    font-size: var(--fs-sm);
-}
-
-/* Staff notes shown on a booking's expanded row. Also the only place a note on a
-   guest booking is visible, since a guest has no customer page to put it on. */
-.booking-notes {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-}
-
-.booking-note {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-05);
-    padding: var(--space-3);
-    background: var(--dark-2);
-    border-left: var(--rule-accent) solid var(--border-dark);
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    line-height: 1.5;
-    white-space: pre-wrap;
-}
-
-/* Green edge = the customer can see this one, matching how it looks on their own
-   booking. */
-.booking-note--shared { border-left-color: var(--green); }
-/* ============================================================
    DEMO HARNESS — not part of the real site
-   Everything above this point is wwwroot/app.css + booking.css
-   verbatim; everything below styles the persona switcher and the
-   scaffolding that stands in for the server.
+   The two stylesheets linked above are the real site's, unmodified;
+   everything here styles the persona switcher and the scaffolding
+   that stands in for the server.
    ============================================================ */
 
 .demo-bar {
@@ -5011,6 +368,9 @@ const LUNCH_START = 13;
 // can't stand in for — here the check is all there is.
 const MAX_PER_SLOT = 1;
 const MAX_ACTIVE_BOOKINGS_PER_EMAIL = 3;
+// BookingService.BookingHorizon — the last date a booking may be made for.
+const BOOKING_HORIZON_DAYS = 60;
+const latestBookableDate = () => addDays(today(), BOOKING_HORIZON_DAYS);
 const SELF_CANCEL_CUTOFF_HOURS = 2;
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PHOTOS = 5;
@@ -5083,6 +443,9 @@ const fmt = {
 // "dddd d MMMM" — no comma, unlike ddddDMMMM above. Matches the date format in
 // Admin.razor's WhatsApp message exactly.
 fmt.ddddDMMMMPlain = (d) => DAYS[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+// "ddd d MMM yyyy" — how Closure.DescribeDates reads a closed range.
+fmt.dddDMMMyyyy = (d) => fmt.dddDMMM(d) + ' ' + d.getFullYear();
+fmt.dMMMM = (d) => d.getDate() + ' ' + MONTHS[d.getMonth()];
 fmt.dMMMHHmm = (d) => fmt.dMMM(d) + ', ' + fmt.hhmm(d);
 fmt.dMMMyyyyHHmm = (d) => fmt.dMMMyyyy(d) + ', ' + fmt.hhmm(d);
 
@@ -5127,26 +490,35 @@ const SEED_SERVICES = [
 // Spread across the permission matrix on purpose: an admin, a worker with every
 // flag, a worker with none of the viewing flags (the interesting case — no customer
 // contact details, own bookings only), and a deactivated account.
+//
+// isMechanic is a separate axis from the permission flags: it says who turns a
+// spanner, which is what decides whether a day with somebody off can still take
+// bookings. Two of the four, so one person's holiday leaves the shop open — the case
+// that would look identical to a bug if there were only ever one mechanic.
 const SEED_STAFF = [
     {
         id: 'staff-francesco', fullName: 'Francesco Ricci', email: 'francesco@fixlosophy.com',
         role: 'Admin', isActive: true, createdAt: addDays(today(), -890),
-        canViewAllBookings: true, canManageBookings: true, canViewCustomerDetails: true
+        canViewAllBookings: true, canManageBookings: true, canViewCustomerDetails: true,
+        isMechanic: true
     },
     {
         id: 'staff-janek', fullName: 'Janek Kowalski', email: 'janek@fixlosophy.com',
         role: 'Worker', isActive: true, createdAt: addDays(today(), -540),
-        canViewAllBookings: true, canManageBookings: true, canViewCustomerDetails: true
+        canViewAllBookings: true, canManageBookings: true, canViewCustomerDetails: true,
+        isMechanic: true
     },
     {
         id: 'staff-priya', fullName: 'Priya Raman', email: 'priya@fixlosophy.com',
         role: 'Worker', isActive: true, createdAt: addDays(today(), -96),
-        canViewAllBookings: false, canManageBookings: true, canViewCustomerDetails: false
+        canViewAllBookings: false, canManageBookings: true, canViewCustomerDetails: false,
+        isMechanic: false
     },
     {
         id: 'staff-owen', fullName: 'Owen Brady', email: 'owen@fixlosophy.com',
         role: 'Worker', isActive: false, createdAt: addDays(today(), -720),
-        canViewAllBookings: false, canManageBookings: true, canViewCustomerDetails: false
+        canViewAllBookings: false, canManageBookings: true, canViewCustomerDetails: false,
+        isMechanic: true
     }
 ];
 
@@ -5254,6 +626,8 @@ const DB = {
     reads: [],             // NotificationRead  { notificationId, staffId }
     enquiries: [],         // Enquiry
     priceAdjustments: [],  // PriceAdjustment
+    closures: [],          // Closure — days the shop is shut, reason and all
+    absences: [],          // StaffAbsence — who is away, never shown to a customer
     refSeq: 0              // stands in for the BookingReferenceSeq sequence
 };
 
@@ -5308,6 +682,7 @@ function seed() {
     seedNotes();
     seedEnquiries();
     seedNotifications();
+    seedAvailability();
 }
 
 // Weighted so the servicing packages dominate, as they do in the shop.
@@ -5577,6 +952,69 @@ function seedNotes() {
     });
 }
 
+// ── Seed: closures and absences ─────────────────────────────
+// Arranged so the Availability tab has something to say the moment it opens, and so
+// the booking calendar has a day that is shut rather than merely full.
+//
+// The all-day closure is deliberately put on a day that already has a live booking:
+// that is the case the screen exists for. Closing a day without noticing who was
+// already in it is how somebody turns up to a locked door.
+function seedAvailability() {
+    DB.closures = [];
+    DB.absences = [];
+
+    const live = (b) => b.status === STATUS.Pending || b.status === STATUS.Confirmed;
+
+    // The first booking more than a week out — far enough ahead that closing over it
+    // reads as a decision somebody made, not as today going wrong.
+    const horizon = addDays(today(), 8);
+    const stranding = DB.bookings
+        .filter((b) => live(b) && b.slotDate >= horizon)
+        .sort((a, b) => a.slotDate - b.slotDate)[0];
+
+    if (stranding) {
+        const from = dateOnly(stranding.slotDate);
+        DB.closures.push({
+            id: uid('cls'),
+            startDate: from,
+            endDate: addDays(from, 1),
+            startTime: null,
+            endTime: null,
+            reason: 'Trade show',
+            createdAt: now(),
+            createdByStaffId: 'staff-francesco'
+        });
+    }
+
+    // A half-day: the afternoon goes, the morning stays bookable. A part-day closure
+    // never shuts the day itself, only some of its slots.
+    const halfDay = addDays(today(), 3);
+    if (slotsFor(halfDay).length > 0) {
+        DB.closures.push({
+            id: uid('cls'),
+            startDate: halfDay,
+            endDate: halfDay,
+            startTime: '13:00',
+            endTime: '19:00',
+            reason: 'Stocktake',
+            createdAt: now(),
+            createdByStaffId: 'staff-francesco'
+        });
+    }
+
+    // Janek away while Francesco is still in, so the shop stays open. That is the half
+    // of the rule which, never shown, looks indistinguishable from it not working.
+    DB.absences.push({
+        id: uid('abs'),
+        staffId: 'staff-janek',
+        startDate: addDays(today(), 5),
+        endDate: addDays(today(), 9),
+        type: 'Holiday',
+        note: 'Annual leave',
+        createdAt: now()
+    });
+}
+
 function seedEnquiries() {
     DB.enquiries = [
         {
@@ -5674,15 +1112,114 @@ const customerById = (id) => DB.customers.find((c) => c.id === id) || null;
 const staffById = (id) => DB.staff.find((s) => s.id === id) || null;
 const bookingById = (id) => DB.bookings.find((b) => b.id === id) || null;
 
+/* ── AvailabilityService.cs ──────────────────────────────────
+   Whether the shop can take a booking on a given day, and why not when it can't.
+
+   The rule, in one sentence: a day is bookable if it's a trading day, no all-day
+   closure covers it, and at least one mechanic is working.
+
+   That last clause is what makes a mechanic's holiday block bookings without any
+   per-mechanic capacity. With one mechanic on the books, their being away means
+   nobody is in, so the day closes itself. With two, one being away leaves the shop
+   open at the same one-bike-at-a-time capacity it always had — MAX_PER_SLOT is about
+   how many bikes fit on the stand, not how many people are in. */
+
+// AvailabilityModels.cs — DayState. Why a day is or isn't bookable, as one answer, so
+// the booking calendar and the admin calendar can't disagree about it.
+const DAY_STATE = {
+    Open: 'Open',               // trading hours, a mechanic in, no closure
+    NotTrading: 'NotTrading',   // no slots defined for this weekday
+    Closed: 'Closed',           // an all-day closure covers it
+    NoMechanic: 'NoMechanic',   // nobody who turns a spanner is working
+    Past: 'Past'
+};
+
+// AbsenceType. Order matters no more than it does in the enum, but the labels do.
+const ABSENCE_TYPES = ['Holiday', 'Sick', 'Training', 'Other'];
+
+// Closure.IsAllDay — both times null means the whole day.
+const closureIsAllDay = (c) => !c.startTime || !c.endTime;
+
+// Closure.Covers / StaffAbsence.Covers — inclusive at both ends, which is what people
+// mean by "closed from the 24th to the 27th".
+function coversDate(row, date) {
+    const d = dateOnly(date).getTime();
+    return d >= dateOnly(row.startDate).getTime() && d <= dateOnly(row.endDate).getTime();
+}
+
+// Closure.CoversSlot. Start-inclusive, end-exclusive: a 13:00–19:00 closure takes the
+// 13:00 slot but not one starting at 19:00, matching how the trading-hours generator
+// treats closing time. "HH:mm" strings compare as times, zero-padded as they are.
+function closureCoversSlot(c, slot) {
+    if (closureIsAllDay(c)) return true;
+    return slot >= c.startTime && slot < c.endTime;
+}
+
+// Closure.DescribeDates / StaffAbsence.DescribeDates.
+const describeDates = (from, to) => (sameDay(from, to)
+    ? fmt.dddDMMMyyyy(from)
+    : fmt.dddDMMM(from) + ' – ' + fmt.dddDMMMyyyy(to));
+
+// AvailabilityService.MechanicRuleApplies. Nobody flagged as a mechanic means the
+// rule isn't set up — not that every day is shut. The other reading turns unticking
+// the last mechanic into a site that silently stops taking bookings with nothing on
+// screen to explain it, so "none configured" degrades to the behaviour the shop had
+// before absences existed. The Availability tab warns when this is false.
+const mechanicIds = () => DB.staff.filter((s) => s.isActive && s.isMechanic).map((s) => s.id);
+const mechanicRuleApplies = () => mechanicIds().length > 0;
+
+// AvailabilityService.AllDayClosureOn. Part-day closures aren't returned: they narrow
+// the slot list rather than shutting the day.
+const allDayClosureOn = (date) =>
+    DB.closures.find((c) => closureIsAllDay(c) && coversDate(c, date)) || null;
+
+// AvailabilityService.BlockedSlotsOn — slot times a part-day closure takes out.
+function blockedSlotsOn(date) {
+    const partial = DB.closures.filter((c) => !closureIsAllDay(c) && coversDate(c, date));
+    if (partial.length === 0) return [];
+    return slotsFor(date).filter((slot) => partial.some((c) => closureCoversSlot(c, slot)));
+}
+
+// AvailabilityService.WorkingMechanicCount. A raw count, so zero means "nobody in" or
+// "nobody configured"; pair it with mechanicRuleApplies() to tell those apart.
+function workingMechanicCount(date) {
+    const ids = mechanicIds();
+    if (ids.length === 0) return 0;
+    const away = DB.absences.filter((a) => coversDate(a, date)).map((a) => a.staffId);
+    return ids.filter((id) => away.indexOf(id) === -1).length;
+}
+
+// AvailabilityService.StateOf.
+function dayState(date) {
+    if (dateOnly(date) < today()) return DAY_STATE.Past;
+    if (slotsFor(date).length === 0) return DAY_STATE.NotTrading;
+    if (allDayClosureOn(date)) return DAY_STATE.Closed;
+    if (mechanicRuleApplies() && workingMechanicCount(date) === 0) return DAY_STATE.NoMechanic;
+    return DAY_STATE.Open;
+}
+
+// DayAvailability.CustomerLabel — what the calendar puts on a day the customer can't
+// book. Null when the day is simply full, which the calendar already styles on its
+// own. NoMechanic deliberately carries no reason: whose holiday it is is not a
+// customer's business.
+function customerLabel(dayIs, reason) {
+    if (dayIs === DAY_STATE.Closed) return reason ? 'Closed — ' + reason : 'Closed';
+    if (dayIs === DAY_STATE.NoMechanic) return 'Closed';
+    return null;
+}
+
 // BookingService.GetAvailableSlots
 function availableSlots(date) {
-    if (dateOnly(date) < today()) return [];
+    if (dayState(date) !== DAY_STATE.Open) return [];
+
+    const blocked = blockedSlotsOn(date);
     const booked = {};
     DB.bookings
         .filter((b) => sameDay(b.slotDate, date) && b.status !== STATUS.Cancelled)
         .forEach((b) => { booked[b.slotTime] = (booked[b.slotTime] || 0) + 1; });
 
     return slotsFor(date).filter((slot) => {
+        if (blocked.indexOf(slot) !== -1) return false;
         if (sameDay(date, today()) && parseInt(slot, 10) <= now().getHours()) return false;
         return (booked[slot] || 0) < MAX_PER_SLOT;
     });
@@ -5690,13 +1227,26 @@ function availableSlots(date) {
 
 const isDateAvailable = (date) => availableSlots(date).length > 0;
 
-// BookingService.GetDateAvailabilityForMonth
+// BookingService.GetDateAvailabilityForMonth — a DayAvailability per day, not just a
+// yes/no. The calendar needs the reason as well as the verdict: "Closed — Bank
+// holiday" and "fully booked" are different disappointments, and only one of them
+// means come back tomorrow.
 function monthAvailability(year, month) {
     const map = {};
     const days = new Date(year, month + 1, 0).getDate();
     for (let d = 1; d <= days; d++) {
         const date = new Date(year, month, d);
-        map[isoDate(date)] = dateOnly(date) < today() ? false : isDateAvailable(date);
+        const dayIs = dayState(date);
+        const closure = dayIs === DAY_STATE.Closed ? allDayClosureOn(date) : null;
+        const reason = closure ? closure.reason : null;
+        map[isoDate(date)] = {
+            state: dayIs,
+            reason,
+            hasFreeSlot: dayIs === DAY_STATE.Open && availableSlots(date).length > 0,
+            // DayAvailability.IsBookable
+            get bookable() { return this.state === DAY_STATE.Open && this.hasFreeSlot; },
+            label: customerLabel(dayIs, reason)
+        };
     }
     return map;
 }
@@ -6053,6 +1603,143 @@ function deleteBooking(id) {
     return true;
 }
 
+// BookingService.RescheduleBooking. Keeps the reference the customer already has in
+// their confirmation email, and the notes and photos attached to the job — which is
+// what you actually want when a closure has displaced somebody. Goes through the same
+// availability checks a new booking does.
+function rescheduleBooking(bookingId, newDate, newSlot) {
+    const booking = DB.bookings.find((b) => b.id === bookingId);
+    if (!booking) return { error: 'That booking no longer exists.' };
+
+    if (booking.status === STATUS.Cancelled || booking.status === STATUS.Completed)
+        return { error: "That booking is already closed — it can't be moved." };
+
+    if (sameDay(booking.slotDate, newDate) && booking.slotTime === newSlot)
+        return { booking };                                          // nothing to do
+
+    if (dateOnly(newDate) < today()) return { error: 'That date has already passed.' };
+    if (dateOnly(newDate) > latestBookableDate())
+        return { error: "We're only booking up to " + fmt.dMMMM(latestBookableDate()) + '.' };
+    if (dayState(newDate) !== DAY_STATE.Open) return { error: "We're not open that day." };
+    if (slotsFor(newDate).indexOf(newSlot) === -1)
+        return { error: "That isn't one of the day's slots." };
+    if (blockedSlotsOn(newDate).indexOf(newSlot) !== -1)
+        return { error: "We're closed at that time." };
+
+    const taken = DB.bookings.some((b) =>
+        b.id !== bookingId && sameDay(b.slotDate, newDate) && b.slotTime === newSlot &&
+        b.status !== STATUS.Cancelled);
+    if (taken) return { error: 'Something else is already booked into that slot.' };
+
+    booking.slotDate = dateOnly(newDate);
+    booking.slotTime = newSlot;
+    persist();
+    return { booking };
+}
+
+/* ── AvailabilityService — the writes ───────────────────────── */
+
+// AvailabilityService.FindStrandedBookings. Every future booking currently sitting on
+// a day, or in a slot, the shop can no longer serve.
+//
+// Distinct from "what did the change I just made strand?": this answers "what is
+// stranded right now?", and it is the one that matters. Showing displaced bookings
+// only in the moment they were created meant switching tabs made them vanish, and a
+// warning you can navigate away from is a warning you will miss.
+function findStrandedBookings() {
+    return DB.bookings
+        .filter((b) => (b.status === STATUS.Pending || b.status === STATUS.Confirmed) &&
+                       dateOnly(b.slotDate) >= today())
+        .filter((b) => {
+            const dayIs = dayState(b.slotDate);
+            if (dayIs === DAY_STATE.Closed || dayIs === DAY_STATE.NoMechanic) return true;
+            // Open, but this particular slot is inside a part-day closure.
+            return blockedSlotsOn(b.slotDate).indexOf(b.slotTime) !== -1;
+        })
+        .sort((a, b) => (a.slotDate - b.slotDate) || a.slotTime.localeCompare(b.slotTime));
+}
+
+// AvailabilityService.GetClosures / GetAbsences — future only by default.
+const upcomingClosures = () =>
+    DB.closures.filter((c) => dateOnly(c.endDate) >= today())
+               .sort((a, b) => a.startDate - b.startDate);
+
+const upcomingAbsences = () =>
+    DB.absences.filter((a) => dateOnly(a.endDate) >= today())
+               .sort((a, b) => a.startDate - b.startDate);
+
+// AvailabilityService.AddClosure, validation and all.
+function addClosure(input) {
+    if (dateOnly(input.endDate) < dateOnly(input.startDate))
+        return { error: "The last day can't be before the first day." };
+
+    if (!String(input.reason || '').trim())
+        return { error: 'Give the closure a reason — customers see it on the calendar.' };
+
+    // Either both times or neither. One alone is ambiguous: does "from 13:00" mean
+    // until closing, or from opening until 13:00?
+    const hasStart = !!input.startTime;
+    const hasEnd = !!input.endTime;
+    if (hasStart !== hasEnd)
+        return { error: 'For a part-day closure, set both a start and an end time. ' +
+                        'Leave both blank to close all day.' };
+
+    if (hasStart && input.endTime <= input.startTime)
+        return { error: "The closure's end time must be after its start time." };
+
+    const closure = {
+        id: uid('cls'),
+        startDate: dateOnly(input.startDate),
+        endDate: dateOnly(input.endDate),
+        startTime: hasStart ? input.startTime : null,
+        endTime: hasStart ? input.endTime : null,
+        reason: String(input.reason).trim(),
+        createdAt: now(),
+        createdByStaffId: input.createdByStaffId || null
+    };
+    DB.closures.push(closure);
+    persist();
+    return { closure };
+}
+
+function removeClosure(id) {
+    const i = DB.closures.findIndex((c) => c.id === id);
+    if (i === -1) return false;
+    DB.closures.splice(i, 1);
+    persist();
+    return true;
+}
+
+// AvailabilityService.AddAbsence.
+function addAbsence(input) {
+    if (dateOnly(input.endDate) < dateOnly(input.startDate))
+        return { error: "The last day can't be before the first day." };
+
+    const staff = staffById(input.staffId);
+    if (!staff) return { error: 'That staff member no longer exists.' };
+
+    const absence = {
+        id: uid('abs'),
+        staffId: input.staffId,
+        startDate: dateOnly(input.startDate),
+        endDate: dateOnly(input.endDate),
+        type: input.type || 'Holiday',
+        note: String(input.note || '').trim(),
+        createdAt: now()
+    };
+    DB.absences.push(absence);
+    persist();
+    return { absence };
+}
+
+function removeAbsence(id) {
+    const i = DB.absences.findIndex((a) => a.id === id);
+    if (i === -1) return false;
+    DB.absences.splice(i, 1);
+    persist();
+    return true;
+}
+
 function assignStaff(bookingId, staffId) {
     const b = bookingById(bookingId);
     if (!b) return false;
@@ -6225,7 +1912,8 @@ function addStaff(model, password) {
     DB.staff.push({
         id: uid('staff'), fullName: model.fullName.trim(), email: model.email.trim(),
         role: model.role, isActive: true, createdAt: now(),
-        canViewAllBookings: false, canManageBookings: true, canViewCustomerDetails: false
+        canViewAllBookings: false, canManageBookings: true, canViewCustomerDetails: false,
+        isMechanic: !!model.isMechanic
     });
     persist();
     return { ok: true };
@@ -6240,7 +1928,8 @@ let persistEnabled = true;
 
 // Dates don't survive JSON, so they're revived by key name on the way back in.
 const DATE_KEYS = ['createdAt', 'slotDate', 'appliedAt', 'readAt', 'handledAt',
-                   'preferredDate', 'lastVisit', 'firstVisit', 'memberSince'];
+                   'preferredDate', 'lastVisit', 'firstVisit', 'memberSince',
+                   'startDate', 'endDate'];
 
 function persist() {
     if (!persistEnabled) return;
@@ -6489,7 +2178,25 @@ function freshUiState() {
             showHandledEnquiries: false,
             editPrices: {},
             priceSaveMessage: null,
-            staffForm: { fullName: '', email: '', role: 'Worker', password: '' },
+            staffForm: { fullName: '', email: '', role: 'Worker', password: '', isMechanic: true },
+            // The Availability tab's two forms, and the date/time chosen for each
+            // displaced booking (booking id -> { date, slot }).
+            availability: {
+                closureFrom: isoDate(today()),
+                closureTo: isoDate(today()),
+                closureReason: '',
+                closurePartDay: false,
+                closureStart: '13:00',
+                closureEnd: '19:00',
+                absenceStaffId: '',
+                absenceFrom: isoDate(today()),
+                absenceTo: isoDate(today()),
+                absenceType: 'Holiday',
+                absenceNote: '',
+                error: null,
+                success: null,
+                moves: {}
+            },
             staffFormError: null,
             staffRowError: null,
             staffEdits: {}
@@ -6604,6 +2311,24 @@ const statusBadge = (status) =>
     '<span class="status-badge status-badge--' + statusClass(status) + '">' + statusLabel(status) + '</span>';
 
 const refBadge = (reference) => '<span class="ref-badge">' + esc(reference) + '</span>';
+
+// MaintenanceJobs.LateAfter — how long past the slot before somebody counts as late.
+const LATE_AFTER_MINUTES = 20;
+
+// Admin's IsLate(Booking): the slot has come and gone with the bike not booked in.
+// Derived rather than stored, so it's right the moment the page renders — the real
+// site raises the bell for the same condition on a timer, but the badge shouldn't
+// wait on a tick.
+const isLate = (b) =>
+    (b.status === STATUS.Pending || b.status === STATUS.Confirmed) &&
+    now() - slotStart(b) >= LATE_AFTER_MINUTES * 60 * 1000;
+
+// Amber rather than red on purpose: most late arrivals turn up, so this is a prompt to
+// ring them, not a verdict. Not a status — a derived "where is this bike?".
+const lateBadge = (b) => (isLate(b)
+    ? '<span class="status-badge status-badge--late" ' +
+      'title="Slot has passed and the bike isn\'t booked in">Not arrived</span>'
+    : '');
 
 // Same normalisation the real action buttons use: wa.me wants international format
 // with no '+' or leading zero, and a bare national number is assumed to be UK.
@@ -7617,15 +3342,30 @@ function bookStep2() {
 
     for (let d = 1; d <= daysInMonth; d++) {
         const date = new Date(month.getFullYear(), month.getMonth(), d);
-        const available = !!availability[isoDate(date)];
+        const day = availability[isoDate(date)];
+        const available = day.bookable;
         const isSelected = !!b.date && sameDay(b.date, date);
         const isToday = sameDay(date, today());
+
+        // Why the day is unavailable, when there's a reason worth giving. "Closed —
+        // Bank holiday" and "fully booked" are different disappointments: one means
+        // try tomorrow, the other means try a different time today. A grey square says
+        // neither. Null for an ordinary full day, which the legend already explains.
+        const closedLabel = day.state === DAY_STATE.Past ? null : day.label;
+
         const css = cls('cal-day',
             isSelected && 'cal-day--selected',
             isToday && !isSelected && 'cal-day--today',
-            available ? 'cal-day--available' : 'cal-day--disabled');
+            available ? 'cal-day--available' : 'cal-day--disabled',
+            closedLabel && 'cal-day--closed');
+        // The reason goes on the title and the aria-label both, so it reaches a
+        // pointer and a screen reader alike — the day is disabled, so there is nowhere
+        // else for it to be said.
         cells += '<button type="button" class="' + css + '" ' + (available ? '' : 'disabled') +
-            ' aria-pressed="' + isSelected + '" aria-label="' + esc(fmt.ddddDMMMMyyyy(date)) + '"' +
+            ' aria-pressed="' + isSelected + '"' +
+            (closedLabel ? ' title="' + esc(closedLabel) + '"' : '') +
+            ' aria-label="' + esc(fmt.ddddDMMMMyyyy(date) +
+                (closedLabel ? ' — ' + closedLabel : '')) + '"' +
             ' data-act="pick-day" data-date="' + isoDate(date) + '">' + d + '</button>';
     }
 
@@ -7660,6 +3400,9 @@ function bookStep2() {
               '<span class="cal-legend__dot cal-legend__dot--available"></span> Available' +
               '<span class="cal-legend__dot cal-legend__dot--selected"></span> Selected' +
               '<span class="cal-legend__dot cal-legend__dot--disabled"></span> Unavailable' +
+              // A struck-through number rather than a dot: it mirrors what a closed
+              // day actually looks like in the grid above.
+              '<span class="cal-legend__closed">00</span> Closed' +
             '</div>' +
           '</div>' +
           '<div class="timeslot-wrapper">' + slotPanel + '</div>' +
@@ -8267,13 +4010,15 @@ function viewAdmin() {
     let tab = a.tab;
     // Permission changes can strand you on a tab you can no longer open.
     if ((tab === 'customers' || tab === 'enquiries') && !canSeeCustomerDetails()) tab = a.tab = 'calendar';
-    if ((tab === 'pricing' || tab === 'staff') && !isAdmin()) tab = a.tab = 'calendar';
+    if ((tab === 'pricing' || tab === 'staff' || tab === 'availability') && !isAdmin())
+        tab = a.tab = 'calendar';
 
     let body = '';
     if (tab === 'bookings') body = adminBookingsTab();
     else if (tab === 'calendar') body = adminCalendarTab();
     else if (tab === 'customers') body = adminCustomersTab();
     else if (tab === 'enquiries') body = adminEnquiriesTab();
+    else if (tab === 'availability') body = adminAvailabilityTab();
     else if (tab === 'pricing') body = adminPricingTab();
     else if (tab === 'staff') body = adminStaffTab();
 
@@ -8349,7 +4094,10 @@ function adminTabBar(tab) {
               button('enquiries', 'Enquiries' + (unhandledEnquiries().length
                   ? '<span class="filter-tab__count">' + unhandledEnquiries().length + '</span>' : ''))
             : '') +
-        (isAdmin() ? button('pricing', 'Pricing') + button('staff', 'Staff Management') : '') +
+        (isAdmin()
+            ? button('availability', 'Availability') +
+              button('pricing', 'Pricing') + button('staff', 'Staff Management')
+            : '') +
     '</div></div>';
 }
 
@@ -8562,7 +4310,7 @@ function adminBookingsTab() {
               '<div class="today-slot"><span class="today-slot__time">' + b.slotTime + '</span>' +
                 '<span class="today-slot__name">' + esc(b.customerName) + '</span>' +
                 '<span class="today-slot__service">' + esc(b.serviceName) + '</span>' +
-                statusBadge(b.status) + '</div>').join('') +
+                statusBadge(b.status) + lateBadge(b) + '</div>').join('') +
           '</div></div>'
         : '';
 
@@ -8612,7 +4360,7 @@ function adminBookingCards(bookings, emptyMessage) {
 
         return '<div class="admin-card ' + (isOpen ? 'admin-card--open' : '') + '" data-act="admin-expand" data-id="' + b.id + '">' +
             '<div class="admin-card__header">' + refBadge(b.reference) +
-              '<div class="admin-card__header-right">' + statusBadge(b.status) +
+              '<div class="admin-card__header-right">' + statusBadge(b.status) + lateBadge(b) +
                 '<span class="admin-card__chevron ' + (isOpen ? 'open' : '') + '">' + icon('chevron-right') + '</span>' +
               '</div></div>' +
             '<div class="admin-card__name">' + esc(b.customerName) + '</div>' +
@@ -8637,7 +4385,7 @@ function adminBookingTable(bookings, emptyMessage) {
               '<span>' + (b.servicePrice > 0 ? '£' + b.servicePrice : 'Quote') + '</span></div></td>' +
             '<td><div class="date-cell"><strong>' + fmt.dMMMyyyy(b.slotDate) + '</strong>' +
               '<span>' + b.slotTime + '</span></div></td>' +
-            '<td>' + statusBadge(b.status) + '</td>' +
+            '<td>' + statusBadge(b.status) + lateBadge(b) + '</td>' +
             (isAdmin()
                 ? '<td data-stop><select class="form-control form-control--compact form-control--assign" ' +
                   'data-act="admin-assign" data-id="' + b.id + '">' + staffOptions(b.assignedStaffId) + '</select></td>'
@@ -8700,15 +4448,19 @@ function adminCalendarTab() {
 
     const pending = dayBookings.filter((b) => b.status === STATUS.Pending).length;
 
+    const dayIs = dayState(day);
+    const blocked = blockedSlotsOn(day);
+
     const slots = slotsFor(day).map((slot) => {
         const inSlot = dayBookings.filter((b) => b.slotTime === slot);
         const content = inSlot.length === 0
-            ? '<span class="day-cal-slot__free">Free</span>'
+            ? '<span class="day-cal-slot__free">' +
+              (blocked.indexOf(slot) !== -1 ? 'Closed' : 'Free') + '</span>'
             : inSlot.map((b) =>
                 '<div class="day-cal-booking ' + (b.status === STATUS.Cancelled ? 'day-cal-booking--cancelled' : '') + '">' +
                   '<div class="day-cal-booking__info">' +
                     '<div class="day-cal-booking__head"><strong>' + esc(b.customerName) + '</strong>' +
-                      refBadge(b.reference) + statusBadge(b.status) + '</div>' +
+                      refBadge(b.reference) + statusBadge(b.status) + lateBadge(b) + '</div>' +
                     '<div class="day-cal-booking__meta"><span>' + esc(b.serviceName) + '</span>' +
                       (b.bikeDescription ? '<span> &middot; ' + esc(b.bikeDescription) + '</span>' : '') +
                       (canSeeCustomerDetails() && b.customerPhone ? '<span> &middot; ' + esc(b.customerPhone) + '</span>' : '') +
@@ -8723,6 +4475,22 @@ function adminCalendarTab() {
             '<div class="day-cal-slot__content">' + content + '</div>' +
         '</div>';
     }).join('');
+
+    // Why the day isn't taking bookings, stated once at the top rather than left to be
+    // inferred from a column of empty slots. Existing bookings still show below: a
+    // closure added after the fact doesn't make the day's work disappear, and those are
+    // exactly the ones somebody needs to deal with.
+    const closure = dayIs === DAY_STATE.Closed ? allDayClosureOn(day) : null;
+    const stillBooked = dayBookings.some((b) =>
+        b.status === STATUS.Pending || b.status === STATUS.Confirmed);
+    const notice = (dayIs === DAY_STATE.Closed || dayIs === DAY_STATE.NoMechanic)
+        ? '<div class="day-cal__notice">' + icon('alert') +
+            '<span>' + (dayIs === DAY_STATE.Closed
+                ? 'Shop closed' + (closure && closure.reason ? ' — ' + esc(closure.reason) : '') + '. Not bookable.'
+                : 'No mechanic in. Not bookable.') + '</span>' +
+            (stillBooked ? '<strong>There are still bookings on this day.</strong>' : '') +
+          '</div>'
+        : '';
 
     return '<div class="day-cal">' +
         '<div class="day-cal__nav">' +
@@ -8749,6 +4517,7 @@ function adminCalendarTab() {
           (pending ? '<span class="status-badge status-badge--pending">' + pending + ' pending</span>' : '') +
           (day.getDay() === 0 ? '<span class="day-cal__closed">Sunday hours — 11am to 5pm</span>' : '') +
         '</div>' +
+        notice +
         '<div class="day-cal__slots">' + slots + '</div>' +
     '</div>';
 }
@@ -9231,6 +5000,189 @@ function adminEnquiriesTab() {
         '</table></div>';
 }
 
+/* ── Availability tab (Components/Admin/AvailabilityTab.razor) ── */
+
+// Every hour the shop could plausibly open or shut, widest trading day plus a margin.
+// Kept as "HH:mm" strings because that is the form a closure stores and compares slots
+// in. Selects rather than a free-text time: appointments start on the hour, so a typed
+// time could name a window that clips no slot at all.
+const HOUR_OPTIONS = Array.from({ length: 15 }, (_, i) => String(i + 7).padStart(2, '0') + ':00');
+
+// Days the shop is shut, and mechanics being away. Admin-only.
+//
+// Two lists rather than one, because they answer different questions and only one is
+// any of a customer's business: a closure shows its reason on the public calendar, an
+// absence never does.
+//
+// The important part of this screen isn't adding a row — it's the warning that comes
+// with it. Closing a week that already has bookings in it, without noticing, is how
+// somebody turns up to a locked door.
+function adminAvailabilityTab() {
+    const av = state.admin.availability;
+
+    const options = (values, selected) => values.map((v) =>
+        '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + v + '</option>').join('');
+
+    const warning = mechanicRuleApplies() ? '' :
+        '<div class="admin-inline-warning">' + icon('alert') +
+          '<span>Nobody is marked as working on bikes, so holidays won\'t close any days. ' +
+          'Tick <strong>Works on bikes</strong> for whoever is in the workshop, on the ' +
+          'Staff Management tab.</span></div>';
+
+    const messages =
+        (av.error ? '<div class="booking-error admin-inline-error">' + esc(av.error) + '</div>' : '') +
+        (av.success ? '<div class="admin-success">' + icon('check') + ' ' + esc(av.success) + '</div>' : '');
+
+    // ── Displaced bookings ───────────────────────────────────────────────────
+    // Everyone currently booked into a day the shop can't serve — not just whoever the
+    // last change stranded. It stays here until each one is dealt with, because a
+    // warning you can navigate away from is a warning you will miss.
+    //
+    // Nothing happens to them automatically: cancelling somebody's appointment is a
+    // decision, and the shop may well want to ring them instead.
+    const stranded = findStrandedBookings();
+    const affected = stranded.length === 0 ? '' :
+        '<div class="availability-affected">' +
+          '<h3>' + icon('alert') + ' ' + stranded.length + ' booking' +
+            (stranded.length === 1 ? '' : 's') + " on days you're closed</h3>" +
+          '<p class="text-muted-sm">These are still live — the customers haven\'t been told. ' +
+            'Move each one to a time that works, or cancel it and invite them to rebook; ' +
+            'either way they get an email.</p>' +
+          stranded.map((b) => {
+              const move = av.moves[b.id] || { date: isoDate(today()), slot: '' };
+              const slots = availableSlots(parseIsoDate(move.date));
+              return '<div class="availability-affected__row">' +
+                '<div class="availability-affected__info">' +
+                  '<strong>' + esc(b.customerName) + '</strong>' + refBadge(b.reference) +
+                  '<span class="text-muted-sm">' + esc(b.serviceName) + ' &middot; ' +
+                    fmt.dddDMMM(b.slotDate) + ' at ' + b.slotTime + '</span>' +
+                '</div>' +
+                '<div class="availability-affected__actions">' +
+                  '<label class="sr-only" for="move-date-' + b.id + '">New date</label>' +
+                  '<input id="move-date-' + b.id + '" type="date" class="form-control form-control--compact" ' +
+                    'min="' + isoDate(today()) + '" max="' + isoDate(latestBookableDate()) + '" ' +
+                    'value="' + move.date + '" data-act="avail-move-date" data-id="' + b.id + '" />' +
+                  '<label class="sr-only" for="move-slot-' + b.id + '">New time</label>' +
+                  '<select id="move-slot-' + b.id + '" class="form-control form-control--compact" ' +
+                    'data-act="avail-move-slot" data-id="' + b.id + '">' +
+                    '<option value="">— pick a time —</option>' +
+                    slots.map((slot) => '<option value="' + slot + '"' +
+                        (slot === move.slot ? ' selected' : '') + '>' + slot + '</option>').join('') +
+                  '</select>' +
+                  '<button class="action-btn action-btn--primary" data-act="avail-move" data-id="' + b.id + '" ' +
+                    (move.slot ? '' : 'disabled') + '>Move &amp; email</button>' +
+                  '<button class="action-btn action-btn--cancel" data-act="avail-cancel-invite" ' +
+                    'data-id="' + b.id + '">Cancel &amp; invite rebooking</button>' +
+                '</div>' +
+              '</div>';
+          }).join('') +
+        '</div>';
+
+    // ── Closures ─────────────────────────────────────────────────────────────
+    const closures = upcomingClosures();
+    const closureList = closures.length === 0
+        ? '<div class="admin-empty"><p>No closures coming up.</p></div>'
+        : '<ul class="availability-list">' + closures.map((c) =>
+            '<li class="availability-list__item"><div>' +
+              '<strong>' + describeDates(c.startDate, c.endDate) + '</strong>' +
+              (closureIsAllDay(c) ? '' :
+                '<span class="status-badge status-badge--pending">' + c.startTime + '–' + c.endTime + '</span>') +
+              '<div class="text-muted-sm">' + esc(c.reason) + '</div>' +
+            '</div>' +
+            '<button class="action-btn action-btn--keep" data-act="avail-remove-closure" ' +
+              'data-id="' + c.id + '">Remove</button></li>').join('') + '</ul>';
+
+    // Part-day is the exception, so it's behind a toggle rather than two more fields
+    // everyone has to skip past.
+    const partDayFields = !av.closurePartDay ? '' :
+        '<div class="form-row">' +
+          '<div class="form-group"><label for="closure-start">Closed from</label>' +
+            '<select id="closure-start" class="form-control" data-model="admin.availability.closureStart">' +
+              options(HOUR_OPTIONS, av.closureStart) + '</select></div>' +
+          '<div class="form-group"><label for="closure-end">Until</label>' +
+            '<select id="closure-end" class="form-control" data-model="admin.availability.closureEnd">' +
+              options(HOUR_OPTIONS, av.closureEnd) + '</select></div>' +
+        '</div>' +
+        '<p class="text-faint-sm">Slots starting inside that window go; the rest of the ' +
+          'day stays bookable.</p>';
+
+    const closurePanel = '<section class="availability-panel">' +
+        '<h3>Shop closures</h3>' +
+        '<p class="text-muted-sm">Customers see the reason on the booking calendar, so keep ' +
+          'it short and true — “Bank holiday”, “Staff training”.</p>' +
+        '<div class="availability-form">' +
+          '<div class="form-row">' +
+            '<div class="form-group"><label for="closure-from">First day closed</label>' +
+              '<input id="closure-from" type="date" class="form-control" value="' + av.closureFrom + '" ' +
+              'data-act="avail-closure-from" /></div>' +
+            '<div class="form-group"><label for="closure-to">Last day closed</label>' +
+              '<input id="closure-to" type="date" class="form-control" value="' + av.closureTo + '" ' +
+              'data-model="admin.availability.closureTo" /></div>' +
+          '</div>' +
+          '<div class="form-group"><label for="closure-reason">Reason</label>' +
+            '<input id="closure-reason" class="form-control" maxlength="80" placeholder="e.g. Christmas Day" ' +
+            'data-model="admin.availability.closureReason" value="' + esc(av.closureReason) + '" /></div>' +
+          '<label class="admin-toggle"><span>Only part of the day</span>' +
+            '<input type="checkbox" data-act="avail-partday" ' +
+            (av.closurePartDay ? 'checked' : '') + ' /></label>' +
+          partDayFields +
+          '<button class="btn btn-primary" data-act="avail-add-closure">Add closure</button>' +
+        '</div>' + closureList +
+    '</section>';
+
+    // ── Staff absence ────────────────────────────────────────────────────────
+    const absences = upcomingAbsences();
+    const absenceList = absences.length === 0
+        ? '<div class="admin-empty"><p>Nobody booked off.</p></div>'
+        : '<ul class="availability-list">' + absences.map((ab) => {
+            const who = staffById(ab.staffId);
+            return '<li class="availability-list__item"><div>' +
+              '<strong>' + esc(who ? who.fullName : 'Unknown') + '</strong>' +
+              '<span class="status-badge status-badge--pending">' + esc(ab.type) + '</span>' +
+              '<div class="text-muted-sm">' + describeDates(ab.startDate, ab.endDate) +
+                (ab.note ? ' · ' + esc(ab.note) : '') + '</div>' +
+            '</div>' +
+            '<button class="action-btn action-btn--keep" data-act="avail-remove-absence" ' +
+              'data-id="' + ab.id + '">Remove</button></li>';
+          }).join('') + '</ul>';
+
+    const activeStaff = DB.staff.filter((m) => m.isActive);
+    const absencePanel = '<section class="availability-panel">' +
+        '<h3>Staff away</h3>' +
+        '<p class="text-muted-sm">Internal only — customers never see who\'s off. A day with ' +
+          'no mechanic in stops taking bookings on its own.</p>' +
+        '<div class="availability-form">' +
+          '<div class="form-group"><label for="absence-staff">Who</label>' +
+            '<select id="absence-staff" class="form-control" data-model="admin.availability.absenceStaffId">' +
+              '<option value="">— pick someone —</option>' +
+              activeStaff.map((m) => '<option value="' + m.id + '"' +
+                  (m.id === av.absenceStaffId ? ' selected' : '') + '>' + esc(m.fullName) +
+                  (m.isMechanic ? '' : ' (not a mechanic)') + '</option>').join('') +
+            '</select></div>' +
+          '<div class="form-row">' +
+            '<div class="form-group"><label for="absence-from">First day away</label>' +
+              '<input id="absence-from" type="date" class="form-control" value="' + av.absenceFrom + '" ' +
+              'data-act="avail-absence-from" /></div>' +
+            '<div class="form-group"><label for="absence-to">Last day away</label>' +
+              '<input id="absence-to" type="date" class="form-control" value="' + av.absenceTo + '" ' +
+              'data-model="admin.availability.absenceTo" /></div>' +
+          '</div>' +
+          '<div class="form-row">' +
+            '<div class="form-group"><label for="absence-type">Type</label>' +
+              '<select id="absence-type" class="form-control" data-model="admin.availability.absenceType">' +
+                options(ABSENCE_TYPES, av.absenceType) + '</select></div>' +
+            '<div class="form-group"><label for="absence-note">Note (optional)</label>' +
+              '<input id="absence-note" class="form-control" maxlength="120" ' +
+              'data-model="admin.availability.absenceNote" value="' + esc(av.absenceNote) + '" /></div>' +
+          '</div>' +
+          '<button class="btn btn-primary" data-act="avail-add-absence">Add absence</button>' +
+        '</div>' + absenceList +
+    '</section>';
+
+    return warning + messages + affected +
+        '<div class="availability-grid">' + closurePanel + absencePanel + '</div>';
+}
+
 /* ── Pricing tab ───────────────────────────────────────────── */
 
 function adminPricingTab() {
@@ -9319,6 +5271,13 @@ function adminStaffTab() {
               '<option value="Admin"' + (a.staffForm.role === 'Admin' ? ' selected' : '') + '>Admin</option>' +
             '</select></div>' +
         '</div>' +
+        // Separate from the permissions below, and offered for admins too: this is
+        // about the workshop, not the dashboard. An owner who turns spanners is a
+        // mechanic; one who doesn't isn't.
+        '<label class="admin-toggle"><span>Works on bikes ' +
+          '<span class="text-muted-sm">— counts towards whether a day can take bookings</span></span>' +
+          '<input type="checkbox" data-act="admin-staff-form-mechanic" ' +
+          (a.staffForm.isMechanic ? 'checked' : '') + ' /></label>' +
         '<button class="btn btn-primary" data-act="admin-add-staff">Add Staff Member</button></div>';
 
     const toggle = (id, field, label, checked) =>
@@ -9341,6 +5300,7 @@ function adminStaffTab() {
                 : toggle(m.id, 'canViewAllBookings', 'View all bookings', m.canViewAllBookings) +
                   toggle(m.id, 'canManageBookings', 'Manage bookings', m.canManageBookings) +
                   toggle(m.id, 'canViewCustomerDetails', 'See customer details', m.canViewCustomerDetails)) +
+            toggle(m.id, 'isMechanic', 'Works on bikes', m.isMechanic) +
             (isMe ? '' : toggle(m.id, 'isActive', 'Active', m.isActive)) +
             '<div class="admin-edit-card__actions">' +
               '<button class="btn btn-outline" data-act="admin-save-staff" data-id="' + m.id + '">Save</button></div>' +
@@ -9353,7 +5313,7 @@ function adminStaffTab() {
 
     const table = '<div class="admin-table-wrapper admin-table-wrapper--desktop-only"><table class="admin-table">' +
         '<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>View All Bookings</th><th>Manage Bookings</th>' +
-        '<th>Customer Details</th><th>Status</th><th>Save</th></tr></thead><tbody>' +
+        '<th>Customer Details</th><th>Works on Bikes</th><th>Status</th><th>Save</th></tr></thead><tbody>' +
         DB.staff.map((m) => {
             const isMe = m.id === me.id;
             return '<tr>' +
@@ -9367,6 +5327,7 @@ function adminStaffTab() {
                     : '<td class="text-center">' + checkbox(m.id, 'canViewAllBookings', m.canViewAllBookings) + '</td>' +
                       '<td class="text-center">' + checkbox(m.id, 'canManageBookings', m.canManageBookings) + '</td>' +
                       '<td class="text-center">' + checkbox(m.id, 'canViewCustomerDetails', m.canViewCustomerDetails) + '</td>') +
+                '<td class="text-center">' + checkbox(m.id, 'isMechanic', m.isMechanic) + '</td>' +
                 '<td>' + (isMe
                     ? '<span class="text-muted-sm">—</span>'
                     : checkbox(m.id, 'isActive', m.isActive) +
@@ -9376,10 +5337,18 @@ function adminStaffTab() {
             '</tr>';
         }).join('') + '</tbody></table></div>';
 
+    // Unticking the last mechanic doesn't shut the shop — the rule switches off
+    // instead, which is the safe direction to fail in but silent unless said out loud.
+    // See mechanicRuleApplies().
+    const noMechanics = mechanicRuleApplies() ? '' :
+        '<div class="admin-inline-warning">' +
+          "Nobody is marked as working on bikes, so holidays won't close any days. " +
+          'Tick <strong>Works on bikes</strong> for whoever is in the workshop.</div>';
+
     return '<div class="staff-mgmt">' + addForm +
         '<h3 class="admin-subheading">Current Staff</h3>' +
         (a.staffRowError ? '<div class="booking-error admin-inline-error">' + esc(a.staffRowError) + '</div>' : '') +
-        cards + table +
+        noMechanics + cards + table +
     '</div>';
 }
 
@@ -9768,11 +5737,107 @@ document.addEventListener('click', (e) => {
         toast('Prices saved — the Services page and booking wizard now quote the new figures.');
         break;
     }
+    // ── Availability ──
+    case 'avail-add-closure': {
+        const av = state.admin.availability;
+        av.error = av.success = null;
+        const result = addClosure({
+            startDate: parseIsoDate(av.closureFrom),
+            endDate: parseIsoDate(av.closureTo),
+            reason: av.closureReason,
+            startTime: av.closurePartDay ? av.closureStart : null,
+            endTime: av.closurePartDay ? av.closureEnd : null,
+            createdByStaffId: state.session.id
+        });
+        if (result.error) {
+            av.error = result.error;
+        } else {
+            av.success = 'Closed ' + describeDates(result.closure.startDate, result.closure.endDate) + '.';
+            av.closureReason = '';
+            av.closurePartDay = false;
+        }
+        // The tab recomputes the stranded list on every render, so anyone this closure
+        // just displaced appears above — along with anyone displaced by an earlier one
+        // who still hasn't been dealt with.
+        render();
+        break;
+    }
+    case 'avail-remove-closure': {
+        const av = state.admin.availability;
+        av.error = av.success = null;
+        removeClosure(id);
+        render();
+        break;
+    }
+    case 'avail-add-absence': {
+        const av = state.admin.availability;
+        av.error = av.success = null;
+        if (!av.absenceStaffId) { av.error = "Pick who's away."; render(); break; }
+        const result = addAbsence({
+            staffId: av.absenceStaffId,
+            startDate: parseIsoDate(av.absenceFrom),
+            endDate: parseIsoDate(av.absenceTo),
+            type: av.absenceType,
+            note: av.absenceNote
+        });
+        if (result.error) {
+            av.error = result.error;
+        } else {
+            const who = staffById(result.absence.staffId);
+            av.success = (who ? who.fullName : 'Away') + ' booked off ' +
+                describeDates(result.absence.startDate, result.absence.endDate) + '.';
+            av.absenceNote = '';
+        }
+        render();
+        break;
+    }
+    case 'avail-remove-absence': {
+        const av = state.admin.availability;
+        av.error = av.success = null;
+        removeAbsence(id);
+        render();
+        break;
+    }
+    // Moving somebody keeps the reference in their confirmation email, and the notes
+    // and photos on the job. Nothing here happens automatically: cancelling an
+    // appointment is a decision, and the shop may well want to ring them instead.
+    case 'avail-move': {
+        const av = state.admin.availability;
+        av.error = av.success = null;
+        const move = av.moves[id];
+        if (!move || !move.slot) { av.error = 'Pick a new date and time first.'; render(); break; }
+
+        const result = rescheduleBooking(id, parseIsoDate(move.date), move.slot);
+        if (result.error) { av.error = result.error; render(); break; }
+
+        const moved = result.booking;
+        delete av.moves[id];
+        av.success = moved.reference + ' moved to ' + fmt.dddDMMM(moved.slotDate) + ' at ' +
+            moved.slotTime + ', and ' + moved.customerName + ' has been emailed.';
+        render();
+        toast('Moved. The customer would be emailed the new time.');
+        break;
+    }
+    case 'avail-cancel-invite': {
+        const av = state.admin.availability;
+        av.error = av.success = null;
+        const booking = bookingById(id);
+        if (!booking) break;
+        updateStatus(id, STATUS.Cancelled);
+        raiseBookingCancelled(booking);
+        delete av.moves[id];
+        av.success = booking.reference + ' cancelled, and ' + booking.customerName +
+            ' has been invited to rebook.';
+        render();
+        toast('Cancelled. The customer would be invited to rebook.');
+        break;
+    }
     case 'admin-add-staff': {
         const form = state.admin.staffForm;
         const result = addStaff(form, form.password);
         state.admin.staffFormError = result.error || null;
-        if (!result.error) state.admin.staffForm = { fullName: '', email: '', role: 'Worker', password: '' };
+        if (!result.error) state.admin.staffForm =
+            { fullName: '', email: '', role: 'Worker', password: '', isMechanic: true };
         render();
         break;
     }
@@ -9910,6 +5975,38 @@ document.addEventListener('change', (e) => {
         render();
         return;
     }
+    if (act === 'avail-partday') {
+        state.admin.availability.closurePartDay = el.checked;
+        render();
+        return;
+    }
+    // The last day can't sit before the first, so it follows the first down rather
+    // than waiting to be rejected on submit. ISO dates compare as strings.
+    if (act === 'avail-closure-from' || act === 'avail-absence-from') {
+        const av = state.admin.availability;
+        const isClosure = act === 'avail-closure-from';
+        const from = isClosure ? 'closureFrom' : 'absenceFrom';
+        const to = isClosure ? 'closureTo' : 'absenceTo';
+        av[from] = el.value;
+        if (av[to] < av[from]) av[to] = av[from];
+        render();
+        return;
+    }
+    if (act === 'avail-move-date') {
+        // Changing the date clears the slot: the times available on the new day are not
+        // the times that were available on the old one.
+        state.admin.availability.moves[el.dataset.id] = { date: el.value, slot: '' };
+        render();
+        return;
+    }
+    if (act === 'avail-move-slot') {
+        const moves = state.admin.availability.moves;
+        const current = moves[el.dataset.id] || { date: isoDate(today()), slot: '' };
+        moves[el.dataset.id] = { date: current.date, slot: el.value };
+        render();
+        return;
+    }
+    if (act === 'admin-staff-form-mechanic') { state.admin.staffForm.isMechanic = el.checked; return; }
     if (act === 'admin-staff-toggle') {
         const edits = state.admin.staffEdits[el.dataset.id] || (state.admin.staffEdits[el.dataset.id] = {});
         edits[el.dataset.field] = el.checked;

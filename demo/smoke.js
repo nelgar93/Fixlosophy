@@ -19,6 +19,7 @@
 const path = require('path');
 const fs = require('fs');
 const { chromium } = require('playwright');
+const { linkedCss } = require('./stylesheets');
 
 // Either shape of build: the single file by default, or a served site build (the one
 // GitHub Pages publishes) when a URL is passed.
@@ -32,6 +33,16 @@ const URL_BASE = SERVED || 'file://' + FILE;
 const ROUTES = ['#/', '#/services', '#/about', '#/gallery', '#/contact', '#/book',
                 '#/privacy', '#/terms', '#/account/login', '#/account/register',
                 '#/account/forgot', '#/admin/login', '#/nowhere'];
+
+// The demo drifted by a whole admin tab once: Admin.razor grew Availability and
+// nothing here noticed, because the tab list was a hand-written array. So it isn't one
+// any more — the tabs come out of the Razor, and a tab the demo hasn't got fails.
+// Skipped, not failed, when the demo has been copied away from the repo it mirrors.
+const ADMIN_RAZOR = path.join(__dirname, '..', 'Components', 'Pages', 'Admin.razor');
+const dashboardTabs = fs.existsSync(ADMIN_RAZOR)
+    ? [...fs.readFileSync(ADMIN_RAZOR, 'utf8')
+         .matchAll(/private const string Tab\w+\s*=\s*"([a-z]+)"/g)].map((m) => m[1])
+    : null;
 
 const failures = [];
 const fail = (msg) => { failures.push(msg); console.log('  FAIL  ' + msg); };
@@ -125,7 +136,9 @@ const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
 
     console.log('\nAdmin tabs (as the admin persona)');
     await page.evaluate(() => applyPersona('admin'));
-    for (const tab of ['calendar', 'bookings', 'customers', 'enquiries', 'pricing', 'staff']) {
+    const tabsToSweep = dashboardTabs ||
+        ['calendar', 'bookings', 'customers', 'enquiries', 'availability', 'pricing', 'staff'];
+    for (const tab of tabsToSweep) {
         const ok = await page.evaluate((t) => {
             try { state.admin.tab = t; render(); return document.querySelector('#app').innerText.length > 200; }
             catch (e) { return 'threw: ' + e.message; }
@@ -213,6 +226,73 @@ const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
     await page.waitForTimeout(200);
     check((await page.locator('.demo-export').count()) === 0, 'the export panel closes');
 
+    // Closures are the half of availability a customer sees, and the stranded list is
+    // the half only the shop sees. Both were missing entirely once, so both are swept.
+    console.log('\nClosures and availability');
+
+    await page.evaluate(() => { applyPersona('guest'); bookReset(); });
+    await go('#/book');
+    await page.locator('.service-pick-card').first().click();
+    await page.locator('[data-act="book-step2"]').click();
+    await page.waitForSelector('.cal-day');
+    const closedDays = await page.evaluate(() => [...document.querySelectorAll('.cal-day--closed')]
+        .map((el) => ({ title: el.title, aria: el.getAttribute('aria-label'), disabled: el.disabled })));
+    check(closedDays.length > 0, 'the booking calendar has a closed day (' + closedDays.length + ')');
+    check(closedDays.every((d) => /^Closed/.test(d.title)),
+        'each one says it is closed rather than just going grey');
+    check(closedDays.some((d) => /Closed — .+/.test(d.title)),
+        'and at least one gives the reason: ' + (closedDays.find((d) => /—/.test(d.title)) || {}).title);
+    check(closedDays.every((d) => d.disabled && /—/.test(d.aria)),
+        'the reason reaches a screen reader, and the day cannot be picked');
+    check((await page.locator('.cal-legend__closed').count()) === 1, 'the legend explains the marker');
+
+    await page.evaluate(() => { applyPersona('admin'); state.admin.tab = 'availability'; render(); });
+    await page.waitForTimeout(200);
+    const stranded = await page.evaluate(() => findStrandedBookings().length);
+    check(stranded > 0, 'the shop is closed over ' + stranded + ' live booking(s)');
+    check((await page.locator('.availability-affected__row').count()) === stranded,
+        'the Availability tab lists every one of them');
+    check((await page.locator('.availability-panel').count()) === 2,
+        'closures and staff absences are separate lists');
+
+    // A closure with no reason is refused: the reason is what the customer sees.
+    await page.locator('[data-act="avail-add-closure"]').click();
+    await page.waitForTimeout(150);
+    check(/reason/i.test(await page.locator('.admin-inline-error').innerText().catch(() => '')),
+        'a closure with no reason is refused');
+
+    // Moving somebody takes them off the list and keeps their reference.
+    const move = await page.evaluate(() => {
+        const b = findStrandedBookings()[0];
+        for (let i = 1; i <= 60; i++) {
+            const date = addDays(today(), i);
+            const slot = availableSlots(date)[0];
+            if (slot) {
+                state.admin.availability.moves[b.id] = { date: isoDate(date), slot };
+                render();
+                return { id: b.id, reference: b.reference };
+            }
+        }
+        return null;
+    });
+    check(move !== null, 'there is somewhere to move the first one to');
+    await page.locator('[data-act="avail-move"][data-id="' + move.id + '"]').click();
+    await page.waitForTimeout(200);
+    const afterMove = await page.evaluate(() => findStrandedBookings().length);
+    check(afterMove === stranded - 1, 'moving one takes it off the list (' + afterMove + ' left)');
+    check((await page.evaluate((id) => bookingById(id).reference, move.id)) === move.reference,
+        'and keeps the reference the customer was emailed');
+
+    // A worker must not reach the tab at all, the same as Pricing and Staff.
+    const workerLandsOn = await page.evaluate(() => {
+        applyPersona('worker');
+        state.admin.tab = 'availability';
+        render();
+        return state.admin.tab;
+    });
+    check(workerLandsOn !== 'availability', 'a worker is bounced off the tab to ' + workerLandsOn);
+    await page.evaluate(() => applyPersona('admin'));
+
     console.log('\nResponsive');
     for (const width of [320, 390, 768, 1440]) {
         await page.setViewportSize({ width, height: 900 });
@@ -244,10 +324,10 @@ const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
     check(consoleErrors.length === 0, 'no console errors' +
         (consoleErrors.length ? ':\n        ' + consoleErrors.slice(0, 6).join('\n        ') : ''));
 
-    // The two stylesheets are copied in byte for byte, so a CSS change can't drift —
-    // but the markup in this file's render functions can, and silently. Renaming a
-    // modifier in the Razor without renaming it here leaves a button matching only the
-    // base .action-btn: no background, no colour, so the browser falls back to its own
+    // The site's CSS is linked rather than copied, so it can no longer drift — but the
+    // markup in this file's render functions can, and silently. Renaming a modifier in
+    // the Razor without renaming it here leaves a button matching only the base
+    // .action-btn: no background, no colour, so the browser falls back to its own
     // grey-on-black default button chrome. That is exactly what shipped once.
     //
     // Scanned from the source rather than the DOM on purpose: only one route and one
@@ -256,7 +336,10 @@ const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
     console.log('\nClass names');
     const source = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
     const styleEnd = source.indexOf('</style>');
-    const css = source.slice(0, styleEnd);
+    // Both stylesheets: the site's, read from where index.html links it, and the
+    // harness's own block. Reading only the latter would report every class the real
+    // site defines as an orphan.
+    const css = linkedCss(source, __dirname) + source.slice(0, styleEnd);
     const markup = source.slice(styleEnd);
 
     const defined = new Set([...css.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*--[a-zA-Z0-9_-]+)/g)].map((m) => m[1]));
@@ -266,6 +349,18 @@ const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
     check(orphanClasses.length === 0,
         'every BEM modifier in the markup has a CSS rule' +
         (orphanClasses.length ? ': ' + orphanClasses.join(', ') : ''));
+
+    // The same class of drift one level up: a tab the real dashboard has and this file
+    // doesn't. Rendering the tabs proves they work; this proves the list is complete.
+    if (dashboardTabs) {
+        check(dashboardTabs.length > 0, 'read ' + dashboardTabs.length + ' tabs out of Admin.razor');
+        const absent = dashboardTabs.filter((t) => !markup.includes("button('" + t + "'"));
+        check(absent.length === 0,
+            'the demo has every tab the dashboard does' +
+            (absent.length ? ' — missing: ' + absent.join(', ') : ''));
+    } else {
+        pass('Admin.razor is not alongside — skipping the tab cross-check');
+    }
 
     await browser.close();
 
