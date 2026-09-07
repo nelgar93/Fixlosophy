@@ -14,6 +14,18 @@
       "Bash(curl -s -o /dev/null -w \"  %{http_code}\\\\n\" http://localhost:5127/admin/login)"
     ]
   },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  },
   "mcpServers": {
     "supabase": {
       "type": "http",
