@@ -6,7 +6,8 @@ using Microsoft.Playwright;
 // Reads commands from stdin, one per line, and writes one result line per command
 // to stdout. Built for driving a running web app from a shell: no Node needed
 // (Playwright's .NET package bundles its own driver) and no browser download —
-// it uses the Edge already installed on the machine via Channel = "msedge".
+// on Windows it uses the Edge already installed on the machine via Channel = "msedge",
+// and elsewhere whatever PWDRIVER_BROWSER points at.
 //
 // Commands:
 //   goto <url>                  navigate and wait for network idle
@@ -41,6 +42,17 @@ using var playwright = await Playwright.CreateAsync();
 var profileDir = Environment.GetEnvironmentVariable("PWDRIVER_PROFILE");
 var headed = Environment.GetEnvironmentVariable("PWDRIVER_HEADED") == "1";
 
+// Which Chromium to drive. On a developer's Windows box, none of this is set and the
+// answer is the Edge already installed, reached by channel — no download, as before.
+// On Claude Code's Linux container there is no Edge, but Playwright's own Chromium is
+// already on disk, and PWDRIVER_BROWSER (set by .claude/hooks/session-start.sh) points
+// at it. An explicit executable and a channel are mutually exclusive, so setting one
+// means leaving the other null.
+var browserPath = Environment.GetEnvironmentVariable("PWDRIVER_BROWSER");
+var useExecutable = !string.IsNullOrWhiteSpace(browserPath);
+var channel = useExecutable ? null : "msedge";
+var executablePath = useExecutable ? browserPath : null;
+
 IBrowser? browser = null;
 IBrowserContext context;
 
@@ -48,7 +60,8 @@ if (string.IsNullOrWhiteSpace(profileDir))
 {
     browser = await playwright.Chromium.LaunchAsync(new()
     {
-        Channel = "msedge",
+        Channel = channel,
+        ExecutablePath = executablePath,
         Headless = !headed,
     });
 
@@ -66,7 +79,8 @@ else
     Directory.CreateDirectory(profileDir);
     context = await playwright.Chromium.LaunchPersistentContextAsync(profileDir, new()
     {
-        Channel = "msedge",
+        Channel = channel,
+        ExecutablePath = executablePath,
         Headless = !headed,
         ViewportSize = new() { Width = 1280, Height = 900 },
         DeviceScaleFactor = 1,

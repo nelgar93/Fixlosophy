@@ -14,8 +14,13 @@ on the machine**, so there is no Node dependency and no browser download.
 
 The .NET 10 SDK, and a `appsettings.Local.json` at the repo root holding the Supabase
 connection string (gitignored; see README). Nothing else — no `npm`, no
-`playwright install`. Playwright's NuGet package ships its own driver binary, and the
-driver launches Edge via `Channel = "msedge"`.
+`playwright install`: Playwright's NuGet package ships its own driver binary.
+
+Which browser it drives depends on the machine. Unset, it asks for the installed Edge
+by channel, which is what a Windows dev box has. Set `PWDRIVER_BROWSER` to a Chromium
+executable and it uses that instead — on Claude Code on the web there is no Edge, and
+`.claude/hooks/session-start.sh` points this at the Chromium the image already carries,
+so the driver works there with nothing further to install.
 
 ## Build
 
