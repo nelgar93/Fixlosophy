@@ -60,6 +60,54 @@ internal static class TestFactory
         return date;
     }
 
+    /// <summary>
+    /// Seeds one bookable service, which is what step 1 of the wizard lists.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="BookingService.GetServices"/> reads ServicePricings, so a component
+    /// test that skips this renders an empty picker and every later step is
+    /// unreachable — which reads as a broken wizard rather than as missing fixture data.
+    /// </remarks>
+    public static ServicePricing AddService(
+        AppDbContext db,
+        string name = "Basic Service",
+        string category = "Servicing Packages",
+        decimal price = 35m)
+    {
+        var pricing = new ServicePricing
+        {
+            Name         = name,
+            Category     = category,
+            CurrentPrice = price,
+            Duration     = "1 hour",
+            SortOrder    = db.ServicePricings.Count()
+        };
+        db.ServicePricings.Add(pricing);
+        db.SaveChanges();
+        return pricing;
+    }
+
+    /// A customer account in the state a signed-in one is really in: email verified,
+    /// password hashed the way AuthService hashes it.
+    public static Customer AddCustomer(
+        AppDbContext db,
+        string email = "signed.in@example.com",
+        string fullName = "Signed In",
+        string phone = "07700 900123")
+    {
+        var customer = new Customer
+        {
+            Email          = email,
+            FullName       = fullName,
+            Phone          = phone,
+            EmailConfirmed = true,
+            PasswordHash   = AuthService.HashPassword("Password123!")
+        };
+        db.Customers.Add(customer);
+        db.SaveChanges();
+        return customer;
+    }
+
     /// Exercises booking logic, not Supabase Storage: a real StorageService needs an
     /// HttpClient and config, neither of which an in-memory test has.
     internal sealed class FakeStorageService : IStorageService

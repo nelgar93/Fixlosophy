@@ -1,0 +1,30 @@
+@*
+    A marker element that exists only once this subtree is rendering interactively —
+    that is, once the Blazor circuit is attached and @onclick handlers are live.
+
+    Why it exists. Blazor Server prerenders an interactive page as static HTML, so
+    every button is in the DOM, visible and enabled, for a beat before it is wired to
+    a circuit. A click sent inside that window is dropped silently: the element was
+    perfectly clickable, there was simply nothing on the other end yet. Playwright's
+    auto-waiting does not save you here, because it waits for the element to be
+    actionable, not for the application behind it to be listening. That gap is the
+    single largest source of flake in a Blazor Server end-to-end suite, and the usual
+    workaround — sleeping for a guessed number of milliseconds — is both slow and
+    still wrong on a cold start, where the first circuit takes seconds rather than
+    hundreds of milliseconds.
+
+    RendererInfo.IsInteractive is false throughout the prerender pass and true from
+    the first interactive render onwards, so the presence of this element is exactly
+    the signal the tests need — no JavaScript, no framework internals, no polling on
+    a private API that a future release can rename.
+
+    Statically rendered pages (the auth pages, which opt out of interactive routing
+    so their forms post as real requests) never render it. That is correct rather
+    than a gap: there is no circuit there to wait for.
+
+    See E2ETest.GotoAsync in Fixlosophy.Tests.E2E for the consuming side.
+*@
+@if (RendererInfo.IsInteractive)
+{
+    <div id="blazor-ready" hidden data-nosnippet></div>
+}

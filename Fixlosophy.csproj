@@ -15,12 +15,14 @@
     <PackageReference Include="MailKit" Version="4.*" />
   </ItemGroup>
 
-  <!-- Fixlosophy.Tests lives in a subdirectory of this project; exclude it from the
-       Web SDK's implicit **/*.cs glob so its test files aren't compiled in twice. -->
+  <!-- The test projects live in subdirectories of this one; exclude them from the
+       Web SDK's implicit **/*.cs glob so their files are not compiled in twice.
+       The wildcard covers Fixlosophy.Tests and Fixlosophy.Tests.E2E — miss the second
+       and its Playwright fixtures land in the web assembly, which fails to build. -->
   <ItemGroup>
-    <Compile Remove="Fixlosophy.Tests/**/*.cs" />
-    <Content Remove="Fixlosophy.Tests/**" />
-    <None Remove="Fixlosophy.Tests/**" />
+    <Compile Remove="Fixlosophy.Tests*/**/*.cs" />
+    <Content Remove="Fixlosophy.Tests*/**" />
+    <None Remove="Fixlosophy.Tests*/**" />
   </ItemGroup>
 
 </Project>

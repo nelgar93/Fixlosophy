@@ -676,6 +676,11 @@ static async Task WithSchemaLockAsync(AppDbContext db, ILogger logger, Action bo
 
 static void EnsureSchema(AppDbContext db, ILogger logger)
 {
+    // The E2E harness boots this same startup path against EF Core's InMemory
+    // provider, which has no DDL and builds its store from the model instead.
+    // Same stance as WithSchemaLockAsync above, for the same reason.
+    if (!db.Database.IsRelational()) return;
+
     db.Database.ExecuteSqlRaw(@"
         CREATE TABLE IF NOT EXISTS ""Customers"" (
             ""Id""           varchar(36) NOT NULL,
@@ -1227,3 +1232,10 @@ static void SeedDefaultAdmin(AppDbContext db, IConfiguration config, ILogger log
     });
     db.SaveChanges();
 }
+
+/// <summary>
+/// Named so the end-to-end suite's <c>WebApplicationFactory&lt;Program&gt;</c> can find
+/// the entry point. Top-level statements generate this class as <c>internal</c>;
+/// re-declaring it here only widens the accessibility, and adds no members.
+/// </summary>
+public partial class Program;

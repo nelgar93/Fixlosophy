@@ -267,17 +267,72 @@ availability check an hour out for the whole of summer.
 
 ## Tests
 
+Three tiers, in the order you should reach for them.
+
 ```
-dotnet test Fixlosophy.Tests/Fixlosophy.Tests.csproj
+dotnet test Fixlosophy.Tests/Fixlosophy.Tests.csproj          # 411 tests, ~2s
+dotnet test Fixlosophy.Tests.E2E/Fixlosophy.Tests.E2E.csproj  # 13 tests, ~17s
 ```
 
-375 tests over `AuthService`, `AuthClaims`, `BookingService`, `CustomerService`,
-`CustomerImportService`, `EnquiryService`, `NotificationService`, `BikeService`,
-`MaintenanceJobs`, `StorageService` and `ShopClock`, using EF Core's InMemory provider
-— no database connection needed.
+**Service tests** (386) over `AuthService`, `AuthClaims`, `BookingService`,
+`CustomerService`, `CustomerImportService`, `EnquiryService`, `NotificationService`,
+`BikeService`, `MaintenanceJobs`, `StorageService` and `ShopClock`, using EF Core's
+InMemory provider — no database connection needed. **The rules live here.** A rule
+asserted at this tier should not be asserted again higher up.
+
+**Component tests** (25, `BookWizardTests.cs`) render `Book.razor` in-process with
+[bUnit](https://bunit.dev), covering only what a service test cannot see: the order the
+wizard's validators run in, which branch each guard takes, and what the confirm handler
+passes on — including that a signed-in customer's booking is filed against their account
+address rather than the form's. No assertions on markup or copy: those break on every
+visual change and catch nothing. Kept small and deliberately droppable — because the
+rules live one tier down, deleting this file would cost a bounded amount of coverage
+rather than the safety net.
+
+**End-to-end tests** (13, `Fixlosophy.Tests.E2E`) drive the real site in a real browser
+via Playwright. Reserved for what genuinely crosses a boundary: the SignalR circuit, the
+auth cookie, a page-to-page hand-off — the booking a guest just made showing up on a
+signed-in mechanic's dashboard. Also needs no database or secrets; see below.
 
 `RecordingEmailSender.cs` is the shared `IEmailSender` double; add new interface methods
-there rather than to a per-class fake.
+there rather than to a per-class fake. (`Fixlosophy.Tests.E2E` has its own, because it
+substitutes the sender inside the running app rather than constructing one.)
+
+### End-to-end: the parts worth knowing
+
+`AppFixture` boots the real `Program.cs` on Kestrel on a random port, backed by the
+InMemory provider, and **replaces `IEmailSender` and `IStorageService` inside the running
+app**. That substitution is not optional: the fixture loads the real
+`appsettings.Local.json` — it has to, that is where the content root is — and that file
+holds a working SMTP host and a Supabase service-role key. Without the swap, every
+booking these tests make would put real mail in a real inbox.
+
+`E2ETest.GotoInteractiveAsync` is the only way to navigate to an interactive page.
+Blazor Server prerenders the markup and attaches the circuit afterwards, so for a moment
+every button is present, visible and enabled with nothing behind it — a click in that gap
+is silently dropped. **Playwright's auto-waiting does not help**: it waits for the
+element to be actionable, not for the application to be listening. So
+`Components/Shared/InteractiveReady.razor` renders a hidden `#blazor-ready` marker only
+once `RendererInfo.IsInteractive` turns true, and the helper waits for that. No
+JavaScript, no framework internals, and no sleeps — which would be both too short on a
+cold start and wasted on every navigation after it. Statically rendered pages (the auth
+pages) never render the marker; use `GotoStaticAsync` for those.
+
+The fixture also lifts the app's per-IP request limiter for the suite. Every test arrives
+from `127.0.0.1` and a Blazor page load is a dozen requests, so a few tests in quick
+succession read as one abusive client and start collecting `429`s — including on
+`/_blazor/initializers`, which stops the circuit dead on whichever test happened to be
+running. The tighter `auth` policy is deliberately left in force.
+
+Set `E2E_TRACE=1` to record a Playwright trace per test (CI does this and uploads them on
+failure). The browser is the machine's installed Edge by default; set
+`E2E_BROWSER_CHANNEL=none` to use Playwright's own Chromium, which is what CI does.
+
+Known flake, pre-dating this suite:
+`MaintenanceJobsTests.FlagLateArrivalsAsync_RaisesOnceForABookingPastItsSlot` fails when
+run within ~35 minutes of midnight. It places a booking at `now - 35min`, which lands on
+yesterday's date, while `FlagLateArrivalsAsync` only scans today's — arguably a real gap
+in the job rather than only in the test.
 
 Two places take an InMemory-specific path so they stay testable, both guarded by
 `Database.IsRelational()`: `BookingService.NextReferenceSequence` (falls back to a count
@@ -295,7 +350,9 @@ didn't quietly break interactivity. See the skill for recipes and gotchas.
 
 GitHub Actions (`.github/workflows/build.yml`) restores, builds, and runs the test
 suite on every push/PR to `main`/`dev`. No secrets required — the test suite doesn't
-touch a real database. A second job in the same workflow builds the demo and runs
+touch a real database. A separate `e2e` job installs headless Chromium and runs
+`Fixlosophy.Tests.E2E`, kept apart so the fast suite stays fast; it uploads Playwright
+traces as an artifact when it fails. A third job in the same workflow builds the demo and runs
 `demo/smoke.js` against it in headless Chromium, which also cross-checks the demo's
 dashboard tabs against `Components/Pages/Admin.razor` — the demo fell a whole tab
 behind once, silently, and that is the check that catches it.

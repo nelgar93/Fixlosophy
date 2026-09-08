@@ -57,3 +57,46 @@ jobs:
 
       - name: Smoke-test the demo
         run: node demo/smoke.js
+
+  # The browser-driven suite. Separate job because it needs a browser and takes an
+  # order of magnitude longer than the unit tests, and the point of keeping the two
+  # apart is that the fast one stays fast. It needs no database and no secrets: the
+  # app boots here against EF Core's InMemory provider, and its outbound SMTP and
+  # Supabase services are replaced in the fixture.
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        run: dotnet build Fixlosophy.Tests.E2E/Fixlosophy.Tests.E2E.csproj --configuration Release
+
+      # Playwright ships its browser installer alongside the built test assembly.
+      # --with-deps pulls the shared libraries headless Chromium needs on a bare runner.
+      - name: Install Chromium
+        run: pwsh Fixlosophy.Tests.E2E/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+
+      - name: Test
+        env:
+          # A dev box drives the Edge it already has; a clean runner has no Edge, so
+          # ask for the Chromium installed in the step above instead.
+          E2E_BROWSER_CHANNEL: none
+          E2E_TRACE: '1'
+        run: dotnet test Fixlosophy.Tests.E2E/Fixlosophy.Tests.E2E.csproj --no-build --configuration Release --verbosity normal
+
+      # Traces are the difference between "it failed on CI" and a frame-by-frame replay
+      # with the DOM at every step. Only kept when something actually failed.
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: Fixlosophy.Tests.E2E/bin/Release/net10.0/traces/
+          if-no-files-found: ignore
