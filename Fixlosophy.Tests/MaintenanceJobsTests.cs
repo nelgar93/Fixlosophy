@@ -306,11 +306,31 @@ public class MaintenanceJobsTests
     }
 
     // ── Late arrivals ────────────────────────────────────────────────────────
-    // These build a booking at a slot time relative to now, so they exercise the real
-    // comparison rather than a frozen one. A slot time is "HH:mm" text, which is why
-    // the job filters in memory rather than in SQL.
+    // Each of these describes an appointment the shop could actually have taken — a
+    // real slot time, on a real trading day — and states the hour the job runs at
+    // instead of reading it off the wall clock. Same reasoning as ReminderHour 0 above.
+    //
+    // They used to derive the slot from ShopClock.Now, which made them describe a shop
+    // that doesn't exist: run at two minutes past midnight and the suite was asserting
+    // things about a 23:27 appointment, four and a half hours after closing. The shop
+    // shuts at 19:00 on a weekday, so no such booking can be made and no such lateness
+    // can occur.
+    //
+    // The cost was not only a suite that failed on the hour it ran at. A slot placed at
+    // 23:27 falls on *yesterday*, which the job skips by design — so
+    // IgnoresBookingsThatAreNoLongerWaiting was really only proving "yesterday is
+    // ignored" and would have kept passing with the status filter deleted outright.
 
-    private static Booking BookedAt(DateTime slotStart, BookingStatus status = BookingStatus.Confirmed) => new()
+    /// A fixed Wednesday, so the weekday slot list applies (09:00–18:00, no 13:00) and
+    /// nothing here moves with the calendar.
+    private static readonly DateTime TradingDay = new(2026, 4, 15);
+
+    /// The shop's first appointment of that day, taken from the booking rules rather
+    /// than typed in — change the opening hours and these tests follow, instead of
+    /// quietly asserting against a time the shop stopped offering.
+    private static string FirstSlot => BookingService.SlotsFor(TradingDay)[0];
+
+    private static Booking BookedAt(string slot, BookingStatus status = BookingStatus.Confirmed) => new()
     {
         Reference = "FIX-260905-002",
         CustomerName = "Jane Doe",
@@ -318,48 +338,64 @@ public class MaintenanceJobsTests
         CustomerPhone = "07700 900000",
         ServiceName = "Full Service",
         ServiceCategory = "Servicing Packages",
-        SlotDate = slotStart.Date,
-        SlotTime = slotStart.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture),
+        SlotDate = TradingDay,
+        SlotTime = slot,
         Status = status,
-        CreatedAt = ShopClock.Now.AddDays(-2)
+        CreatedAt = TradingDay.AddDays(-2)
     };
 
+    /// The clock reading a given number of minutes after that appointment was due to
+    /// start. Uses the job's own notion of when a slot starts, so the test can't drift
+    /// from it.
+    private static DateTime MinutesAfter(Booking booking, double minutes) =>
+        BookingService.SlotStart(booking).AddMinutes(minutes);
+
+    // The 09:00 hasn't turned up and it's gone half past. That is the phone call the
+    // notification exists to prompt.
     [Fact]
     public async Task FlagLateArrivalsAsync_RaisesOnceForABookingPastItsSlot()
     {
         using var db = NewDb();
-        db.Bookings.Add(BookedAt(ShopClock.Now - MaintenanceJobs.LateAfter - TimeSpan.FromMinutes(15)));
+        var booking = BookedAt(FirstSlot);
+        db.Bookings.Add(booking);
         db.SaveChanges();
         var jobs = NewJobs(db, new RecordingEmailSender());
+        var halfPast = MinutesAfter(booking, MaintenanceJobs.LateAfter.TotalMinutes + 15);
 
-        Assert.Equal(1, await jobs.FlagLateArrivalsAsync());
+        Assert.Equal(1, await jobs.FlagLateArrivalsAsync(halfPast));
         Assert.NotNull(db.Bookings.Single().LateNotifiedAt);
         Assert.Single(db.Notifications.Where(n => n.Type == NotificationType.LateArrival));
 
         // Every tick for the rest of the day would otherwise ring the bell again,
         // which is how people learn to ignore notifications.
-        Assert.Equal(0, await jobs.FlagLateArrivalsAsync());
+        Assert.Equal(0, await jobs.FlagLateArrivalsAsync(halfPast.AddMinutes(30)));
         Assert.Single(db.Notifications.Where(n => n.Type == NotificationType.LateArrival));
     }
 
+    // Two minutes past nine, with somebody still finding a space outside.
     [Fact]
     public async Task FlagLateArrivalsAsync_LeavesSomeoneMerelyParkingUpAlone()
     {
         using var db = NewDb();
-        db.Bookings.Add(BookedAt(ShopClock.Now - TimeSpan.FromMinutes(2)));
+        var booking = BookedAt(FirstSlot);
+        db.Bookings.Add(booking);
         db.SaveChanges();
 
-        Assert.Equal(0, await NewJobs(db, new RecordingEmailSender()).FlagLateArrivalsAsync());
+        Assert.Equal(0, await NewJobs(db, new RecordingEmailSender())
+            .FlagLateArrivalsAsync(MinutesAfter(booking, 2)));
     }
 
+    // The shop opens, and the morning's appointments are all still ahead of it.
     [Fact]
     public async Task FlagLateArrivalsAsync_IgnoresASlotStillInTheFuture()
     {
         using var db = NewDb();
-        db.Bookings.Add(BookedAt(ShopClock.Now + TimeSpan.FromHours(2)));
+        var booking = BookedAt(BookingService.SlotsFor(TradingDay)[^1]);
+        db.Bookings.Add(booking);
         db.SaveChanges();
 
-        Assert.Equal(0, await NewJobs(db, new RecordingEmailSender()).FlagLateArrivalsAsync());
+        Assert.Equal(0, await NewJobs(db, new RecordingEmailSender())
+            .FlagLateArrivalsAsync(MinutesAfter(booking, -120)));
     }
 
     // Moving a booking to InProgress is what the shop does when a bike lands on the
@@ -371,10 +407,14 @@ public class MaintenanceJobsTests
     public async Task FlagLateArrivalsAsync_IgnoresBookingsThatAreNoLongerWaiting(BookingStatus status)
     {
         using var db = NewDb();
-        db.Bookings.Add(BookedAt(ShopClock.Now - MaintenanceJobs.LateAfter - TimeSpan.FromMinutes(15), status));
+        var booking = BookedAt(FirstSlot, status);
+        db.Bookings.Add(booking);
         db.SaveChanges();
 
-        Assert.Equal(0, await NewJobs(db, new RecordingEmailSender()).FlagLateArrivalsAsync());
+        // Same day, same slot, same hour as the raising case above — so the only thing
+        // that can account for a different answer is the status.
+        Assert.Equal(0, await NewJobs(db, new RecordingEmailSender())
+            .FlagLateArrivalsAsync(MinutesAfter(booking, MaintenanceJobs.LateAfter.TotalMinutes + 15)));
     }
 
     // A booking left un-progressed from last week is a records problem, not somebody
@@ -383,10 +423,12 @@ public class MaintenanceJobsTests
     public async Task FlagLateArrivalsAsync_OnlyLooksAtToday()
     {
         using var db = NewDb();
-        var lastWeek = ShopClock.Now.AddDays(-7);
-        db.Bookings.Add(BookedAt(new DateTime(lastWeek.Year, lastWeek.Month, lastWeek.Day, 9, 0, 0)));
+        var booking = BookedAt(FirstSlot);
+        db.Bookings.Add(booking);
         db.SaveChanges();
 
-        Assert.Equal(0, await NewJobs(db, new RecordingEmailSender()).FlagLateArrivalsAsync());
+        // A week on, at the same time of day: long past, but not today's problem.
+        Assert.Equal(0, await NewJobs(db, new RecordingEmailSender())
+            .FlagLateArrivalsAsync(MinutesAfter(booking, MaintenanceJobs.LateAfter.TotalMinutes + 15).AddDays(7)));
     }
 }

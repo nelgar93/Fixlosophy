@@ -328,11 +328,21 @@ Set `E2E_TRACE=1` to record a Playwright trace per test (CI does this and upload
 failure). The browser is the machine's installed Edge by default; set
 `E2E_BROWSER_CHANNEL=none` to use Playwright's own Chromium, which is what CI does.
 
-Known flake, pre-dating this suite:
-`MaintenanceJobsTests.FlagLateArrivalsAsync_RaisesOnceForABookingPastItsSlot` fails when
-run within ~35 minutes of midnight. It places a booking at `now - 35min`, which lands on
-yesterday's date, while `FlagLateArrivalsAsync` only scans today's — arguably a real gap
-in the job rather than only in the test.
+### Tests state the hour; they don't read it
+
+Nothing in the suite depends on when it runs, and appointments in tests are ones the
+shop could actually have taken. Two mechanisms carry this:
+`MaintenanceJobsTests.NewConfig` pins `Maintenance:ReminderHour` to 0 so the reminder
+window is always open, and the jobs whose behaviour *is* a question about the time of
+day — `IsWithinReminderWindow`, `FlagLateArrivalsAsync` — take the moment as a
+parameter, with the production call sites passing `ShopClock.Now`.
+
+The late-arrival tests build their bookings from `BookingService.SlotsFor(day)` rather
+than from an offset against the current time, so a change to opening hours moves them
+instead of leaving them asserting against a slot the shop stopped offering. Derived from
+the wall clock, they described a shop that doesn't exist — a 23:27 appointment when run
+after midnight, hours past a 19:00 close — which both failed on the hour the suite ran
+at and let one test pass for the wrong reason.
 
 Two places take an InMemory-specific path so they stay testable, both guarded by
 `Database.IsRelational()`: `BookingService.NextReferenceSequence` (falls back to a count

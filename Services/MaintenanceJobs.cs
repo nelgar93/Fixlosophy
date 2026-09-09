@@ -145,9 +145,25 @@ public class MaintenanceJobs(
     /// <para>Today only. A booking left un-progressed from last week is a records
     /// problem, not someone who might still walk in.</para>
     /// </remarks>
-    public async Task<int> FlagLateArrivalsAsync(CancellationToken ct = default)
+    public Task<int> FlagLateArrivalsAsync(CancellationToken ct = default) =>
+        FlagLateArrivalsAsync(ShopClock.Now, ct);
+
+    /// <summary>
+    /// As <see cref="FlagLateArrivalsAsync(CancellationToken)"/>, but as of a given
+    /// moment rather than right now.
+    /// </summary>
+    /// <remarks>
+    /// The same seam as <see cref="IsWithinReminderWindow"/>, for the same reason.
+    /// Whether a booking is late is entirely a question of the time of day, so a test
+    /// that reads the hour off the wall clock has to invent a slot relative to it — and
+    /// outside trading hours that means an appointment the shop could never have taken,
+    /// at 23:27 or 02:00. Such a test passes or fails on when it happened to run, and
+    /// worse, can pass for the wrong reason: a "wrong status is ignored" case run after
+    /// midnight is really only proving the slot landed on yesterday's date. Stating the
+    /// hour makes the scenario a real one the shop would recognise.
+    /// </remarks>
+    public async Task<int> FlagLateArrivalsAsync(DateTime now, CancellationToken ct = default)
     {
-        var now = ShopClock.Now;
         var todayStart = now.Date;
         var todayEnd = todayStart.AddDays(1);
 
